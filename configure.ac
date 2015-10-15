@@ -15,9 +15,11 @@ AC_PROG_LIBTOOL
 AC_CONFIG_FILES([     \
   Makefile            \
   apex/Makefile       \
+  champ/Makefile      \
   chaos/Makefile      \
   common/Makefile     \
   curvefit/Makefile   \
+  estist/Makefile     \
   euler/Makefile      \
   levmar/Makefile     \
   lls/Makefile        \
