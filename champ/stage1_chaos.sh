@@ -8,12 +8,12 @@
 down_sample="1"
 
 cdfdir="/data/CHAMP/L3"
-outdir="/data/CHAMP/Stage1"
+outdir="/data/CHAMP/Stage1_CHAOS"
 
 prog="/data/palken/lib/champ/stage1"
 
 # Use CHAOS external field model?
-extra_flags=""
+extra_flags="-c"
 
 year=""
 if test -n "$1"; then

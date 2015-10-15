@@ -3,7 +3,7 @@
 # Plot CHAMP residuals to search for gravity and diamagnetic signatures
 
 # Where to store data files
-outdir="/nfs/satmag_work/palken/corr/champ/data"
+outdir="/data/palken/lib/champ/data"
 
 # Local time range
 lt_min="20"

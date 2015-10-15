@@ -1,0 +1,421 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+
+\newcommand{\B}{\mathbf{B}}
+\newcommand{\J}{\mathbf{J}}
+\newcommand{\R}{\mathbf{r}}
+\newcommand{\Bsh}{\B_{pol}^{sh}}
+\newcommand{\qsh}{q_{nm}^{sh}}
+\newcommand{\qi}{q_{nm}^i}
+\newcommand{\q}{q_{nm}}
+\newcommand{\psish}{\psi_{nm}^{sh}}
+
+\begin{document}
+
+\section{Introduction}
+
+The geomagnetic field can be decomposed into toroidal and poloidal
+components:
+\begin{equation}
+\B = \B_{tor} + \B_{pol}
+\end{equation}
+where
+\begin{align}
+\B_{tor} &= \wedge \Phi \\
+\B_{pol} &= \nabla \times \wedge \Psi
+\end{align}
+Similarly, the current density can everywhere be decomposed as:
+\begin{equation}
+\mu_0 \J = \mu_0 \J_{tor} + \mu_0 \J_{pol}
+\end{equation}
+where
+\begin{align}
+\mu_0 \J_{tor} &= \wedge Q \\
+\mu_0 \J_{pol} &= \nabla \times \wedge \Phi
+\end{align}
+Here, we see immediately that $\nabla \times \B_{tor} = \mu_0 \J_{pol}$.
+By imposing $\nabla \times \B_{pol} = \mu_0 \J_{tor}$, we can derive
+\begin{equation}
+\nabla^2 \Psi = -Q
+\end{equation}
+
+\subsection{Spherical harmonic expansions of the toroidal and poloidal scalars}
+
+Now we see that the full magnetic field $\B$ and current density $\J$
+can be specified by three scalar functions $\Phi,\Psi,Q$. We can
+expand these scalars in a basis of spherical harmonics:
+\begin{align}
+\Phi(r,\theta,\phi) = \sum_{nm} \phi_{nm}(r) Y_{nm}(\theta,\phi) \\
+\Psi(r,\theta,\phi) = R \sum_{nm} \psi_{nm}(r) Y_{nm}(\theta,\phi) \\
+Q(r,\theta,\phi) = \frac{1}{R} \sum_{nm} q_{nm}(r) Y_{nm}(\theta,\phi)
+\end{align}
+Here, $R$ is a reference radius introduced so that
+$\phi_{nm}(r),\psi_{nm}(r),q_{nm}(r)$ all have the same units (nT).
+This makes numerical computations easier. The spherical harmonics
+are defined as
+\begin{equation}
+Y_{nm}(\theta,\phi) = S_{n|m|}(\cos{\theta}) \exp{im\phi}
+\end{equation}
+where $S_{nm}(\cos{\theta})$ are the Schmidt semi-normalized associated
+Legendre functions.
+
+\subsection{Spherical harmonic expansion of the magnetic field}
+
+With the spherical harmonic expansions of the toroidal and poloidal
+scalars defined above, we can expand the toroidal and poloidal magnetic
+field as follows.
+\begin{align}
+\B_{tor} &= \sum_{nm} \phi_{nm}(r)
+\left[
+\begin{array}{c}
+0 \\
+-\frac{im}{\sin{\theta}} Y_{nm} \\
+\partial_{\theta} Y_{nm}
+\end{array}
+\right] \label{eqn:Btor} \\
+\B_{pol} &= -\frac{R}{r} \sum_{nm}
+\left[
+\begin{array}{c}
+n(n+1) \psi_{nm}(r) Y_{nm} \\
+\partial_r \left( r \psi_{nm}(r) \right) \partial_{\theta} Y_{nm} \\
+\frac{im}{\sin{\theta}} \partial_r \left( r \psi_{nm}(r) \right) Y_{nm}
+\end{array}
+\right] \label{eqn:Bpol}
+\end{align}
+
+\subsection{Spherical harmonic expansion of the current}
+
+Similarly, the current density can be expanded as
+\begin{align}
+\mu_0 \J_{tor} &= \frac{1}{R} \sum_{nm} q_{nm}(r)
+\left[
+\begin{array}{c}
+0 \\
+-\frac{im}{\sin{\theta}} Y_{nm} \\
+\partial_{\theta} Y_{nm}
+\end{array}
+\right] \\
+\mu_0 \J_{pol} &= -\frac{1}{r} \sum_{nm}
+\left[
+\begin{array}{c}
+n(n+1) \phi_{nm}(r) Y_{nm} \\
+\partial_r \left( r \phi_{nm}(r) \right) \partial_{\theta} Y_{nm} \\
+\frac{im}{\sin{\theta}} \partial_r \left( r \phi_{nm}(r) \right) Y_{nm}
+\end{array}
+\right]
+\end{align}
+
+\subsection{Relating $\Psi$ and $Q$}
+
+From the relation $\nabla^2 \Psi = -Q$, one can show
+\begin{equation}
+\psi_{nm}(r) = \int_{0}^{\infty} G_n(r,s) \left( \frac{s}{R} \right)^2 q_{nm}(s) ds
+\label{eqn:psinm1}
+\end{equation}
+where the Green's function $G_n(r,s)$ is given by
+\begin{equation}
+G_n(r,s) = \frac{1}{2n + 1}
+\left\{
+\begin{array}{cc}
+\frac{r^n}{s^{n+1}}, & r < s \\
+\frac{s^n}{r^{n+1}}, & r > s
+\end{array}
+\right.
+\end{equation}
+If the toroidal current is restricted to the shell $S(a,c)$, so that
+$q_{nm}(r) = 0$ outside the shell, Eq.~\eqref{eqn:psinm1} becomes
+\begin{equation}
+\psi_{nm}(r) = \int_{a}^{c} G_n(r,s) \left( \frac{s}{R} \right)^2 q_{nm}(s) ds
+\label{eqn:psinm2}
+\end{equation}
+Since the quantity $\partial_r (r \psi_{nm}(r))$ appears in
+the expansion for $\B_{pol}$, it is instructive to examine this
+expression for the case $r > c$. If we wish to know the poloidal
+scalar above the current shell, the Green's function becomes
+$G_n(r,s) = \frac{1}{2n+1} \frac{s^n}{r^{n+1}}$ and
+\begin{equation}
+r \psi_{nm}(r > c) = \frac{1}{r^n} \frac{1}{2n+1} \int_a^c s^n \left( \frac{s}{R} \right)^2 q_{nm}(s) ds
+\label{eqn:psiabove}
+\end{equation}
+The integral does not depend on $r$, and so we find for the case $r > c$:
+\begin{equation}
+\partial_r (r \psi_{nm}(r)) = -n \psi_{nm}(r)
+\label{eqn:psi_above}
+\end{equation}
+Similarly, if we are below the current shell, with $r < a$, we will find:
+\begin{equation}
+\partial_r (r \psi_{nm}(r)) = (n+1) \psi_{nm}(r)
+\label{eqn:psi_below}
+\end{equation}
+Inside the current shell, with $a \le r \le c$, the integral will
+depend on $r$ and so the expression for $\partial_r(r \psi_{nm}(r))$
+becomes more complex. To summarize, the poloidal fields due to
+internal and external toroidal current sources are given by
+\begin{align}
+\B_{pol}^i = \nabla \times \wedge \Psi^i &=
+-\frac{R}{r} \sum_{nm} n \psi_{nm}^i(r)
+\left[
+\begin{array}{c}
+(n+1) Y_{nm} \\
+-\partial_{\theta} Y_{nm} \\
+\frac{-im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right] \label{eqn:Bpoli} \\
+\B_{pol}^e = \nabla \times \wedge \Psi^e &=
+-\frac{R}{r} \sum_{nm} (n+1) \psi_{nm}^e(r)
+\left[
+\begin{array}{c}
+n Y_{nm} \\
+\partial_{\theta} Y_{nm} \\
+\frac{im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right] \label{eqn:Bpole}
+\end{align}
+
+\section{Fitting poloidal and toroidal fields to satellite data}
+
+Assume we have a satellite which samples the geomagnetic field
+within a shell $S(r_1,r_2)$. The shell will have some thickness to it
+due to the satellite's elliptical orbit, as well as orbital decay
+over its lifetime. The magnetic field $\B$ seen by the satellite can
+be expressed as
+\begin{equation}
+\B = \B_{pol}^i + \B_{pol}^e + \B_{pol}^{sh} + \B_{tor}
+\end{equation}
+where $\B_{pol}^i$ is the poloidal field due to toroidal currents flowing
+internally to the satellite shell, $\B_{pol}^e$ is the poloidal field
+due to toroidal currents flowing externally to the satellite shell,
+$\B_{pol}^{sh}$ is the poloidal field due to toroidal currents flowing
+in the satellite shell, and $\B_{tor}$ is the toroidal field due
+to poloidal currents flowing in the satellite shell. $\B_{tor}$ does
+not need to be separated into internal/external/within components,
+since poloidal currents flowing outside the satellite shell cannot
+be seen by the satellite (Backus).
+
+\subsection{$\B_{pol}^i$ and $\B_{pol}^e$}
+
+The fields $\B_{pol}^i$ and $\B_{pol}^e$ are potential fields in the
+satellite shell, since their current densities are 0 in $S(r_1,r_2)$.
+Therefore,
+\begin{align}
+\B_{pol}^i &= -\nabla V^i \\
+\B_{pol}^e &= -\nabla V^e
+\end{align}
+
+The scalar potential fields are given by
+\begin{align}
+V^i(r,\theta,\phi) &= R \sum_{nm} g_{nm} \left( \frac{R}{r} \right)^{n+1} Y_{nm}(\theta,\phi) \\
+V^e(r,\theta,\phi) &= R \sum_{nm} k_{nm} \left( \frac{r}{R} \right)^n Y_{nm}(\theta,\phi)
+\end{align}
+Since these potential fields are also poloidal, they satisfy
+Eqs.~\eqref{eqn:Bpoli}-\eqref{eqn:Bpole}, and so for the internal case:
+\begin{align}
+-\nabla V^i &= \nabla \times \wedge \Psi^i \\
+\sum_{nm} g_{nm} \left( \frac{R}{r} \right)^{n+2}
+\left[
+\begin{array}{c}
+(n+1) Y_{nm} \\
+-\partial_{\theta} Y_{nm} \\
+\frac{-im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right]
+&=
+-\frac{R}{r} \sum_{nm} n \psi_{nm}^i(r)
+\left[
+\begin{array}{c}
+(n+1) Y_{nm} \\
+-\partial_{\theta} Y_{nm} \\
+\frac{-im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right]
+\end{align}
+By inspection, we find
+\begin{equation}
+\psi_{nm}^i(r) = -\frac{1}{n} \left( \frac{R}{r} \right)^{n+1} g_{nm}
+\label{eqn:psi_g}
+\end{equation}
+For the external polidal field, we have
+\begin{align}
+-\nabla V^e &= \nabla \times \wedge \Psi^e \\
+-\sum_{nm} k_{nm} \left( \frac{r}{R} \right)^{n-1}
+\left[
+\begin{array}{c}
+n Y_{nm} \\
+\partial_{\theta} Y_{nm} \\
+\frac{im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right]
+&=
+-\frac{R}{r} \sum_{nm} (n+1) \psi_{nm}^e(r)
+\left[
+\begin{array}{c}
+n Y_{nm} \\
+\partial_{\theta} Y_{nm} \\
+\frac{im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right]
+\end{align}
+and so by inspection
+\begin{equation}
+\psi_{nm}^e(r) = \frac{1}{n+1} \left( \frac{r}{R} \right)^n k_{nm}
+\end{equation}
+
+\subsection{Visualizing current flow}
+
+For the internal field $\B_{pol}^i$, we would additionally like to visualize the flow of the
+toroidal current system (EEJ and Sq), and so we relate the toroidal current scalars $\q(r)$
+and potential coefficients $g_{nm}$ by assuming a spherical sheet current flowing at some radius
+$b$. Since the sheet current has no thickness, we parameterize the current scalars as
+\begin{equation}
+\q(r) = \q b \delta(r - b)
+\label{eqn:qnm}
+\end{equation}
+where the factor of $b$ is inserted so that $\q$ has the same units as $\q(r)$ (nT).
+Using this expression in Eq.~\eqref{eqn:psiabove} for the poloidal scalar for a current
+flowing beneath the satellite shell yields
+\begin{equation}
+\psi_{nm}^i(r) = \frac{\q}{2n + 1} \left( \frac{b}{r} \right)^{n+1} \left( \frac{b}{R} \right)^2
+\label{eqn:psi_q}
+\end{equation}
+and combining this with Eq.~\eqref{eqn:psi_g} yields
+\begin{equation}
+g_{nm} = -\frac{n}{2n+1} \q \left( \frac{b}{R} \right)^{n+3}
+\label{eqn:g_q}
+\end{equation}
+If we choose the current shell radius $b$ high enough that we have satellite measurements
+below the shell (ie: CHAMP measurements near 250-300 km altitude), we must also consider
+the current shell as an external source. In this case, we find
+\begin{equation}
+\psi_{nm}^e(r) = \frac{\q}{2n + 1} \left( \frac{r}{b} \right)^n \left( \frac{b}{R} \right)^2
+\label{eqn:psie_q}
+\end{equation}
+and also
+\begin{equation}
+k_{nm} = q_{nm} \frac{n+1}{2n + 1} \left( \frac{R}{b} \right)^{n-2}
+\end{equation}
+
+To solve for the $\q$ in the least-squares inversion, we would use the parameterizations
+\begin{align}
+\B_{pol}(r > b) &= -\frac{R}{r} \left( \frac{b}{R} \right)^2 \sum_{nm} \q \frac{n}{2n + 1}
+\left( \frac{b}{r} \right)^{n+1}
+\left[
+\begin{array}{c}
+(n+1) Y_{nm} \\
+-\partial_{\theta} Y_{nm} \\
+-\frac{im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right] \\
+\B_{pol}(r < b) &= -\frac{R}{r} \left( \frac{b}{R} \right)^2 \sum_{nm} \q \frac{n+1}{2n + 1}
+\left( \frac{r}{b} \right)^n
+\left[
+\begin{array}{c}
+n Y_{nm} \\
+\partial_{\theta} Y_{nm} \\
+\frac{im}{\sin{\theta}} Y_{nm}
+\end{array}
+\right]
+\end{align}
+depending whether the satellite measurement is above or below the current shell at $r = b$.
+
+To parameterize $\B_{pol}^i$ in the least squares inversion, we could either use
+$\B_{pol}^i = \nabla \times \wedge \Psi^i$ with Eq.~\eqref{eqn:psi_q}, and solve
+for the $\q$ directly, or use $\B_{pol}^i = -\nabla V^i$, solve for the $g_{nm}$
+and use Eq.~\eqref{eqn:g_q} to recover the $\q$. Once the $\q$ are determined,
+the sheet current density (in A/m) flowing at the radius $b$ is given by
+\begin{equation}
+\mu_0 \mathbf{K}_{tor}^i = \frac{b}{R} \sum_{nm} \q
+\left[
+\begin{array}{c}
+0 \\
+-\frac{im}{\sin{\theta}} Y_{nm} \\
+\partial_{\theta} Y_{nm}
+\end{array}
+\right]
+\end{equation}
+
+\subsubsection{The current stream function}
+
+To visualize the equivalent current flow at $r = b$, it is most useful to draw contours
+of the current stream function $\chi^i$. For a toroidal current, the current stream function is
+defined by (see Haines, 1994, eq 25)
+\begin{equation}
+\J_{tor} = \nabla \times \left[ \hat{r} \chi^i(\theta,\phi) \right]
+\end{equation}
+so with our definitions,
+\begin{equation}
+\chi^i(\theta,\phi) = -\frac{Qb}{\mu_0} = -\frac{b}{\mu_0} \frac{b}{R} \sum_{nm} \q Y_{nm}(\theta,\phi)
+\end{equation}
+with the $\q$ defined in Eq.~\eqref{eqn:qnm}. Using $\mu_0 = 400 \pi$ nT / (kA km$^{-1}$),
+we see $\chi^i$ will have units of kA. The contours of the $\chi^i$ stream function will illustrate
+current flow, counterclockwise around a maximum, and clockwise around a minimum.
+
+\subsection{$\B_{pol}^{sh}$}
+
+The shell poloidal field is due to toroidal currents flowing inside the satellite shell $S(a,c)$. Here,
+we will expand the toroidal current scalar radial dependence as a Taylor series:
+\begin{equation}
+q_{nm}(r) = \sum_{j=0}^J q_{nm}^{(j)} \left( \frac{r - r_0}{R} \right)^j
+\end{equation}
+where we have absorbed the $1/j!$ term into $q_{nm}^{(j)}$ and added the reference radius
+to keep the radial term dimensionless. $r_0$ is the mean altitude of the current shell,
+ie: $(a+c)/2$. The corresponding poloidal scalar can be expressed
+as
+\begin{align}
+\psi_{nm}(r) &= \sum_j q_{nm}^{(j)} \left( A_n^{(j)}(r) + B_n^{(j)}(r) \right) \\
+\partial_r \left( r \psi_{nm}(r) \right) &= \sum_j q_{nm}^{(j)} \left( -n A_n^{(j)}(r) + (n+1) B_n^{(j)}(r) \right)
+\end{align}
+where
+\begin{align}
+A_n^{(j)}(r) &= \frac{1}{2n + 1} \left( \frac{r}{R} \right)^{j+2} \int_{a/r}^1 s^{n+2} \left( s - \frac{r_0}{r} \right)^j ds \\
+B_n^{(j)}(r) &= \frac{1}{2n + 1} \left( \frac{r}{R} \right)^{j+2} \int_{1}^{c/r} \frac{1}{s^{n-1}} \left( s - \frac{r_0}{r} \right)^j ds
+\end{align}
+Finally, the poloidal magnetic field is given by
+\begin{equation}
+\B_{pol}^{sh} = -\frac{R}{r} \sum_{nmj} q_{nm}^{(j)}
+\left[
+\begin{array}{c}
+n(n+1) \left( A_n^{(j)}(r) + B_n^{(j)}(r) \right) Y_{nm} \\
+\left( -n A_n^{(j)}(r) + (n+1) B_n^{(j)}(r) \right) \partial_{\theta} Y_{nm} \\
+\frac{im}{\sin{\theta}} \left( -n A_n^{(j)}(r) + (n+1) B_n^{(j)}(r) \right) Y_{nm}
+\end{array}
+\right]
+\end{equation}
+
+The current density is given by
+\begin{equation}
+\mu_0 \J_{tor}^{sh} = \frac{1}{R} \sum_{nmj} q_{nm}^{(j)}
+\left( \frac{r - r_0}{R} \right)^j
+\left[
+\begin{array}{c}
+0 \\
+-\frac{im}{\sin{\theta}} Y_{nm} \\
+\partial_{\theta} Y_{nm}
+\end{array}
+\right]
+\end{equation}
+
+\section{Misc}
+
+Possible functions for the toroidal current which go to zero (0th and 1st
+derivatives) on the current shell $S(a,c)$:
+\begin{align}
+q_{nm}(r) &= q_{nm} \cos{\left[ \frac{\pi}{c-a} \left( r - \frac{1}{2}(c+a) \right) \right]}^2 \\
+q_{nm}(r) &= q_{nm} (r-a)^2 (r-c)^2
+\end{align}
+
+\section{Identities}
+
+Here are some useful identities involving the toroidal and poloidal differential operators.
+
+\begin{align}
+\wedge &= \R \times \nabla \\
+\wedge f &= -\nabla \times \left( \R f \right) \\
+\nabla \times \wedge f &= \R \nabla^2 f - \nabla \left( f + \R \cdot \nabla f \right) \\
+\wedge \cdot \left( \nabla \times \wedge \right) &= 0 \\
+\R \cdot \wedge &= 0 \\
+\nabla \cdot \wedge &= 0 \\
+\nabla \cdot \left( \nabla \times \wedge \right) &= 0
+\end{align}
+
+\end{document}

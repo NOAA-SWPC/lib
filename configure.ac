@@ -25,6 +25,7 @@ AC_CONFIG_FILES([     \
   lls/Makefile        \
   magdata/Makefile    \
   msynth/Makefile     \
+  poltor/Makefile     \
   pomme/Makefile      \
   swarm/Makefile      \
   track/Makefile      \

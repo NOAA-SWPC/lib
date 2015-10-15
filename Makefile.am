@@ -10,6 +10,7 @@ SUBDIRS =     \
   lls         \
   magdata     \
   msynth      \
+  poltor      \
   pomme       \
   swarm       \
   track

@@ -4,7 +4,7 @@
 #
 # Usage: mkidx.sh [start_year] [end_year] [start_doy] [end_doy] [start_doy2] [end_doy2]
 
-cdfdir="/nfs/satmag/CHAMP/Stage1"
+cdfdir="/data/CHAMP/Stage1"
 
 start_year="2000"
 end_year="2010"
@@ -20,7 +20,7 @@ if test -n "$4"; then end_doy=$(seq -f "%02g" $4 $4); fi
 if test -n "$5"; then start_doy2=$(seq -f "%02g" $5 $5); fi
 if test -n "$6"; then end_doy2=$(seq -f "%02g" $6 $6); fi
 
-doy_prog="/nfs/satmag_work/palken/corr/common/doy2md"
+doy_prog="/data/palken/lib/common/doy2md"
 
 # Make specialized index file
 tmpfile=$(mktemp)
