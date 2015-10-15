@@ -18,8 +18,14 @@ AC_CONFIG_FILES([     \
   chaos/Makefile      \
   common/Makefile     \
   curvefit/Makefile   \
+  euler/Makefile      \
+  levmar/Makefile     \
   lls/Makefile        \
+  magdata/Makefile    \
   msynth/Makefile     \
+  pomme/Makefile      \
+  swarm/Makefile      \
+  track/Makefile      \
 ])
 
 #AC_CONFIG_FILES([     \

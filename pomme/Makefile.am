@@ -1,10 +1,8 @@
 lib_LTLIBRARIES = libpomme.la
 
-pmodeldir = $(top_builddir)/pomme8.1/POMME8
+libpomme_la_SOURCES = geod2geoc.c gsm2geo.c sm2geo.c plmbar.c magfdz.c int-ext.c pomme.c pomme_wrap.c
 
-libpomme_la_SOURCES = $(pmodeldir)/geod2geoc.c $(pmodeldir)/gsm2geo.c $(pmodeldir)/sm2geo.c $(pmodeldir)/plmbar.c $(pmodeldir)/magfdz.c $(pmodeldir)/int-ext.c $(pmodeldir)/pomme.c pomme_wrap.c
-
-AM_CPPFLAGS = -I$(pmodeldir) -I$(top_builddir)/common
+AM_CPPFLAGS = -I$(top_builddir)/common
 
 check_PROGRAMS = test test2 test_ext
 test_SOURCES = test.c
