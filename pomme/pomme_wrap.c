@@ -16,7 +16,6 @@
 
 #include <indices/indices.h>
 
-#include "estist2.h"
 #include "pomme.h"
 
 void pomme_geodetic(int control[MAXCONTROL], double fday,
@@ -67,7 +66,6 @@ pomme_alloc(pomme_parameters *params)
 
   w->f107_workspace_p = f107_alloc(F107_IDX_FILE);
   w->estist_workspace_p = estist_alloc(ESTIST_IDX_FILE);
-  w->estist2_workspace_p = estist2_alloc(ESTIST2_IDX_FILE);
   w->ace_workspace_p = ace_alloc(ACE_IDX_FILE);
 
   w->control[POS_0] = params->ndeg; /* internal field coefficients */
@@ -135,9 +133,6 @@ pomme_free(pomme_workspace *w)
 
   if (w->estist_workspace_p)
     estist_free(w->estist_workspace_p);
-
-  if (w->estist2_workspace_p)
-    estist2_free(w->estist2_workspace_p);
 
   if (w->ace_workspace_p)
     ace_free(w->ace_workspace_p);
@@ -449,12 +444,7 @@ pomme_get_indices(time_t t, double *E_st, double *I_st, double *IMF_By,
   if (s)
     *f107 = 120.0; /* default value */
 
-#if 1
   s = estist_get(t, E_st, I_st, w->estist_workspace_p);
-#else
-  /* POMME is designed to work with the Stefan-provided Est/Ist values */
-  s = estist2_get(t, E_st, I_st, w->estist2_workspace_p);
-#endif
   if (s)
     {
       /* raise error since these are critical parameters */

@@ -3,8 +3,7 @@
 # Make index files for Swarm, using the latest baseline
 # version available for each day
 
-datadir="/nfs/satmag/SWARM/Stage1"
-#datadir="/nfs/satmag/SWARM/VFM_CORRECTED/0403/Stage1_DTU"
+datadir="/data/SWARM/MAG/Stage1_CHAOS"
 
 function dosat
 {

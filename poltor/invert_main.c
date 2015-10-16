@@ -27,7 +27,6 @@
 #include <gsl/gsl_blas.h>
 
 #include "common.h"
-#include "dstcorr.h"
 #include "oct.h"
 #include "track.h"
 

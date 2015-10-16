@@ -19,11 +19,6 @@
 #define INCLUDED_POMME8_ext_h
 #endif
 
-#ifndef INCLUDED_estist2_h
-#include "estist2.h"
-#define INCLUDED_estist2_h
-#endif
-
 #define R_EARTH_KM        (6371.2)
 
 typedef struct
@@ -33,7 +28,6 @@ typedef struct
   tcontrol control;
   f107_workspace *f107_workspace_p;
   estist_workspace *estist_workspace_p;
-  estist2_workspace *estist2_workspace_p;
   ace_workspace *ace_workspace_p;
 } pomme_workspace;
 

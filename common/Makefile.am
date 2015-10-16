@@ -1,4 +1,4 @@
-bin_PROGRAMS = test test_zenith test_sunrise time2fday test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_estist2 test_ut1 doy2md
+bin_PROGRAMS = test test_zenith test_sunrise time2fday test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_ut1 doy2md
 
 doy2md_SOURCES = doy2md.c
 test_SOURCES = test.c
@@ -33,7 +33,6 @@ libcommon_la_SOURCES = \
   eci.c                \
 	ellipsoid.c          \
   ema.c                \
-  estist2.c            \
   fit.c                \
   fit2.c               \
   geo.c                \
@@ -61,7 +60,6 @@ test_common_libs = -lm -lgsl -lgslcblas
 doy2md_LDADD = libcommon.la ${test_common_libs}
 test_LDADD = libcommon.la ${test_common_libs}
 test_zenith_LDADD = libcommon.la ${test_common_libs}
-test_estist2_LDADD = libcommon.la ${test_common_libs}
 test_sunrise_LDADD = libcommon.la ${test_common_libs}
 time2fday_LDADD = libcommon.la ${test_common_libs}
 time2str_LDADD = libcommon.la ${test_common_libs}
