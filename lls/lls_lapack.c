@@ -60,21 +60,23 @@ lls_lapack_dposv(const double lambda, gsl_vector *c, lls_workspace *w)
 } /* lls_lapack_dposv() */
 
 int
-lls_lapack_zposv(gsl_vector_complex *c, lls_complex_workspace *w)
+lls_lapack_zposv(const double lambda, gsl_vector_complex *c, lls_complex_workspace *w)
 {
   int s = 0;
-  lapack_int n = w->work_A_complex->size1;
+  lapack_int n = w->work_A->size1;
   lapack_int nrhs = 1;
-  lapack_int lda = w->work_A_complex->size1;
-  lapack_int ldb = w->work_b_complex->size;
+  lapack_int lda = w->work_A->size1;
+  lapack_int ldb = w->work_b->size;
   lapack_int ldx = c->size;
   double rcond;
   double ferr, berr;
   lapack_int ldaf = n;
   char equed = 'N';
 
-  gsl_matrix_complex_transpose_memcpy(w->work_A_complex, w->AHA);
-  gsl_vector_complex_memcpy(w->work_b_complex, w->AHb);
+  gsl_matrix_complex_transpose_memcpy(w->work_A, w->AHA);
+  gsl_vector_complex_memcpy(w->work_b, w->AHb);
+
+  lls_complex_regularize(lambda, w->work_A);
 
   /* use expert driver to get condition number estimate */
   s = LAPACKE_zposvx(LAPACK_COL_MAJOR,
@@ -82,13 +84,13 @@ lls_lapack_zposv(gsl_vector_complex *c, lls_complex_workspace *w)
                      'U',
                      n,
                      nrhs,
-                     (lapack_complex_double *) w->work_A_complex->data,
+                     (lapack_complex_double *) w->work_A->data,
                      lda,
                      (lapack_complex_double *) w->AF->data,
                      ldaf,
                      &equed,
                      w->S->data,
-                     (lapack_complex_double *) w->work_b_complex->data,
+                     (lapack_complex_double *) w->work_b->data,
                      ldb,
                      (lapack_complex_double *) c->data,
                      ldx,
@@ -107,16 +109,16 @@ int
 lls_lapack_zinvert(gsl_matrix_complex *B, const lls_complex_workspace *w)
 {
   int s = 0;
-  lapack_int n = w->work_A_complex->size1;
-  lapack_int lda = w->work_A_complex->size1;
+  lapack_int n = w->work_A->size1;
+  lapack_int lda = w->work_A->size1;
 
-  gsl_matrix_complex_transpose_memcpy(w->work_A_complex, w->AHA);
+  gsl_matrix_complex_transpose_memcpy(w->work_A, w->AHA);
 
   /* compute Cholesky decomposition of A^H A */
   s = LAPACKE_zpotrf(LAPACK_COL_MAJOR,
                      'U',
                      n,
-                     (lapack_complex_double *) w->work_A_complex->data,
+                     (lapack_complex_double *) w->work_A->data,
                      lda);
   if (s)
     {
@@ -128,7 +130,7 @@ lls_lapack_zinvert(gsl_matrix_complex *B, const lls_complex_workspace *w)
   s = LAPACKE_zpotri(LAPACK_COL_MAJOR,
                      'U',
                      n,
-                     (lapack_complex_double *) w->work_A_complex->data,
+                     (lapack_complex_double *) w->work_A->data,
                      lda);
   if (s)
     {
@@ -137,7 +139,7 @@ lls_lapack_zinvert(gsl_matrix_complex *B, const lls_complex_workspace *w)
     }
 
   /* store output in upper half of B */
-  gsl_matrix_complex_transpose_memcpy(B, w->work_A_complex);
+  gsl_matrix_complex_transpose_memcpy(B, w->work_A);
 
   return s;
 } /* lls_lapack_zinvert() */

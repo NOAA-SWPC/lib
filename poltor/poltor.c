@@ -305,6 +305,11 @@ poltor_alloc(const poltor_parameters *params)
       return 0;
     }
 
+  w->nreg = 200;
+  w->reg_param = gsl_vector_alloc(w->nreg);
+  w->rho = gsl_vector_alloc(w->nreg);
+  w->eta = gsl_vector_alloc(w->nreg);
+
   return w;
 } /* poltor_alloc() */
 
@@ -371,12 +376,24 @@ poltor_free(poltor_workspace *w)
   if (w->cquad_workspace_p)
     gsl_integration_cquad_workspace_free(w->cquad_workspace_p);
 
+  if (w->reg_param)
+    gsl_vector_free(w->reg_param);
+
+  if (w->rho)
+    gsl_vector_free(w->rho);
+
+  if (w->eta)
+    gsl_vector_free(w->eta);
+
   free(w);
 }
 
 /*
 poltor_calc()
   Build LS system: A^H W A and A^H W b
+
+Notes:
+1) On output, w->L contains diag(L) the regularization matrix
 */
 
 int
@@ -395,6 +412,20 @@ poltor_calc(poltor_workspace *w)
 
   /* initialize lls module */
   lls_complex_reset(w->lls_workspace_p);
+
+  fprintf(stderr, "poltor_calc: computing regularization matrix...");
+
+#if POLTOR_SYNTH_DATA
+  /* no regularization (set lambda = 0 later) */
+  gsl_vector_set_all(w->L, 1.0);
+#else
+  /* construct L = diag(L) */
+  s = poltor_regularize(w->L, w);
+  if (s)
+    return s;
+#endif
+
+  fprintf(stderr, "done\n");
 
   fprintf(stderr, "poltor_calc: building LS system...");
 
@@ -422,8 +453,6 @@ Notes:
 1) On output, w->c contains coefficient vector
 
 2) On output, w->chisq contains the residual sum of squares r^T r
-
-3) On output, w->L contains diag(L), the Tikhonov regularizing matrix
 */
 
 int
@@ -433,27 +462,33 @@ poltor_solve(poltor_workspace *w)
   struct timeval tv0, tv1;
   const double dof = (double) w->data->nres - (double) w->p;
 
-#if !POLTOR_SYNTH_DATA
-  fprintf(stderr, "poltor_solve: regularizing LS system...");
-
-  /* construct L = diag(L) */
-  s = poltor_regularize(w->L, w);
-  if (s)
-    return s;
-
-  /* add L^T L to normal equations matrix */
-  s = lls_complex_regularize2(w->L, w->lls_workspace_p);
-  if (s)
-    return s;
-
-  fprintf(stderr, "done\n");
+#if POLTOR_SYNTH_DATA
+  const double lambda = 0.0; /* no regularization */
+#else
+  const double lambda = 1.0; /* regularization provided by L matrix */
 #endif
+
+  {
+    size_t i;
+    lls_complex_lcurve(w->reg_param, w->rho, w->eta, w->lls_workspace_p);
+
+    for (i = 0; i < w->nreg; ++i)
+      {
+        printf("%.12e %.12e %.12e\n",
+               gsl_vector_get(w->reg_param, i),
+               gsl_vector_get(w->rho, i),
+               gsl_vector_get(w->eta, i));
+      }
+    exit(1);
+  }
+
+  fprintf(stderr, "poltor_solve: regularization lambda = %g\n", lambda);
 
   fprintf(stderr, "poltor_solve: solving LS system...");
   gettimeofday(&tv0, NULL);
 
   /* solve A^H W A c = A^H W b */
-  s = lls_complex_solve(w->c, w->lls_workspace_p);
+  s = lls_complex_solve(lambda, w->c, w->lls_workspace_p);
   if (s)
     {
       fprintf(stderr, "poltor_solve: error solving system: %d\n", s);
@@ -800,20 +835,14 @@ poltor_eval_chi_int(const double b, const double theta, const double phi,
           size_t pidx = gsl_sf_legendre_array_index(n, mabs);
           gsl_complex cnm = gsl_vector_complex_get(w->c, nmidx);
           complex double qnm;
-          complex double Ynm, dYnm;
+          complex double Ynm;
 
           qnm = nfac * rterm * (GSL_REAL(cnm) + I * GSL_IMAG(cnm));
 
           if (m >= 0)
-            {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
-            }
+            Ynm = w->Ynm[pidx];
           else
-            {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
-            }
+            Ynm = conj(w->Ynm[pidx]);
 
           sum += qnm * Ynm;
         }
@@ -915,20 +944,14 @@ poltor_eval_chi_ext(const double b, const double theta, const double phi,
           size_t pidx = gsl_sf_legendre_array_index(n, mabs);
           gsl_complex cnm = gsl_vector_complex_get(w->c, nmidx);
           complex double qnm;
-          complex double Ynm, dYnm;
+          complex double Ynm;
 
           qnm = nfac * rterm * (GSL_REAL(cnm) + I * GSL_IMAG(cnm));
 
           if (m >= 0)
-            {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
-            }
+            Ynm = w->Ynm[pidx];
           else
-            {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
-            }
+            Ynm = conj(w->Ynm[pidx]);
 
           sum += qnm * Ynm;
         }
@@ -1556,10 +1579,17 @@ poltor_build_ls(const int fold, poltor_workspace *w)
 
       if (fold)
         {
-          /* compute A^H W A and A^H W b */
-          fprintf(stderr, "\t folding into A^H W A and A^H W b...");
+          /* convert LS system to standard form */
+          fprintf(stderr, "\t converting (A,b) to standard form...");
           gettimeofday(&tv0, NULL);
-          lls_complex_fold(&A.matrix, &rhs.vector, &wts.vector, w->lls_workspace_p);
+          lls_complex_stdform(&A.matrix, &rhs.vector, &wts.vector, w->L, w->lls_workspace_p);
+          gettimeofday(&tv1, NULL);
+          fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+          /* compute A^H A and A^H b */
+          fprintf(stderr, "\t folding into A^H A and A^H b...");
+          gettimeofday(&tv0, NULL);
+          lls_complex_fold(&A.matrix, &rhs.vector, w->lls_workspace_p);
           gettimeofday(&tv1, NULL);
           fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
         }
@@ -2439,18 +2469,12 @@ poltor_eval_chi(const double r, const double theta, const double phi,
           size_t pidx = gsl_sf_legendre_array_index(n, mabs);
           gsl_complex cnm = gsl_vector_complex_get(w->c, nmidx);
           complex double qnm = GSL_REAL(cnm) + I * GSL_IMAG(cnm);
-          complex double Ynm, dYnm;
+          complex double Ynm;
 
           if (m >= 0)
-            {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
-            }
+            Ynm = w->Ynm[pidx];
           else
-            {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
-            }
+            Ynm = conj(w->Ynm[pidx]);
 
           sum += qnm * Ynm;
         }

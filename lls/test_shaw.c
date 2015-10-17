@@ -129,7 +129,6 @@ static void
 test_shaw_lls(const gsl_matrix * X, const gsl_vector * y,
               double *lambda, gsl_vector * c)
 {
-  int status;
   const size_t n = X->size1;
   const size_t p = X->size2;
   gsl_matrix * A = gsl_matrix_alloc(n, p);
@@ -158,7 +157,7 @@ test_shaw_lls(const gsl_matrix * X, const gsl_vector * y,
 
   *lambda = gsl_vector_get(reg_param, reg_idx);
 
-  status = lls_solve(*lambda, c, work);
+  lls_solve(*lambda, c, work);
 
   gsl_matrix_free(A);
   gsl_vector_free(b);

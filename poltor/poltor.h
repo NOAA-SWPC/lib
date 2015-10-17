@@ -17,7 +17,7 @@
 #include "track_weight.h"
 
 /* use synthetic data for testing */
-#define POLTOR_SYNTH_DATA            1
+#define POLTOR_SYNTH_DATA            0
 
 /* apply spatial weighting to data */
 #define POLTOR_SPATIAL_WEIGHTS       1
@@ -163,6 +163,12 @@ typedef struct
   size_t *base_ext;
   size_t *base_sh;
   size_t *base_tor;
+
+  /* L-curve parameters */
+  gsl_vector *reg_param;  /* regularization parameters */
+  gsl_vector *rho;        /* residual norms */
+  gsl_vector *eta;        /* solution norms */
+  size_t nreg;            /* number of points on L-curve */
 
   size_t flags;       /* POLTOR_FLG_xxx */
 

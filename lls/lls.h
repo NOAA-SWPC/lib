@@ -45,7 +45,6 @@ typedef struct
 {
   size_t p;                      /* number of coefficients */
   size_t max_block;              /* maximum observations at a time */
-  gsl_vector *c;                 /* coefficient vector */
   double residual;
   double chisq;                  /* residual ssq chi^2 */
   double cond;                   /* condition number */
@@ -54,17 +53,21 @@ typedef struct
   gsl_vector_complex *AHb;       /* A^H W b */
   double bHb;                    /* rhs scalar product: b^H W b */
 
-  gsl_vector_complex *c_complex; /* coefficient vector for robust iterations */
+  gsl_vector_complex *c;         /* coefficient vector */
   gsl_vector_complex *r_complex; /* complex residuals for robust regression */
   gsl_vector *r;                 /* residuals for robust regression */
   gsl_vector *w_robust;          /* robust weights */
   size_t niter;                  /* number of robust iterations */
 
   /* extra workspace for LAPACK */
-  gsl_matrix_complex *work_A_complex;
-  gsl_vector_complex *work_b_complex;
+  gsl_matrix_complex *work_A;
+  gsl_vector_complex *work_b;
   gsl_matrix_complex *AF;
   gsl_vector *S;
+
+  /* for computing L-curve */
+  gsl_eigen_herm_workspace *eigen_p;
+  gsl_vector *eval;
 
   gsl_multifit_robust_workspace *robust_workspace_p;
 } lls_complex_workspace;
@@ -91,10 +94,17 @@ int lls_load(const char *filename, lls_workspace *w);
 lls_complex_workspace *lls_complex_alloc(const size_t max_block, const size_t p);
 void lls_complex_free(lls_complex_workspace *w);
 int lls_complex_reset(lls_complex_workspace *w);
-int lls_complex_fold(gsl_matrix_complex *A, gsl_vector_complex *b,
-                     gsl_vector *wts, lls_complex_workspace *w);
-int lls_complex_solve(gsl_vector_complex *c, lls_complex_workspace *w);
-int lls_complex_regularize2(const gsl_vector *diag, lls_complex_workspace *w);
+int lls_complex_stdform(gsl_matrix_complex *A, gsl_vector_complex *b,
+                        const gsl_vector *wts, const gsl_vector *L,
+                        lls_complex_workspace *w);
+int lls_complex_fold(const gsl_matrix_complex *A, const gsl_vector_complex *b,
+                     lls_complex_workspace *w);
+int lls_complex_solve(const double lambda, gsl_vector_complex *c, lls_complex_workspace *w);
+int lls_complex_btransform(const gsl_vector *L, gsl_vector_complex *c,
+                           lls_complex_workspace *w);
+int lls_complex_lcurve(gsl_vector *reg_param, gsl_vector *rho, gsl_vector *eta,
+                       lls_complex_workspace *w);
+int lls_complex_regularize(const double lambda, gsl_matrix_complex *AHA);
 int lls_complex_invert(gsl_matrix_complex *B, const lls_complex_workspace *w);
 int lls_complex_correlation(gsl_matrix_complex *B, const lls_complex_workspace *w);
 int lls_complex_save(const char *filename, lls_complex_workspace *w);
@@ -102,7 +112,7 @@ int lls_complex_load(const char *filename, lls_complex_workspace *w);
 
 /* lls_lapack.c */
 int lls_lapack_dposv(const double lambda, gsl_vector *c, lls_workspace *w);
-int lls_lapack_zposv(gsl_vector_complex *c, lls_complex_workspace *w);
+int lls_lapack_zposv(const double lambda, gsl_vector_complex *c, lls_complex_workspace *w);
 int lls_lapack_zinvert(gsl_matrix_complex *B, const lls_complex_workspace *w);
 
 #endif /* INCLUDED_lls_h */
