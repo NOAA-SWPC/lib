@@ -13,8 +13,6 @@
 #include <gsl/gsl_linalg.h>
 #include <gsl/gsl_blas.h>
 
-#include "oct.h"
-
 static void
 random_vector_complex(gsl_vector_complex *v, gsl_rng *r,
                       const double lower, const double upper)
@@ -264,9 +262,6 @@ test_complex_solve(const double lambda, const gsl_matrix_complex * X, const gsl_
       gsl_test_rel(GSL_IMAG(c1i), GSL_IMAG(c2i), tol, "%s, imag lambda=%g n=%zu p=%zu i=%zu", desc, lambda, n, p, i);
     }
 
-  printcv_octave(c1, "c1");
-  printcv_octave(c2, "c2");
-
   gsl_vector_complex_free(c1);
   gsl_vector_complex_free(c2);
   gsl_matrix_complex_free(Xtmp);
@@ -326,12 +321,6 @@ test_complex_system(const size_t n, const size_t p, gsl_rng *r)
   test_complex_solve(1.0, X, y, w, L, "random w, random L");
   test_complex_solve(0.1, X, y, w, L, "random w, random L");
   test_complex_solve(0.01, X, y, w, L, "random w, random L");
-
-  printc_octave(X, "X");
-  printcv_octave(c, "c");
-  printcv_octave(y, "y");
-  printv_octave(w, "w");
-  printv_octave(L, "L");
 
   gsl_matrix_complex_free(X);
   gsl_vector_complex_free(c);
