@@ -5,6 +5,6 @@ libtrack_la_SOURCES = track.c track_filter.c track_flag.c track_offsets.c track_
 bin_PROGRAMS = print
 
 print_SOURCES = print.c
-print_LDADD = libtrack.la $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas
+print_LDADD = libtrack.la $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas
 
 AM_CPPFLAGS = -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/pomme -I$(top_builddir)/curvefit -I$(top_builddir)/chaos

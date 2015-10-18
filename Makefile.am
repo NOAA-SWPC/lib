@@ -1,16 +1,18 @@
+# The order of these directories is important, as some
+# directories need to be built before others
 SUBDIRS =     \
-  apex        \
-  champ       \
-  chaos       \
   common      \
+  apex        \
+  chaos       \
   curvefit    \
-  estist      \
-  euler       \
   levmar      \
   lls         \
-  magdata     \
   msynth      \
-  poltor      \
   pomme       \
-  swarm       \
-  track
+  track       \
+  magdata     \
+  euler       \
+  champ       \
+  estist      \
+  poltor      \
+  swarm
