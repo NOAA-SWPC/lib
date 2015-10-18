@@ -13,9 +13,7 @@
 down_sample="1"
 
 cdfdir="/data/SWARM/MAG/Unzipped_Data"
-
 outdir="/data/SWARM/MAG/Stage1"
-#outdir="/data/SWARM/MAG/Stage1_CHAOS"
 
 # Use CHAOS external field model
 #extra_flags="-c"
