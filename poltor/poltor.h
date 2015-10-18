@@ -169,6 +169,7 @@ typedef struct
   gsl_vector *rho;        /* residual norms */
   gsl_vector *eta;        /* solution norms */
   size_t nreg;            /* number of points on L-curve */
+  size_t reg_idx;         /* index of L-curve corner */
 
   size_t flags;       /* POLTOR_FLG_xxx */
 
@@ -209,6 +210,7 @@ double poltor_spectrum_ext(const size_t n, poltor_workspace *w);
 double poltor_spectrum_sh(const size_t n, poltor_workspace *w);
 double poltor_spectrum_tor(const size_t n, poltor_workspace *w);
 int poltor_print_spectrum(const char *filename, poltor_workspace *w);
+int poltor_print_lcurve(const char *filename, const poltor_workspace *w);
 size_t poltor_nmidx(const size_t type, const size_t n, const int m, poltor_workspace *w);
 size_t poltor_jnmidx(const size_t j, const size_t n, const int m, poltor_workspace *w);
 int poltor_regularize(gsl_vector *L, poltor_workspace *w);

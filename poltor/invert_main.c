@@ -548,9 +548,9 @@ main(int argc, char *argv[])
   size_t mmax_sh = 5;
   size_t nmax_tor = 60;
   size_t mmax_tor = 5;
-  double alpha_int = 0.01;
-  double alpha_sh = 0.003;
-  double alpha_tor = 0.05;
+  double alpha_int = 1.0;
+  double alpha_sh = 1.0;
+  double alpha_tor = 1.0;
   size_t robust_maxit = 5;
   const double R = R_EARTH_KM;
   const double b = R + 110.0;   /* radius of internal current shell (Sq+EEJ) */
@@ -769,7 +769,7 @@ main(int argc, char *argv[])
   fprintf(stderr, "done\n");
 #endif
 
-  fprintf(stderr, "print_data = %d\n", print_data);
+  fprintf(stderr, "main: print_data = %d\n", print_data);
   if (print_data)
     {
       fprintf(stderr, "main: writing data to %s...", data_file);

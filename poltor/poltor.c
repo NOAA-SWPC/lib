@@ -416,13 +416,17 @@ poltor_calc(poltor_workspace *w)
   fprintf(stderr, "poltor_calc: computing regularization matrix...");
 
 #if POLTOR_SYNTH_DATA
+
   /* no regularization (set lambda = 0 later) */
   gsl_vector_set_all(w->L, 1.0);
+
 #else
+
   /* construct L = diag(L) */
   s = poltor_regularize(w->L, w);
   if (s)
     return s;
+
 #endif
 
   fprintf(stderr, "done\n");
@@ -461,28 +465,35 @@ poltor_solve(poltor_workspace *w)
   int s = 0;
   struct timeval tv0, tv1;
   const double dof = (double) w->data->nres - (double) w->p;
+  double lambda; /* regularization parameter */
 
 #if POLTOR_SYNTH_DATA
-  const double lambda = 0.0; /* no regularization */
+
+  /* no regularization */
+  lambda = 0.0;
+
 #else
-  const double lambda = 1.0; /* regularization provided by L matrix */
-#endif
 
   {
-    size_t i;
-    lls_complex_lcurve(w->reg_param, w->rho, w->eta, w->lls_workspace_p);
+    const char *lcurve_file = "lcurve.dat";
 
-    for (i = 0; i < w->nreg; ++i)
-      {
-        printf("%.12e %.12e %.12e\n",
-               gsl_vector_get(w->reg_param, i),
-               gsl_vector_get(w->rho, i),
-               gsl_vector_get(w->eta, i));
-      }
-    exit(1);
+    /* calculate L-curve */
+    fprintf(stderr, "poltor_solve: calculating L-curve...");
+    lls_complex_lcurve(w->reg_param, w->rho, w->eta, w->lls_workspace_p);
+    fprintf(stderr, "done\n");
+
+    /* find L-corve corner */
+    fprintf(stderr, "poltor_solve: calculating L-curve corner...");
+    gsl_multifit_linear_ridge_lcorner(w->rho, w->eta, &(w->reg_idx));
+    lambda = gsl_vector_get(w->reg_param, w->reg_idx);
+    fprintf(stderr, "done (lambda = %f)\n", lambda);
+
+    fprintf(stderr, "poltor_solve: writing L-curve to %s...", lcurve_file);
+    poltor_print_lcurve(lcurve_file, w);
+    fprintf(stderr, "done\n");
   }
 
-  fprintf(stderr, "poltor_solve: regularization lambda = %g\n", lambda);
+#endif
 
   fprintf(stderr, "poltor_solve: solving LS system...");
   gettimeofday(&tv0, NULL);
@@ -494,6 +505,9 @@ poltor_solve(poltor_workspace *w)
       fprintf(stderr, "poltor_solve: error solving system: %d\n", s);
       return s;
     }
+
+  /* backtransform standard form system to get original solution vector */
+  lls_complex_btransform(w->L, w->c, w->lls_workspace_p);
 
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds, residual = %.12e, chisq/dof = %.12e)\n",
@@ -831,7 +845,7 @@ poltor_eval_chi_int(const double b, const double theta, const double phi,
       for (m = -M; m <= M; ++m)
         {
           int mabs = abs(m);
-          size_t nmidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, w);
+          size_t nmidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
           size_t pidx = gsl_sf_legendre_array_index(n, mabs);
           gsl_complex cnm = gsl_vector_complex_get(w->c, nmidx);
           complex double qnm;
@@ -1357,7 +1371,7 @@ poltor_print_spectrum(const char *filename, poltor_workspace *w)
       double qn = poltor_spectrum_sh(n, w);
       double phin = poltor_spectrum_tor(n, w);
 
-      fprintf(fp, "%zu %f %f %f %f\n",
+      fprintf(fp, "%zu %.12e %.12e %.12e %.12e\n",
               n,
               gn,
               kn,
@@ -1369,6 +1383,40 @@ poltor_print_spectrum(const char *filename, poltor_workspace *w)
 
   return 0;
 } /* poltor_print_spectrum() */
+
+int
+poltor_print_lcurve(const char *filename, const poltor_workspace *w)
+{
+  FILE *fp;
+  size_t i;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "poltor_print_lcurve: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  for (i = 0; i < w->nreg; ++i)
+    {
+      fprintf(fp, "%.12e %.12e %.12e\n",
+              gsl_vector_get(w->reg_param, i),
+              gsl_vector_get(w->rho, i),
+              gsl_vector_get(w->eta, i));
+    }
+
+  fprintf(fp, "\n\n");
+
+  fprintf(fp, "%.12e %.12e %.12e\n",
+          gsl_vector_get(w->reg_param, w->reg_idx),
+          gsl_vector_get(w->rho, w->reg_idx),
+          gsl_vector_get(w->eta, w->reg_idx));
+
+  fclose(fp);
+
+  return 0;
+}
 
 /*
 poltor_theta()
@@ -2335,7 +2383,7 @@ poltor_regularize(gsl_vector *L, poltor_workspace *w)
   const double alpha_int = w->alpha_int;
   const double alpha_sh = w->alpha_sh;
   const double alpha_tor = w->alpha_tor;
-  const double beta = 3.0; /* power of n */
+  const double beta = 1.0; /* power of n */
   const double gamma_int = 2000.0;
   const double gamma_sh = 100.0;
   size_t n, j;
@@ -2344,7 +2392,7 @@ poltor_regularize(gsl_vector *L, poltor_workspace *w)
 
   for (n = 1; n <= w->nmax_int; ++n)
     {
-#if 0
+#if 1
       double nfac = pow((double) n, beta);
       double val = alpha_int * nfac;
 #else

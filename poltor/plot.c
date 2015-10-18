@@ -176,6 +176,7 @@ plot_flow(const double ut, poltor_workspace *w)
 
   /* plot current stream function grid */
   {
+    const double b = w->R + 110.0;
     const double lat_min2 = -80.0;
     const double lat_max2 = 80.0;
 #if 1
@@ -216,7 +217,7 @@ plot_flow(const double ut, poltor_workspace *w)
           {
             double chi_int, chi_sh; /* current stream function */
 
-            poltor_eval_chi_int(0.0, theta, phi, &chi_int, w);
+            poltor_eval_chi_int(b, theta, phi, &chi_int, w);
             poltor_eval_chi_sh(0.0, theta, phi, &chi_sh, w);
 
             fprintf(fp, "%f %f %f %f\n",
