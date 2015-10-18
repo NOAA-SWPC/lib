@@ -9,6 +9,7 @@
 
 #include <gsl/gsl_math.h>
 
+#include "common.h"
 #include "pomme.h"
 
 static char tz_str[] = "TZ=GMT";
