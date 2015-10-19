@@ -179,11 +179,11 @@ copy_track(const size_t track_idx, const satdata_mag *data,
                 ++(npts[2]);
             }
 
-          if (flags & MAGDATA_FLG_GRAD_NS)
+          if (flags & MAGDATA_FLG_DZ_NS)
             ++npts[3];
         }
 
-      if (s == 0 && flags & MAGDATA_FLG_GRAD_NS)
+      if (s == 0 && flags & MAGDATA_FLG_DZ_NS)
         ++ngrad;
     }
 
