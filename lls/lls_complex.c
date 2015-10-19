@@ -321,26 +321,6 @@ lls_complex_fold(const gsl_matrix_complex *A, const gsl_vector_complex *b,
       /* compute final weights as product of input and robust weights */
       gsl_vector_mul(wts, &wv.vector);
 
-      for (i = 0; i < n; ++i)
-        {
-          gsl_vector_complex_view rv = gsl_matrix_complex_row(A, i);
-          gsl_complex bi = gsl_vector_complex_get(b, i);
-          double wi = gsl_vector_get(wts, i);
-          gsl_complex val;
-
-          GSL_SET_COMPLEX(&val, sqrt(wi), 0.0);
-
-          /* A <- sqrt(W) A */
-          gsl_vector_complex_scale(&rv.vector, val);
-
-          /* b <- W b */
-          val = gsl_complex_mul_real(bi, wi);
-          gsl_vector_complex_set(b, i, val);
-
-          /* bHb += b^H W b */
-          w->bHb += wi * gsl_complex_abs2(bi);
-        }
-
 #endif
  
       /* AHA += A^H A, using only the upper half of the matrix */
