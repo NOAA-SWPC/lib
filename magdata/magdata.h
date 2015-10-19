@@ -14,15 +14,14 @@
 #define MAGDATA_FLG_Y                 (1 << 1)  /* Y measurement available */
 #define MAGDATA_FLG_Z                 (1 << 2)  /* Z measurement available */
 #define MAGDATA_FLG_F                 (1 << 3)  /* F measurement available */
-#define MAGDATA_FLG_GRAD_NS           (1 << 4)  /* along-track difference (gradient) data available */
-#define MAGDATA_FLG_DX                (1 << 5)  /* DX measurement available */
-#define MAGDATA_FLG_DY                (1 << 6)  /* DY measurement available */
-#define MAGDATA_FLG_DZ                (1 << 7)  /* DZ measurement available */
-#define MAGDATA_FLG_DF                (1 << 8)  /* DF measurement available */
-#define MAGDATA_FLG_TRACK_START       (1 << 9)  /* start of track in data structure */
-#define MAGDATA_FLG_FIT_MF            (1 << 10) /* fit main field to this data point */
-#define MAGDATA_FLG_FIT_EULER         (1 << 11) /* fit Euler angles to this data point */
-#define MAGDATA_FLG_DISCARD           (1 << 12) /* discard this data point */
+#define MAGDATA_FLG_DX_NS             (1 << 4)  /* along-track DX measurement available */
+#define MAGDATA_FLG_DY_NS             (1 << 5)  /* along-track DY measurement available */
+#define MAGDATA_FLG_DZ_NS             (1 << 6)  /* along-track DZ measurement available */
+#define MAGDATA_FLG_DF_NS             (1 << 7)  /* along-track DF measurement available */
+#define MAGDATA_FLG_TRACK_START       (1 << 8)  /* start of track in data structure */
+#define MAGDATA_FLG_FIT_MF            (1 << 9)  /* fit main field to this data point */
+#define MAGDATA_FLG_FIT_EULER         (1 << 10) /* fit Euler angles to this data point */
+#define MAGDATA_FLG_DISCARD           (1 << 11) /* discard this data point */
 
 /* global flags */
 #define MAGDATA_GLOBFLG_EULER         (1 << 0)  /* fit Euler angles to this dataset */

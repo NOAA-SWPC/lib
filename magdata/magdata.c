@@ -386,11 +386,11 @@ magdata_init(magdata *data)
       if (data->flags[i] & MAGDATA_FLG_Z)
         track_weight_add_data(data->theta[i], data->phi[i], data->weight_workspace_p);
 
-      if (data->flags[i] & MAGDATA_FLG_DX)
+      if (data->flags[i] & MAGDATA_FLG_DX_NS)
         track_weight_add_data(data->theta[i], data->phi[i], data->weight_workspace_p);
-      if (data->flags[i] & MAGDATA_FLG_DY)
+      if (data->flags[i] & MAGDATA_FLG_DY_NS)
         track_weight_add_data(data->theta[i], data->phi[i], data->weight_workspace_p);
-      if (data->flags[i] & MAGDATA_FLG_DZ)
+      if (data->flags[i] & MAGDATA_FLG_DZ_NS)
         track_weight_add_data(data->theta[i], data->phi[i], data->weight_workspace_p);
 
       if (data->r[i] > data->rmax)
@@ -472,21 +472,21 @@ magdata_calc(magdata *data)
       if (data->flags[i] & MAGDATA_FLG_F)
         ++(data->nf);
 
-      if (data->flags[i] & MAGDATA_FLG_DX)
+      if (data->flags[i] & MAGDATA_FLG_DX_NS)
         ++(data->ndx);
 
-      if (data->flags[i] & MAGDATA_FLG_DY)
+      if (data->flags[i] & MAGDATA_FLG_DY_NS)
         ++(data->ndy);
 
-      if (data->flags[i] & MAGDATA_FLG_DZ)
+      if (data->flags[i] & MAGDATA_FLG_DZ_NS)
         ++(data->ndz);
 
-      if (data->flags[i] & MAGDATA_FLG_DF)
+      if (data->flags[i] & MAGDATA_FLG_DF_NS)
         ++(data->ndf);
 
       ++(data->nvec);
 
-      if (data->flags[i] & (MAGDATA_FLG_DX | MAGDATA_FLG_DY | MAGDATA_FLG_DZ))
+      if (data->flags[i] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS))
         ++(data->ngrad);
     }
 
@@ -547,7 +547,8 @@ magdata_print(const char *filename, const magdata *data)
   fprintf(fp, "# Field %zu: vector data used in MF fitting (1 or 0)\n", i++);
   fprintf(fp, "# Field %zu: vector data used in Euler angle fitting (1 or 0)\n", i++);
   fprintf(fp, "# Field %zu: vector measurement available (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: along-track gradient available (scalar or vector) (1 or 0)\n", i++);
+  fprintf(fp, "# Field %zu: scalar along-track gradient available (1 or 0)\n", i++);
+  fprintf(fp, "# Field %zu: vector along-track gradient available (1 or 0)\n", i++);
 
   for (i = 0; i < data->n; ++i)
     {
@@ -571,7 +572,7 @@ magdata_print(const char *filename, const magdata *data)
       magdata_residual(i, B, data);
       magdata_residual_dB_ns(i, dB, data);
 
-      fprintf(fp, "%ld %f %.2f %.2f %.1f %.2f %.3f %.3f %.3f %.3f %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %d %d %d %d %d %d\n",
+      fprintf(fp, "%ld %f %.2f %.2f %.1f %.2f %.3f %.3f %.3f %.3f %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %d %d %d %d %d %d %d\n",
               unix_time,
               satdata_epoch2year(data->t[i]),
               ut,
@@ -597,7 +598,8 @@ magdata_print(const char *filename, const magdata *data)
               ((data->flags[i] & MAGDATA_FLG_FIT_MF) && (data->flags[i] & MAGDATA_FLG_Z)) ? 1 : 0,
               data->flags[i] & MAGDATA_FLG_FIT_EULER ? 1 : 0,
               MAGDATA_ExistVector(data->flags[i]),
-              data->flags[i] & MAGDATA_FLG_GRAD_NS ? 1 : 0);
+              data->flags[i] & MAGDATA_FLG_DF_NS ? 1 : 0,
+              data->flags[i] & MAGDATA_FLG_DZ_NS ? 1 : 0);
 
       /* separate individual tracks with newlines */
       if (i < data->n - 1 && data->flags[i + 1] & MAGDATA_FLG_TRACK_START)
@@ -643,7 +645,7 @@ magdata_map(const char *filename, const magdata *data)
   fprintf(fp, "# Field %zu: scalar data used in MF fitting (1 or 0)\n", i++);
   fprintf(fp, "# Field %zu: vector data used in MF fitting (1 or 0)\n", i++);
   fprintf(fp, "# Field %zu: vector data used in Euler angle fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: along-track gradient available (1 or 0)\n", i++);
+  fprintf(fp, "# Field %zu: vector along-track gradient available (1 or 0)\n", i++);
 
   for (i = 0; i < data->n; ++i)
     {
@@ -659,7 +661,7 @@ magdata_map(const char *filename, const magdata *data)
               ((data->flags[i] & MAGDATA_FLG_FIT_MF) && (data->flags[i] & MAGDATA_FLG_F)) ? 1 : 0,
               ((data->flags[i] & MAGDATA_FLG_FIT_MF) && (data->flags[i] & MAGDATA_FLG_Z)) ? 1 : 0,
               data->flags[i] & MAGDATA_FLG_FIT_EULER ? 1 : 0,
-              data->flags[i] & MAGDATA_FLG_GRAD_NS ? 1 : 0);
+              data->flags[i] & MAGDATA_FLG_DZ_NS ? 1 : 0);
     }
 
   fclose(fp);
