@@ -2,7 +2,7 @@
 #
 # Make CHAMP index files
 
-cdfdir="/nfs/satmag/CHAMP/Stage1"
+cdfdir="/data/CHAMP/Stage1_CHAOS"
 
 start_year="2000"
 end_year="2010"

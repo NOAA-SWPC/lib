@@ -6,7 +6,7 @@
  * rms test, and along-track gradient calculation
  *
  * Pre-processing steps are:
- * 1. Instrument flags (recommended CHAMP flags except 1 star camera allowed)
+ * 1. Instrument flags
  * 2. Track rms test
  * 3. Downsample by factor 15
  * 4. UT selection (near 11 UT)
@@ -158,14 +158,14 @@ copy_track(const size_t track_idx, const satdata_mag *data,
         if (!SATDATA_BadData(data->flags[j]) &&
             (dt >= grad_dt_min && dt <= grad_dt_max))
           {
-            /* set gradient flag to indicate gradient information available */
-            flags |= MAGDATA_FLG_DF | MAGDATA_FLG_GRAD_NS;
+            /* set flag to indicate scalar gradient information available */
+            flags |= MAGDATA_FLG_DF_NS;
 
             /* check for vector measurement at along-track point */
             if (MAGDATA_ExistVector(flags) && !(data->flags[j] & SATDATA_FLG_NOVEC_NEC))
               {
                 assert(data->flags[j] == 0 || data->flags[j] == SATDATA_FLG_DOWNSAMPLE);
-                flags |= MAGDATA_FLG_DX | MAGDATA_FLG_DY | MAGDATA_FLG_DZ;
+                flags |= MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS;
 
                 datum.B_nec_ns[0] = SATDATA_VEC_X(data->B, j);
                 datum.B_nec_ns[1] = SATDATA_VEC_Y(data->B, j);
@@ -201,7 +201,7 @@ copy_track(const size_t track_idx, const satdata_mag *data,
       datum.flags = flags;
 
       s = magdata_add(&datum, mdata);
-      if (s == 0 && flags & MAGDATA_FLG_GRAD_NS)
+      if (s == 0 && flags & MAGDATA_FLG_DZ_NS)
         ++ngrad;
     }
 
@@ -754,7 +754,7 @@ main(int argc, char *argv[])
 
   track_p = preprocess_data(&params, data);
 
-#if 0
+#if 1
   fprintf(stderr, "main: recomputing longitude...");
   replace_longitude(12.0, data);
   fprintf(stderr, "done\n");

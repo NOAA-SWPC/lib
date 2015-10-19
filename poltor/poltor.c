@@ -1532,7 +1532,7 @@ poltor_build_ls(const int fold, poltor_workspace *w)
           /* compute residual: B_i - B_main - B_crust - B_ext */
           magdata_residual(data_idx, B, data);
 
-          if (data->flags[data_idx] & (MAGDATA_FLG_DX|MAGDATA_FLG_DY|MAGDATA_FLG_DZ))
+          if (data->flags[data_idx] & (MAGDATA_FLG_DX_NS|MAGDATA_FLG_DY_NS|MAGDATA_FLG_DZ_NS))
             {
               /* compute dB residual: B_i_ns - B_i */
               magdata_residual_dB_ns(data_idx, dB, data);
@@ -1551,7 +1551,7 @@ poltor_build_ls(const int fold, poltor_workspace *w)
               x = &vx.vector;
             }
 
-          if (data->flags[data_idx] & MAGDATA_FLG_DX)
+          if (data->flags[data_idx] & MAGDATA_FLG_DX_NS)
             {
               gsl_vector_set(w->weights, ridx, POLTOR_WEIGHT_DX * data->weights[data_idx]);
 
@@ -1575,7 +1575,7 @@ poltor_build_ls(const int fold, poltor_workspace *w)
               y = &vy.vector;
             }
 
-          if (data->flags[data_idx] & MAGDATA_FLG_DY)
+          if (data->flags[data_idx] & MAGDATA_FLG_DY_NS)
             {
               gsl_vector_set(w->weights, ridx, POLTOR_WEIGHT_DY * data->weights[data_idx]);
 
@@ -1599,7 +1599,7 @@ poltor_build_ls(const int fold, poltor_workspace *w)
               z = &vz.vector;
             }
 
-          if (data->flags[data_idx] & MAGDATA_FLG_DZ)
+          if (data->flags[data_idx] & MAGDATA_FLG_DZ_NS)
             {
               gsl_vector_set(w->weights, ridx, POLTOR_WEIGHT_DZ * data->weights[data_idx]);
 

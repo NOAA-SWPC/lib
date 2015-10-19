@@ -376,7 +376,7 @@ poltor_synth(poltor_workspace *w)
       data->By_model[i] = 0.0;
       data->Bz_model[i] = 0.0;
 
-      if (data->flags[i] & MAGDATA_FLG_GRAD_NS)
+      if (data->flags[i] & MAGDATA_FLG_DZ_NS)
         {
           double B_ns[3];
           double theta_ns = poltor_theta_ns(i, w);

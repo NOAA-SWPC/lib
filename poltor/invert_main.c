@@ -46,7 +46,7 @@
 set_flags()
   The preproc program will have calculated the magdata struct,
 but won't set the individual X/Y/Z fitting flags, since that should
-be done here. However it would set the MAGDATA_FLG_GRAD_NS flag if
+be done here. However it would set the MAGDATA_FLG_DZ_NS flag if
 gradient information is available for each point.
 
 So go through data, and based on the FIT_xxx settings, re-assign
@@ -78,26 +78,24 @@ set_flags(magdata *data)
       flags |= MAGDATA_FLG_Z;
 #endif
 
-      if (data->flags[i] & MAGDATA_FLG_GRAD_NS)
+      if (data->flags[i] & MAGDATA_FLG_DZ_NS)
         {
-          /* along-track gradient is available for this point */
-
-          flags |= MAGDATA_FLG_GRAD_NS;
+          /* vector along-track gradient is available for this point */
 
           /* only fit X/Y at mid/low latitudes */
           if (data->qdlat[i] >= -60.0 && data->qdlat[i] <= 60.0)
             {
 #if POLTOR_FIT_DX
-              flags |= MAGDATA_FLG_DX;
+              flags |= MAGDATA_FLG_DX_NS;
 #endif
 #if POLTOR_FIT_DY
-              flags |= MAGDATA_FLG_DY;
+              flags |= MAGDATA_FLG_DY_NS;
 #endif
             }
 
           /* fit B_z at all latitudes */
 #if POLTOR_FIT_DZ
-          flags |= MAGDATA_FLG_DZ;
+          flags |= MAGDATA_FLG_DZ_NS;
 #endif
         }
 
@@ -399,7 +397,7 @@ print_residuals(const char *filename, poltor_workspace *w)
   fprintf(fp, "# Field %zu: shell toroidal DX model (nT)\n", i++);
   fprintf(fp, "# Field %zu: shell toroidal DY model (nT)\n", i++);
   fprintf(fp, "# Field %zu: shell toroidal DZ model (nT)\n", i++);
-  fprintf(fp, "# Field %zu: gradient available (1 or 0)\n", i++);
+  fprintf(fp, "# Field %zu: vector along-track gradient available (1 or 0)\n", i++);
 
   for (i = 0; i < data->n; ++i)
     {
@@ -417,7 +415,7 @@ print_residuals(const char *filename, poltor_workspace *w)
       /* compute individual magnetic field models at this point */
       poltor_eval_B_all(data->r[i], theta, data->phi[i], B_int, B_ext, B_sh, B_tor, w);
 
-      if (data->flags[i] & MAGDATA_FLG_GRAD_NS)
+      if (data->flags[i] & MAGDATA_FLG_DZ_NS)
         {
           double theta_ns = poltor_theta_ns(i, w);
 
@@ -433,7 +431,7 @@ print_residuals(const char *filename, poltor_workspace *w)
           B_model[j] = B_int[j] + B_ext[j] + B_sh[j] + B_tor[j];
           B_res[j] = B_obs[j] - B_model[j];
 
-          if (data->flags[i] & MAGDATA_FLG_GRAD_NS)
+          if (data->flags[i] & MAGDATA_FLG_DZ_NS)
             {
               dB_model[j] = B_int2[j] + B_ext2[j] + B_sh2[j] + B_tor2[j] - B_model[j];
               dB_res[j] = dB_obs[j] - dB_model[j];
@@ -477,7 +475,7 @@ print_residuals(const char *filename, poltor_workspace *w)
               data->satdir[i] * (B_tor2[0] - B_tor[0]),
               data->satdir[i] * (B_tor2[1] - B_tor[1]),
               data->satdir[i] * (B_tor2[2] - B_tor[2]),
-              data->flags[i] & MAGDATA_FLG_GRAD_NS ? 1 : 0);
+              data->flags[i] & MAGDATA_FLG_DZ_NS ? 1 : 0);
     }
 
   fclose(fp);
