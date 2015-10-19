@@ -5,6 +5,7 @@ SUBDIRS =     \
   apex        \
   chaos       \
   curvefit    \
+  grid        \
   levmar      \
   lls         \
   msynth      \

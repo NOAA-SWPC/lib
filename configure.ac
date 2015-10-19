@@ -21,6 +21,7 @@ AC_CONFIG_FILES([     \
   curvefit/Makefile   \
   estist/Makefile     \
   euler/Makefile      \
+  grid/Makefile       \
   levmar/Makefile     \
   lls/Makefile        \
   magdata/Makefile    \
