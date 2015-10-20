@@ -5,8 +5,10 @@ SUBDIRS =     \
   apex        \
   chaos       \
   curvefit    \
+	efi         \
   grid        \
 	iri         \
+	julia       \
   levmar      \
 	lis         \
   lls         \

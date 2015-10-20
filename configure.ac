@@ -20,11 +20,13 @@ AC_CONFIG_FILES([     \
   common/Makefile     \
   cond/Makefile       \
   curvefit/Makefile   \
+  efi/Makefile        \
   estist/Makefile     \
   euler/Makefile      \
   grid/Makefile       \
   hwm/Makefile        \
   iri/Makefile        \
+  julia/Makefile      \
   levmar/Makefile     \
   lis/Makefile        \
   lls/Makefile        \
