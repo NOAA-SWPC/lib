@@ -8,6 +8,7 @@ SUBDIRS =     \
   grid        \
 	iri         \
   levmar      \
+	lis         \
   lls         \
 	msis        \
   msynth      \

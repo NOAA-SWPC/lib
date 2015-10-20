@@ -26,6 +26,7 @@ AC_CONFIG_FILES([     \
   hwm/Makefile        \
   iri/Makefile        \
   levmar/Makefile     \
+  lis/Makefile        \
   lls/Makefile        \
   magdata/Makefile    \
   mageq/Makefile      \
