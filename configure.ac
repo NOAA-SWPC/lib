@@ -27,6 +27,7 @@ AC_CONFIG_FILES([     \
   lls/Makefile        \
   magdata/Makefile    \
   mageq/Makefile      \
+  msis/Makefile       \
   msynth/Makefile     \
   poltor/Makefile     \
   pomme/Makefile      \

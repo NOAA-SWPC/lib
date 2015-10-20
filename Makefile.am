@@ -9,6 +9,7 @@ SUBDIRS =     \
 	iri         \
   levmar      \
   lls         \
+	msis        \
   msynth      \
 	mageq       \
   pomme       \
