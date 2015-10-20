@@ -25,6 +25,7 @@ AC_CONFIG_FILES([     \
   euler/Makefile      \
   grid/Makefile       \
   hwm/Makefile        \
+  invert_eej/Makefile \
   iri/Makefile        \
   julia/Makefile      \
   levmar/Makefile     \
