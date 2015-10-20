@@ -471,8 +471,16 @@ poltor_solve(poltor_workspace *w)
 
   /* no regularization */
   lambda = 0.0;
+  gsl_vector_set_all(w->L, 1.0);
 
 #else
+
+  /* construct L = diag(L); this must be done again here
+   * in case user loads LLS system from a file
+   */
+  s = poltor_regularize(w->L, w);
+  if (s)
+    return s;
 
   {
     const char *lcurve_file = "lcurve.dat";
@@ -1398,6 +1406,11 @@ poltor_print_lcurve(const char *filename, const poltor_workspace *w)
       return -1;
     }
 
+  i = 1;
+  fprintf(fp, "# Field %zu: regularization parameter lambda\n", i++);
+  fprintf(fp, "# Field %zu: residual norm ||b - A x||\n", i++);
+  fprintf(fp, "# Field %zu: solution norm ||L x||\n", i++);
+
   for (i = 0; i < w->nreg; ++i)
     {
       fprintf(fp, "%.12e %.12e %.12e\n",
@@ -1532,10 +1545,19 @@ poltor_build_ls(const int fold, poltor_workspace *w)
           /* compute residual: B_i - B_main - B_crust - B_ext */
           magdata_residual(data_idx, B, data);
 
+          if (!gsl_finite(B[0]) || !gsl_finite(B[1]) || !gsl_finite(B[2]))
+            {
+              fprintf(stderr, "ACK1\n");
+            }
+
           if (data->flags[data_idx] & (MAGDATA_FLG_DX_NS|MAGDATA_FLG_DY_NS|MAGDATA_FLG_DZ_NS))
             {
               /* compute dB residual: B_i_ns - B_i */
               magdata_residual_dB_ns(data_idx, dB, data);
+              if (!gsl_finite(dB[0]) || !gsl_finite(dB[1]) || !gsl_finite(dB[2]))
+                {
+                  fprintf(stderr, "ACK2\n");
+                }
             }
 
           if (data->flags[data_idx] & MAGDATA_FLG_X)
@@ -2415,7 +2437,7 @@ poltor_regularize(gsl_vector *L, poltor_workspace *w)
       {
         for (n = 1; n <= nmax; ++n)
           {
-#if 0
+#if 1
             double nfac = pow((double) n, beta);
             double val = alpha_sh * nfac;
 #else

@@ -237,6 +237,11 @@ lls_complex_stdform(gsl_matrix_complex *A, gsl_vector_complex *b,
               double Li = gsl_vector_get(L, i);
               gsl_complex val;
 
+              if (Li == 0.0)
+                {
+                  GSL_ERROR("L matrix is singular", GSL_ESING);
+                }
+
               GSL_SET_COMPLEX(&val, 1.0 / Li, 0.0);
 
               gsl_vector_complex_scale(&cv.vector, val);
@@ -336,6 +341,15 @@ lls_complex_fold(const gsl_matrix_complex *A, const gsl_vector_complex *b,
       /* bHb += b^H b */
       bnorm = gsl_blas_dznrm2(b);
       w->bHb += bnorm * bnorm;
+
+      fprintf(stderr, "norm(AHb) = %.12e, bHb = %.12e\n",
+              gsl_blas_dznrm2(w->AHb), w->bHb);
+
+      if (!gsl_finite(w->bHb))
+        {
+          fprintf(stderr, "bHb is NAN\n");
+          exit(1);
+        }
 
       return s;
     }
@@ -444,9 +458,13 @@ lls_complex_btransform(const gsl_vector *L, gsl_vector_complex *c,
         {
           gsl_complex ci = gsl_vector_complex_get(c, i);
           double Li = gsl_vector_get(L, i);
-          gsl_complex val = gsl_complex_div_real(ci, Li);
 
-          gsl_vector_complex_set(c, i, val);
+          if (Li == 0.0)
+            {
+              GSL_ERROR("L matrix is singular", GSL_ESING);
+            }
+          
+          gsl_vector_complex_set(c, i, gsl_complex_div_real(ci, Li));
         }
 
       return GSL_SUCCESS;

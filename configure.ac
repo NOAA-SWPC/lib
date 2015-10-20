@@ -22,9 +22,11 @@ AC_CONFIG_FILES([     \
   estist/Makefile     \
   euler/Makefile      \
   grid/Makefile       \
+  iri/Makefile        \
   levmar/Makefile     \
   lls/Makefile        \
   magdata/Makefile    \
+  mageq/Makefile      \
   msynth/Makefile     \
   poltor/Makefile     \
   pomme/Makefile      \

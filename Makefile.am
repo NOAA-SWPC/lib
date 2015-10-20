@@ -6,9 +6,11 @@ SUBDIRS =     \
   chaos       \
   curvefit    \
   grid        \
+	iri         \
   levmar      \
   lls         \
   msynth      \
+	mageq       \
   pomme       \
   track       \
   magdata     \

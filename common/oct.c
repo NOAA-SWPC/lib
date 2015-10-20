@@ -172,3 +172,48 @@ printcv_octave(const gsl_vector_complex *v, const char *str)
 
   fclose(fp);
 }
+
+/* print triangular matrix, using upper triangle */
+void
+printtri_octave(const gsl_matrix *m, const char *str)
+{
+  FILE *fp;
+  size_t i, j;
+  const size_t N = m->size1;
+  const size_t M = m->size2;
+
+  if (str == NULL)
+    fp = stdout;
+  else
+    fp = fopen(str, "w");
+
+  if (!fp)
+    return;
+
+  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "# name: %s\n", str);
+  fprintf(fp, "# type: matrix\n");
+  fprintf(fp, "# rows: %zu\n", N);
+  fprintf(fp, "# columns: %zu\n", M);
+
+  for (i = 0; i < N; ++i)
+    {
+      for (j = 0; j < M; ++j)
+        {
+          double mij;
+
+          if (j >= i)
+            mij = gsl_matrix_get(m, i, j);
+          else
+            mij = 0.0;
+
+          fprintf(fp,
+                  "%10.12e%s",
+                  mij,
+                  (j < M - 1) ? " " : "\n");
+        }
+    }
+
+  if (str != NULL)
+    fclose(fp);
+}

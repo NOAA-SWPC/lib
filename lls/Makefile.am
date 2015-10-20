@@ -2,7 +2,7 @@ noinst_LTLIBRARIES = liblls.la
 
 AM_CPPFLAGS = -I$(top_builddir)/common
 
-liblls_la_SOURCES = lls.c lls_complex.c lls_lapack.c
+liblls_la_SOURCES = lls.c lls_complex.c lls_lapack.c tsqr.c
 
 check_PROGRAMS = test
 test_SOURCES = test.c

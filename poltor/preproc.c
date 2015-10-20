@@ -512,6 +512,11 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
     fprintf(stderr, "done\n");
   }
 
+#if 1
+  /* XXX This code is introducting NaN's into the CHAMP B_z vector data
+   * on 17 september 2000 ???
+   */
+
   /* smooth high-latitude data */
   if (params->smooth_alpha > 0.0)
     {
@@ -519,6 +524,7 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
       track_smooth(params->smooth_alpha, data, track_p);
       fprintf(stderr, "done\n");
     }
+#endif
 
 #if 0
   fprintf(stderr, "preprocess_data: removing magnetospheric offsets...");

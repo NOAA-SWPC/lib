@@ -116,22 +116,6 @@ random_unitary(gsl_matrix_complex *m, gsl_rng *r)
   gsl_matrix_complex_free(m2);
 } /* random_unitary() */
 
-static void
-random_vector(gsl_vector *v, gsl_rng *r,
-              const double lower, const double upper)
-
-{
-  const size_t N = v->size;
-  size_t i;
-
-  for (i = 0; i < N; ++i)
-    {
-      double vi = gsl_rng_uniform(r) * (upper - lower) + lower;
-
-      gsl_vector_set(v, i, vi);
-    }
-} /* random_vector() */
-
 void
 random_matrix_complex_ill(gsl_matrix_complex * m, gsl_rng *r)
 {
