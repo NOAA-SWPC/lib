@@ -22,6 +22,7 @@ AC_CONFIG_FILES([     \
   estist/Makefile     \
   euler/Makefile      \
   grid/Makefile       \
+  hwm/Makefile        \
   iri/Makefile        \
   levmar/Makefile     \
   lls/Makefile        \
