@@ -18,6 +18,7 @@ AC_CONFIG_FILES([     \
   champ/Makefile      \
   chaos/Makefile      \
   common/Makefile     \
+  cond/Makefile       \
   curvefit/Makefile   \
   estist/Makefile     \
   euler/Makefile      \

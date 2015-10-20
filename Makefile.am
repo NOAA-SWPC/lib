@@ -13,6 +13,7 @@ SUBDIRS =     \
   msynth      \
 	mageq       \
 	hwm         \
+	cond        \
   pomme       \
   track       \
   magdata     \
