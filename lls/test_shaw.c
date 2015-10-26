@@ -106,16 +106,15 @@ test_shaw_gsl(const gsl_matrix * X, const gsl_vector * y,
   gsl_multifit_linear_svd(X, work);
 
   /* calculate L-curve */
-  gsl_multifit_linear_ridge_lcurve(y, reg_param, rho, eta, work);
+  gsl_multifit_linear_lcurve(y, reg_param, rho, eta, work);
 
   /* calculate corner of L-curve */
-  gsl_multifit_linear_ridge_lcorner(rho, eta, &reg_idx);
+  gsl_multifit_linear_lcorner(rho, eta, &reg_idx);
 
   *lambda = gsl_vector_get(reg_param, reg_idx);
 
   /* compute regularized solution with optimal lambda */
-  gsl_multifit_linear_ridge_solve(*lambda, y, c, cov,
-                                  &rnorm, &snorm, work);
+  gsl_multifit_linear_solve(*lambda, X, y, c, &rnorm, &snorm, work);
 
   gsl_multifit_linear_free(work);
   gsl_matrix_free(cov);
@@ -153,7 +152,7 @@ test_shaw_lls(const gsl_matrix * X, const gsl_vector * y,
   lls_lcurve(reg_param, rho, eta, work);
 
   /* calculate corner of L-curve */
-  gsl_multifit_linear_ridge_lcorner(rho, eta, &reg_idx);
+  gsl_multifit_linear_lcorner(rho, eta, &reg_idx);
 
   *lambda = gsl_vector_get(reg_param, reg_idx);
 

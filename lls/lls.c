@@ -359,11 +359,7 @@ lls_lcurve(gsl_vector *reg_param, gsl_vector *rho, gsl_vector *eta,
   else
     {
       int s;
-
-      /* smallest regularization parameter */
-      const double smin_ratio = 16.0 * GSL_DBL_EPSILON;
-
-      double s1, sp, ratio, tmp;
+      double smax, smin;
       size_t i;
 
       /* compute eigenvalues of A^T W A */
@@ -373,25 +369,14 @@ lls_lcurve(gsl_vector *reg_param, gsl_vector *rho, gsl_vector *eta,
         return s;
 
       /* find largest and smallest eigenvalues */
-      gsl_vector_minmax(w->eval, &sp, &s1);
+      gsl_vector_minmax(w->eval, &smin, &smax);
 
       /* singular values are square roots of eigenvalues */
-      s1 = sqrt(s1);
-      if (sp > GSL_DBL_EPSILON)
-        sp = sqrt(fabs(sp));
+      smax = sqrt(smax);
+      if (smin > GSL_DBL_EPSILON)
+        smin = sqrt(fabs(smin));
 
-      tmp = GSL_MAX(sp, s1*smin_ratio);
-      gsl_vector_set(reg_param, N - 1, tmp);
-
-      /* ratio so that reg_param(1) = s(1) */
-      ratio = pow(s1 / tmp, 1.0 / (N - 1.0));
-
-      /* calculate the regularization parameters */
-      for (i = N - 1; i > 0 && i--; )
-        {
-          double rp1 = gsl_vector_get(reg_param, i + 1);
-          gsl_vector_set(reg_param, i, ratio * rp1);
-        }
+      gsl_multifit_linear_lreg(smin, smax, reg_param);
 
       for (i = 0; i < N; ++i)
         {
