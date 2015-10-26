@@ -104,6 +104,47 @@ printc_octave(const gsl_matrix_complex *m, const char *str)
   fclose(fp);
 }
 
+/* print symmetric matrix, using upper triangle */
+void
+printsym_octave(const gsl_matrix *m, const char *str)
+{
+  FILE *fp;
+  size_t i, j;
+  const size_t N = m->size1;
+  const size_t M = m->size2;
+
+  fp = fopen(str, "w");
+
+  if (!fp)
+    return;
+
+  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "# name: %s\n", str);
+  fprintf(fp, "# type: matrix\n");
+  fprintf(fp, "# rows: %zu\n", N);
+  fprintf(fp, "# columns: %zu\n", M);
+
+  for (i = 0; i < N; ++i)
+    {
+      for (j = 0; j < M; ++j)
+        {
+          double z;
+
+          if (j >= i)
+            z = gsl_matrix_get(m, i, j);
+          else
+            z = gsl_matrix_get(m, j, i);
+
+          fprintf(fp,
+                  "%.12e%s",
+                  z,
+                  (j < M - 1) ? " " : "\n");
+        }
+    }
+
+  fclose(fp);
+}
+
 /* print Hermitian matrix, using upper triangle */
 void
 printherm_octave(const gsl_matrix_complex *m, const char *str)
