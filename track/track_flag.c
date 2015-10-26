@@ -362,8 +362,8 @@ Return: number of data flagged
 */
 
 size_t
-track_flag_season(int (*callback)(const double doy, void *params),
-                  void *params, satdata_mag *data, track_workspace *w)
+track_flag_season(int (*callback)(const double doy, const void *params),
+                  const void *params, satdata_mag *data, track_workspace *w)
 {
   size_t i;
   size_t nflagged = 0;        /* number of points flagged */

@@ -100,8 +100,8 @@ size_t track_flag_lt(const double lt_min, const double lt_max, satdata_mag *data
                      track_workspace *w);
 size_t track_flag_kp(const double kp_min, const double kp_max, satdata_mag *data,
                      track_workspace *w);
-size_t track_flag_season(int (*callback)(const double doy, void *params),
-                         void *params, satdata_mag *data, track_workspace *w);
+size_t track_flag_season(int (*callback)(const double doy, const void *params),
+                         const void *params, satdata_mag *data, track_workspace *w);
 size_t track_flag_lon(const double lon_min, const double lon_max,
                       satdata_mag *data, track_workspace *w);
 size_t track_flag_meanalt(const double alt_min, const double alt_max, satdata_mag *data,
