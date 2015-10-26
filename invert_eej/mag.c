@@ -31,9 +31,10 @@ static int mag_compute_F1(const double t_eq, const double phi_eq,
                           const size_t sidx, const size_t eidx,
                           const satdata_mag *data, mag_workspace *w);
 static int mag_output(const int header, const mag_workspace *w);
+static int mag_callback_season(const double doy, const void *params);
 
 mag_workspace *
-mag_alloc(const int year, const char *output_file, const char *log_dir)
+mag_alloc(mag_params *params)
 {
   mag_workspace *w;
   
@@ -41,26 +42,30 @@ mag_alloc(const int year, const char *output_file, const char *log_dir)
   if (!w)
     return 0;
 
-  w->output_file = output_file;
-  if (output_file)
+  w->params = params;
+
+  if (params->output_file)
     {
-      w->fp_output = fopen(output_file, "a");
+      w->fp_output = fopen(params->output_file, "a");
       if (!w->fp_output)
         {
           fprintf(stderr, "mag_alloc: unable to open %s: %s\n", 
-                  output_file, strerror(errno));
+                  params->output_file, strerror(errno));
           mag_free(w);
           return 0;
         }
     }
+
+  w->ncurr = params->ncurr;
+  w->EEJ = malloc(w->ncurr * sizeof(double));
 
   w->green_workspace_p = green_alloc(MAG_SQFILT_INT_DEG);
 
   w->sqfilt_workspace_p = mag_sqfilt_alloc(MAG_SQFILT_INT_DEG, MAG_SQFILT_INT_ORD,
                                            MAG_SQFILT_EXT_DEG, MAG_SQFILT_EXT_ORD);
 
-  w->eej_workspace_p = mag_eej_alloc(year, MAG_EEJ_NCURR,
-                                     MAG_EEJ_QDLAT_MIN, MAG_EEJ_QDLAT_MAX);
+  w->eej_workspace_p = mag_eej_alloc(params->year, params->ncurr,
+                                     params->curr_altitude, params->qdlat_max);
 
   {
     pde_parameters pde_params;
@@ -91,23 +96,25 @@ mag_alloc(const int year, const char *output_file, const char *log_dir)
 
   w->kp_workspace_p = kp_alloc(KP_IDX_FILE);
 
-  w->log_general = log_alloc(LOG_APPEND|LOG_TIMESTAMP, "%s/invert.log", log_dir);
-  w->log_profile = log_alloc(LOG_WRITE, "%s/profile.dat", log_dir);
-  w->log_F2 = log_alloc(LOG_WRITE, "%s/F2.dat", log_dir);
-  w->log_Sq_Lcurve = log_alloc(LOG_WRITE, "%s/Sq_lcurve.dat", log_dir);
-  w->log_Sq_Lcorner = log_alloc(LOG_WRITE, "%s/Sq_lcorner.dat", log_dir);
-  w->log_EEJ_Lcurve = log_alloc(LOG_WRITE, "%s/EEJ_lcurve.dat", log_dir);
-  w->log_EEJ_Lcorner = log_alloc(LOG_WRITE, "%s/EEJ_lcorner.dat", log_dir);
-  w->log_EEJ = log_alloc(LOG_WRITE, "%s/EEJ.dat", log_dir);
-  w->log_PDE = log_alloc(LOG_WRITE, "%s/PDE.dat", log_dir);
-  w->log_model = log_alloc(LOG_WRITE, "%s/model.dat", log_dir);
-  w->log_EEF = log_alloc(LOG_WRITE, "%s/EEF.dat", log_dir);
+  w->log_general = log_alloc(LOG_APPEND|LOG_TIMESTAMP, "%s/invert.log", params->log_dir);
+  w->log_profile = log_alloc(LOG_WRITE, "%s/profile.dat", params->log_dir);
+  w->log_F2 = log_alloc(LOG_WRITE, "%s/F2.dat", params->log_dir);
+  w->log_Sq_Lcurve = log_alloc(LOG_WRITE, "%s/Sq_lcurve.dat", params->log_dir);
+  w->log_Sq_Lcorner = log_alloc(LOG_WRITE, "%s/Sq_lcorner.dat", params->log_dir);
+  w->log_EEJ_Lcurve = log_alloc(LOG_WRITE, "%s/EEJ_lcurve.dat", params->log_dir);
+  w->log_EEJ_Lcorner = log_alloc(LOG_WRITE, "%s/EEJ_lcorner.dat", params->log_dir);
+  w->log_EEJ = log_alloc(LOG_WRITE, "%s/EEJ.dat", params->log_dir);
+  w->log_LC = log_alloc(LOG_WRITE, "%s/LC.dat", params->log_dir);
+  w->log_PDE = log_alloc(LOG_WRITE, "%s/PDE.dat", params->log_dir);
+  w->log_model = log_alloc(LOG_WRITE, "%s/model.dat", params->log_dir);
+  w->log_EEF = log_alloc(LOG_WRITE, "%s/EEF.dat", params->log_dir);
 
   /* initialize headers in log files */
   mag_log_profile(1, 0, 0.0, 1, w);
   mag_log_F2(1, w);
   mag_log_Sq_Lcurve(1, w);
   mag_log_Sq_Lcorner(1, w);
+  mag_log_LC(1, w);
   mag_log_EEJ(1, w);
   mag_log_EEJ_Lcurve(1, w);
   mag_log_EEJ_Lcorner(1, w);
@@ -123,6 +130,9 @@ mag_alloc(const int year, const char *output_file, const char *log_dir)
 void
 mag_free(mag_workspace *w)
 {
+  if (w->EEJ)
+    free(w->EEJ);
+
   if (w->green_workspace_p)
     green_free(w->green_workspace_p);
 
@@ -156,6 +166,9 @@ mag_free(mag_workspace *w)
   if (w->log_Sq_Lcorner)
     log_free(w->log_Sq_Lcorner);
 
+  if (w->log_LC)
+    log_free(w->log_LC);
+
   if (w->log_EEJ)
     log_free(w->log_EEJ);
 
@@ -179,6 +192,87 @@ mag_free(mag_workspace *w)
 
   free(w);
 } /* mag_free() */
+
+/*
+mag_preproc()
+  Preprocess satellite data according to given parameters
+
+Inputs: data - satellite data
+        w    - workspace
+*/
+
+int
+mag_preproc(const mag_params *params, track_workspace *track_p,
+            satdata_mag *data, mag_workspace *w)
+{
+  int status = 0;
+
+  /* flag data outside [lt_min,lt_max] */
+  {
+    size_t nlt = track_flag_lt(params->lt_min, params->lt_max, data, track_p);
+
+    log_proc(w->log_general, "mag_preproc: flagged data outside LT window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+            params->lt_min, params->lt_max,
+            nlt, data->n, (double)nlt / (double)data->n * 100.0);
+  }
+
+  /* flag data outside [lon_min,lon_max] */
+  {
+    size_t nlon = track_flag_lon(params->lon_min, params->lon_max, data, track_p);
+
+    log_proc(w->log_general, "mag_preproc: flagged data outside longitude window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+            params->lon_min, params->lon_max,
+            nlon, data->n, (double)nlon / (double)data->n * 100.0);
+  }
+
+  /* flag data according to season */
+  {
+    size_t nseas = track_flag_season(mag_callback_season, params, data, track_p);
+
+    log_proc(w->log_general, "mag_preproc: flagged data outside season windows [%g,%g],[%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+            params->season_min, params->season_max,
+            params->season_min2, params->season_max2,
+            nseas, data->n, (double)nseas / (double)data->n * 100.0);
+  }
+
+  /* flag high kp data */
+  {
+    const double kp_min = 0.0;
+    const double kp_max = MAG_MAX_KP;
+    size_t nkp = track_flag_kp(kp_min, kp_max, data, track_p);
+
+    log_proc(w->log_general, "mag_preproc: flagged data outside kp window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+            kp_min, kp_max,
+            nkp, data->n, (double)nkp / (double)data->n * 100.0);
+  }
+
+  /* last check: flag tracks with very few good data points left */
+  {
+    size_t nflag = track_flag_n(2000, data, track_p);
+
+    log_proc(w->log_general, "mag_preproc: flagged data due to low data points: %zu/%zu (%.1f%%) data flagged)\n",
+            nflag, data->n, (double)nflag / (double)data->n * 100.0);
+  }
+
+  {
+    size_t nflagged = satdata_nflagged(data);
+    size_t nleft = data->n - nflagged;
+    size_t nflagged_track = track_nflagged(track_p);
+    size_t nleft_track = track_p->n - nflagged_track;
+
+    log_proc(w->log_general, "mag_preproc: total flagged data: %zu/%zu (%.1f%%)\n",
+             nflagged, data->n, (double)nflagged / (double)data->n * 100.0);
+    log_proc(w->log_general, "mag_preproc: total remaining data: %zu/%zu (%.1f%%)\n",
+             nleft, data->n, (double)nleft / (double)data->n * 100.0);
+
+    log_proc(w->log_general, "mag_preproc: total flagged tracks: %zu/%zu (%.1f%%)\n",
+             nflagged_track, track_p->n, (double)nflagged_track / (double)track_p->n * 100.0);
+    log_proc(w->log_general, "mag_preproc: total remaining tracks: %zu/%zu (%.1f%%)\n",
+             nleft_track, track_p->n, (double)nleft_track / (double)track_p->n * 100.0);
+  }
+
+  return status;
+} /* mag_preproc() */
 
 /*
 mag_proc()
@@ -211,57 +305,8 @@ mag_proc(const mag_params *params, track_workspace *track_p,
   log_proc(w->log_general, "mag_proc: processing %zu satellite data (%zu tracks)\n",
            data->n, track_p->n);
 
-  {
-    size_t nlt = track_flag_lt(params->lt_min, params->lt_max, data, track_p);
-
-    log_proc(w->log_general, "mag_proc: flagged data outside LT window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
-            params->lt_min, params->lt_max,
-            nlt, data->n, (double)nlt / (double)data->n * 100.0);
-  }
-
-  {
-    size_t nlon = track_flag_lon(params->lon_min, params->lon_max, data, track_p);
-
-    log_proc(w->log_general, "mag_proc: flagged data outside longitude window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
-            params->lon_min, params->lon_max,
-            nlon, data->n, (double)nlon / (double)data->n * 100.0);
-  }
-
-  /* flag high kp data */
-  {
-    const double kp_min = 0.0;
-    const double kp_max = MAG_MAX_KP;
-    size_t nkp = track_flag_kp(kp_min, kp_max, data, track_p);
-
-    log_proc(w->log_general, "mag_proc: flagged data outside kp window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
-            kp_min, kp_max,
-            nkp, data->n, (double)nkp / (double)data->n * 100.0);
-  }
-
-  /* last check: flag tracks with very few good data points left */
-  {
-    size_t nflag = track_flag_n(2000, data, track_p);
-
-    log_proc(w->log_general, "mag_proc: flagged data due to low data points: %zu/%zu (%.1f%%) data flagged)\n",
-            nflag, data->n, (double)nflag / (double)data->n * 100.0);
-  }
-
-  {
-    size_t nflagged = satdata_nflagged(data);
-    size_t nleft = data->n - nflagged;
-    size_t nflagged_track = track_nflagged(track_p);
-    size_t nleft_track = track_p->n - nflagged_track;
-
-    log_proc(w->log_general, "mag_proc: total flagged data: %zu/%zu (%.1f%%)\n",
-             nflagged, data->n, (double)nflagged / (double)data->n * 100.0);
-    log_proc(w->log_general, "mag_proc: total remaining data: %zu/%zu (%.1f%%)\n",
-             nleft, data->n, (double)nleft / (double)data->n * 100.0);
-
-    log_proc(w->log_general, "mag_proc: total flagged tracks: %zu/%zu (%.1f%%)\n",
-             nflagged_track, track_p->n, (double)nflagged_track / (double)track_p->n * 100.0);
-    log_proc(w->log_general, "mag_proc: total remaining tracks: %zu/%zu (%.1f%%)\n",
-             nleft_track, track_p->n, (double)nleft_track / (double)track_p->n * 100.0);
-  }
+  /* preprocess tracks using given parameters */
+  mag_preproc(params, track_p, data, w);
 
   for (i = 0; i < track_p->n; ++i)
     {
@@ -308,6 +353,8 @@ mag_proc(const mag_params *params, track_workspace *track_p,
 
       fprintf(stderr, "mag_proc: found track %zu, t = %.2f, lon = %g, lt = %g, kp = %g, dir = %d\n",
               ntrack, satdata_epoch2year(t_eq), lon_eq, lt_eq, kp, dir);
+      if (ntrack == 44)
+        printf("here\n");
 
       /*
        * store track in workspace, compute magnetic coordinates, and
@@ -336,6 +383,9 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       /* output Sq L-curve and corners */
       mag_log_Sq_Lcurve(0, w);
       mag_log_Sq_Lcorner(0, w);
+
+      /* print line current profiles to log file */
+      mag_log_LC(0, w);
 
       /* print EEJ current density to log file */
       mag_log_EEJ(0, w);
@@ -369,7 +419,7 @@ mag_proc(const mag_params *params, track_workspace *track_p,
 
       /* invert for EEF */
       {
-        gsl_vector_view J_sat = gsl_vector_view_array(w->EEJ, MAG_EEJ_NCURR);
+        gsl_vector_view J_sat = gsl_vector_view_array(w->EEJ, w->ncurr);
 
         s += inverteef_calc(&J_sat.vector,
                             w->pde_workspace_p->J_lat_E,
@@ -554,7 +604,7 @@ mag_output(const int header, const mag_workspace *w)
   size_t i;
   long year, month, day, hour, min, sec, msec;
 
-  if (w->output_file == NULL)
+  if (w->params->output_file == NULL)
     return 0; /* no output desired */
 
   if (header)
@@ -579,7 +629,7 @@ mag_output(const int header, const mag_workspace *w)
 
   fprintf(fp, "%s %.3f ", str, w->track.phi_eq * 180.0 / M_PI);
 
-  for (i = 0; i < MAG_EEJ_NCURR; ++i)
+  for (i = 0; i < w->ncurr; ++i)
     fprintf(fp, "%f ", w->EEJ[i]);
 
   fprintf(fp, "\n");
@@ -587,3 +637,18 @@ mag_output(const int header, const mag_workspace *w)
 
   return GSL_SUCCESS;
 } /* mag_output() */
+
+static int
+mag_callback_season(const double doy, const void *params)
+{
+  const mag_params *p = (mag_params *) params;
+
+  if (doy >= p->season_min && doy <= p->season_max)
+    return 0;
+
+  if (p->season_min2 >= 0.0 && p->season_max2 >= 0.0 &&
+     (doy >= p->season_min2 && doy <= p->season_max2))
+    return 0;
+
+  return -1;
+}

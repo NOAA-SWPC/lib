@@ -51,7 +51,7 @@ mag_log_profile(const int header, const size_t ntrack,
       log_proc(w->log_profile, "# Field %zu: local time (hours)\n", i++);
       log_proc(w->log_profile, "# Field %zu: season (day of year in [0,365])\n", i++);
       log_proc(w->log_profile, "# Field %zu: peak F^(2) value at equator (nT)\n", i++);
-      log_proc(w->log_profile, "# Field %zu: peak height-integrated current density (A/m)\n", i++);
+      log_proc(w->log_profile, "# Field %zu: peak height-integrated current density (mA/m)\n", i++);
       log_proc(w->log_profile, "# Field %zu: kp\n", i++);
       log_proc(w->log_profile, "# Field %zu: satellite direction (+1 north, -1 south)\n", i++);
       return s;
@@ -66,7 +66,7 @@ mag_log_profile(const int header, const size_t ntrack,
            lt,
            doy,
            F2_peak,
-           w->EEJ[MAG_EEJ_NCURR / 2],
+           w->EEJ[w->ncurr / 2] * 1000.0,
            kp,
            dir);
 
@@ -217,6 +217,44 @@ mag_log_Sq_Lcorner(const int header, const mag_workspace *w)
 } /* mag_log_Sq_Lcorner() */
 
 /*
+mag_log_LC()
+  Log computed line currents to a file, 1 row per profile
+
+Inputs: header - 1 = print header, 0 = don't
+        w      - workspace
+*/
+
+int
+mag_log_LC(const int header, const mag_workspace *w)
+{
+  int s = 0;
+  size_t i;
+  mag_track *track = (mag_track *) &(w->track);
+  time_t t = satdata_epoch2timet(track->t_eq);
+
+  if (header)
+    {
+      /* print header information */
+      i = 1;
+      log_proc(w->log_LC, "# Number of line currents: %zu\n", w->ncurr);
+      log_proc(w->log_LC, "# Field %zu: timestamp of equator crossing (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
+      log_proc(w->log_LC, "# Field %zu: longitude of equator crossing (degrees)\n", i++);
+      log_proc(w->log_LC, "# Fields %zu-%zu: line current profile (mA/m)\n", i, i + w->ncurr - 1);
+      ++i;
+      return s;
+    }
+
+  log_proc(w->log_LC, "%zu %9.4f", t, track->phi_eq * 180.0 / M_PI);
+
+  for (i = 0; i < w->ncurr; ++i)
+    log_proc(w->log_LC, " %9.6f", w->EEJ[i] * 1000.0);
+
+  log_proc(w->log_LC, "\n");
+
+  return s;
+} /* mag_log_LC() */
+
+/*
 mag_log_EEJ()
   Log computed F^(2) residuals to a file
 
@@ -239,17 +277,17 @@ mag_log_EEJ(const int header, const mag_workspace *w)
       /* print header information */
       i = 1;
       log_proc(w->log_EEJ, "# Field %zu: QD latitude (degrees)\n", i++);
-      log_proc(w->log_EEJ, "# Field %zu: EEJ height-integrated current (A/m)\n", i++);
+      log_proc(w->log_EEJ, "# Field %zu: EEJ height-integrated current (mA/m)\n", i++);
       return s;
     }
 
-  for (i = 0; i < MAG_EEJ_NCURR; ++i)
+  for (i = 0; i < w->ncurr; ++i)
     {
-      double qdlat = eej_p->qdlat_min + i * eej_p->dqdlat;
+      double qdlat = -eej_p->qdlat_max + i * eej_p->dqdlat;
 
-      log_proc(w->log_EEJ, "%f %f\n",
+      log_proc(w->log_EEJ, "%8.4f %9.6f\n",
                qdlat,
-               w->EEJ[i]);
+               w->EEJ[i] * 1000.0);
     }
 
   log_proc(w->log_EEJ, "\n\n");
@@ -390,19 +428,19 @@ mag_log_model(const int header, const mag_workspace *w)
       /* print header information */
       i = 1;
       log_proc(w->log_model, "# Field %zu: QD latitude (degrees)\n", i++);
-      log_proc(w->log_model, "# Field %zu: modeled current density (A/m)\n", i++);
-      log_proc(w->log_model, "# Field %zu: satellite current density (A/m)\n", i++);
+      log_proc(w->log_model, "# Field %zu: modeled current density (mA/m)\n", i++);
+      log_proc(w->log_model, "# Field %zu: satellite current density (mA/m)\n", i++);
       return s;
     }
 
-  for (i = 0; i < MAG_EEJ_NCURR; ++i)
+  for (i = 0; i < w->ncurr; ++i)
     {
-      double qdlat = eej_p->qdlat_min + i * eej_p->dqdlat;
+      double qdlat = -eej_p->qdlat_max + i * eej_p->dqdlat;
 
       log_proc(w->log_model, "%f %.12e %.12e\n",
                qdlat,
-               gsl_vector_get(inveef_p->J_pde, i),
-               w->EEJ[i]);
+               gsl_vector_get(inveef_p->J_pde, i) * 1000.0,
+               w->EEJ[i] * 1000.0);
     }
 
   log_proc(w->log_model, "\n\n");
@@ -441,7 +479,7 @@ mag_log_EEF(const int header, const time_t t, const double phi,
       log_proc(w->log_EEF, "# Field %zu: season (day of year in [0,365])\n", i++);
       log_proc(w->log_EEF, "# Field %zu: eastward electric field (mV/m)\n", i++);
       log_proc(w->log_EEF, "# Field %zu: relative error between modeled and observed current profile\n", i++);
-      log_proc(w->log_EEF, "# Field %zu: peak height-integrated current density (A/m)\n", i++);
+      log_proc(w->log_EEF, "# Field %zu: peak height-integrated current density (mA/m)\n", i++);
       log_proc(w->log_EEF, "# Field %zu: kp\n", i++);
       return s;
     }
@@ -454,7 +492,7 @@ mag_log_EEF(const int header, const time_t t, const double phi,
            doy,
            w->EEF,
            w->RelErr,
-           w->EEJ[MAG_EEJ_NCURR / 2],
+           w->EEJ[w->ncurr / 2] * 1000.0,
            kp);
 
   return s;

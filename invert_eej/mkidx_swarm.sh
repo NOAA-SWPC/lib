@@ -4,7 +4,7 @@
 # version available for each day
 
 # Use track-filtered data
-datadir="/nfs/satmag/SWARM/Stage1"
+datadir="/data/SWARM/MAG/Stage1_CHAOS"
 
 function dosat
 {

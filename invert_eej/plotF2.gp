@@ -4,10 +4,13 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'log4'
-outdir = 'log4/plots'
+logdir = 'log'
+outdir = 'log/plots'
 #logdir = 'WAMNET/data_C'
 #outdir = 'WAMNET/data_C/plots'
+
+cmd = sprintf('mkdir -p %s', outdir)
+tstr = system(cmd)
 
 fileF2 = logdir.'/F2.dat'
 fileEEJ = logdir.'/EEJ.dat'
@@ -55,7 +58,7 @@ do for [idx=0:nplot - 1] {
 np = idx + 1
 
 # Retrieve timestamp string
-cmd = sprintf('/nfs/satmag_work/palken/corr/common/time2str2 %s', word(tarr, np))
+cmd = sprintf('/data/palken/lib/common/time2str2 %s', word(tarr, np))
 tstr = system(cmd)
 
 # Retrieve longitude of equator crossing
@@ -68,11 +71,12 @@ lthour = int(lt)
 ltmin = int((lt - lthour) * 60)
 ltstr = sprintf('%02d:%02d', lthour, ltmin)
 
-cmd = sprintf('/nfs/satmag_work/palken/corr/common/time2str3 %s', word(tarr, np))
+cmd = sprintf('/data/palken/lib/common/time2str3 %s', word(tarr, np))
 fstr = system(cmd)
-set out sprintf('%s/plot_%s.png', outdir, fstr)
+outstr = sprintf('%s/plot_%s.png', outdir, fstr)
+set out outstr
 
-str = sprintf('Generating plot %d/%d...', np, nplot)
+str = sprintf('Generating plot %d/%d: %s...', np, nplot, outstr)
 print str
 
 set multiplot layout nrow,ncol
@@ -97,7 +101,7 @@ unset title
 
 load 'incrow.cfg'
 
-set xrange [-20:20]
+set xrange [-30:30]
 #set yrange [-20:20]
 #set y2range [-0.25:0.15]
 
@@ -129,7 +133,8 @@ plot fileSqLcurve us 2:3 index idx w lp lt 5 pt 7 ps 0.3 ti "Sq", \
 set lmargin at screen 0.55
 set rmargin at screen right(currentcolumn,ncol,w,l,r,hbuffer)
 set xrange [1e-2:1e3]
-set yrange [1e-4:1e10]
+#set yrange [1e-4:1e10]
+set yrange [*:*]
 unset ylabel
 
 plot fileEEJLcurve us 2:3 index idx w lp lt 5 pt 7 ps 0.3 ti "EEJ", \

@@ -24,9 +24,6 @@
 #define MAG_LT_MIN             (6.0)
 #define MAG_LT_MAX             (18.0)
 
-/* where to store log files */
-#define LOG_DIR                "log"
-
 /* maximum latitude spacing to allow for data gaps */
 #define MAG_DLAT               (2.0)
 
@@ -47,23 +44,22 @@
 /* maximum data in one track */
 #define MAG_MAX_TRACK          4000
 
-/****************************
- * EEJ inversion parameters *
- ****************************/
-
-/* number of current arcs representing EEJ */
-#define MAG_EEJ_NCURR          81
-
-/* qd latitude range for current flow */
-#define MAG_EEJ_QDLAT_MIN      (-20.0)
-#define MAG_EEJ_QDLAT_MAX      (20.0)
-
 typedef struct
 {
+  int year;                       /* year of measurements for QD transforms */
+  char *log_dir;                  /* log directory */
+  char *output_file;              /* output file */
   double lt_min;                  /* minimum local time (hours) */
   double lt_max;                  /* maximum local time (hours) */
   double lon_min;                 /* minimum longitude (degrees) */
   double lon_max;                 /* maximum longitude (degrees) */
+  double season_min;              /* minimum season (doy) */
+  double season_max;              /* maximum season (doy) */
+  double season_min2;             /* minimum season 2 (doy) */
+  double season_max2;             /* maximum season 2 (doy) */
+  double curr_altitude;           /* altitude of line currents (km) */
+  size_t ncurr;                   /* number of line currents */
+  double qdlat_max;               /* maximum QD latitude for line currents (deg) */
   int profiles_only;              /* compute profiles only (no EEF) */
 } mag_params;
 
@@ -99,7 +95,7 @@ typedef struct
   size_t nlon;      /* number of longitude segments per current arc */
   size_t p;         /* number of model parameters (number of line currents) */
 
-  double qdlat_min; /* minimum QD latitude for arc currents */
+  double qdlat_max; /* maximum QD latitude for arc currents */
   double dqdlat;    /* distance in deg between arc currents */
   double curr_dist_km; /* approx. distance in km between arc currents */
 
@@ -119,7 +115,10 @@ typedef struct
   gsl_vector *S;     /* current strength coefficients (S_j) */
   gsl_vector *rhs;   /* right hand side vector (F^(2)) */
   gsl_matrix *L;     /* regularization matrix */
-  gsl_vector *tau;   /* for QR decomposition */
+  gsl_matrix *Xs;    /* least squares matrix in standard form */
+  gsl_vector *ys;    /* right hand side vector in standard form */
+  gsl_vector *cs;    /* solution vector in standard form */
+  gsl_matrix *M;     /* matrix for standard to general form conversion */
   double rnorm;      /* residual norm || y - X c || */
   double snorm;      /* solution norm || L c || */
   gsl_multifit_linear_workspace *multifit_p;
@@ -138,7 +137,6 @@ typedef struct
 typedef struct
 {
   gsl_matrix *X;     /* least squares matrix */
-  gsl_matrix *cov;   /* covariance matrix */
   gsl_vector *c;     /* coefficient vector */
   gsl_vector *rhs;   /* right hand side vector */
   size_t p;          /* number of coefficients for Sq model */
@@ -176,9 +174,12 @@ typedef struct
 
 typedef struct
 {
-  mag_track track;  /* stores current track for processing */
+  mag_params *params;
 
-  double EEJ[MAG_EEJ_NCURR]; /* EEJ current density (A/m) */
+  mag_track track;           /* stores current track for processing */
+
+  double *EEJ;               /* EEJ current density (A/m) */
+  size_t ncurr;              /* number of line currents */
 
   double EEF;                /* final EEF value (mV/m) */
   double RelErr;             /* relative error output parameter */
@@ -188,6 +189,7 @@ typedef struct
   log_workspace *log_F2;
   log_workspace *log_Sq_Lcurve;
   log_workspace *log_Sq_Lcorner;
+  log_workspace *log_LC;
   log_workspace *log_EEJ;
   log_workspace *log_EEJ_Lcurve;
   log_workspace *log_EEJ_Lcorner;
@@ -211,8 +213,10 @@ typedef struct
  * Prototypes
  */
 
-mag_workspace *mag_alloc(const int year, const char *output_dir, const char *log_dir);
+mag_workspace *mag_alloc(mag_params *params);
 void mag_free(mag_workspace *w);
+int mag_preproc(const mag_params *params, track_workspace *track_p,
+                satdata_mag *data, mag_workspace *w);
 int mag_proc(const mag_params *params, track_workspace *track_p,
              satdata_mag *data, mag_workspace *w);
 
@@ -223,6 +227,7 @@ int mag_log_profile(const int header, const size_t ntrack,
 int mag_log_F2(const int header, const mag_workspace *w);
 int mag_log_Sq_Lcurve(const int header, const mag_workspace *w);
 int mag_log_Sq_Lcorner(const int header, const mag_workspace *w);
+int mag_log_LC(const int header, const mag_workspace *w);
 int mag_log_EEJ(const int header, const mag_workspace *w);
 int mag_log_EEJ_Lcurve(const int header, const mag_workspace *w);
 int mag_log_EEJ_Lcorner(const int header, const mag_workspace *w);
@@ -239,7 +244,7 @@ int mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w);
 
 /* mag_eej.c */
 mag_eej_workspace *mag_eej_alloc(const int year, const size_t ncurr,
-                                 const double qdlat_min,
+                                 const double altitude,
                                  const double qdlat_max);
 void mag_eej_free(mag_eej_workspace *w);
 int mag_eej_proc(mag_track *track, double *J, mag_eej_workspace *w);

@@ -20,6 +20,8 @@
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_sort.h>
 #include <gsl/gsl_linalg.h>
+#include <gsl/gsl_errno.h>
+#include <gsl/gsl_eigen.h>
 
 #include "apex.h"
 #include "coord.h"
@@ -28,6 +30,7 @@
 #include "geod2geoc.h"
 #include "mag.h"
 #include "mageq.h"
+#include "oct.h"
 
 static int mag_eej_matrix_row(const double r, const double theta, const double phi,
                               const double b[3], gsl_vector *v, const mag_eej_workspace *w);
@@ -36,27 +39,39 @@ static int eej_add_B(const double ri[3], const double rjk[3],
 static int eej_ls(const gsl_matrix *X, const gsl_vector *y,
                   gsl_vector *c, gsl_matrix *cov, mag_eej_workspace *w);
 
+/*
+mag_eej_alloc()
+  Allocate workspace for fitting line currents to magnetic data
+
+Inputs: year      - year of data to be inverted (for computing QD transformations)
+        ncurr     - number of line currents (placed symmetrically around magnetic equator)
+        altitude  - altitude of line currents (km)
+        qdlat_max - line currents will span [-qdlat_max,qdlat_max]
+
+Return: workspace
+*/
+
 mag_eej_workspace *
 mag_eej_alloc(const int year, const size_t ncurr,
-              const double qdlat_min, const double qdlat_max)
+              const double altitude, const double qdlat_max)
 {
   mag_eej_workspace *w;
-  const size_t n = 1000;   /* maximum number of F^(2) data to fit */
+  const size_t n = 5000;   /* maximum number of F^(2) data to fit */
   const double qdlon_min = 0.0;
   const double qdlon_max = 359.0;
   const size_t nlon = 360;
   const double dlon = (qdlon_max - qdlon_min) / (nlon - 1.0);
-  const double dlat = (qdlat_max - qdlat_min) / (ncurr - 1.0);
+  const double dlat = (2.0 * qdlat_max) / (ncurr - 1.0);
   size_t j, k;
 
   w = calloc(1, sizeof(mag_eej_workspace));
   if (!w)
     return 0;
 
-  w->qd_alt = 110.0;
+  w->qd_alt = altitude;
   w->nlon = nlon;
   w->p = ncurr;
-  w->qdlat_min = qdlat_min;
+  w->qdlat_max = qdlat_max;
   w->dqdlat = dlat;
 
   /* distance in km between arc currents */
@@ -77,8 +92,10 @@ mag_eej_alloc(const int year, const size_t ncurr,
   w->cov = gsl_matrix_alloc(w->p, w->p);
   w->S = gsl_vector_alloc(w->p);
   w->rhs = gsl_vector_alloc(n);
-  w->L = gsl_matrix_alloc(w->p, w->p);
-  w->tau = gsl_vector_alloc(w->p);
+  w->Xs = gsl_matrix_alloc(n, w->p);
+  w->ys = gsl_vector_alloc(n);
+  w->cs = gsl_vector_alloc(w->p);
+  w->M = gsl_matrix_alloc(w->p, n);
 
   w->multifit_p = gsl_multifit_linear_alloc(n, w->p);
   w->nreg = 200;
@@ -86,28 +103,19 @@ mag_eej_alloc(const int year, const size_t ncurr,
   w->eta = gsl_vector_alloc(w->nreg);
   w->reg_param = gsl_vector_alloc(w->nreg);
 
-  /* precompute regularization matrix L (second finite difference operator) */
+  /* construct smoothing matrix L */
+  w->L = gsl_matrix_alloc(w->p, w->p);
 
-  gsl_matrix_set_zero(w->L);
+  {
+    const size_t kmax = 2;
+    gsl_vector *alpha = gsl_vector_alloc(kmax + 1);
+    gsl_vector_set_all(alpha, 1.0);
+    gsl_vector_set(alpha, 2, 10.0);
 
-  /* first row = [2 -1 0 ... ] */
-  gsl_matrix_set(w->L, 0, 0, 2.0);
-  gsl_matrix_set(w->L, 0, 1, -1.0);
+    gsl_multifit_linear_Lsobolev(w->p, kmax, alpha, w->L, w->multifit_p);
 
-  for (j = 1; j < w->p - 1; ++j)
-    {
-      gsl_matrix_set(w->L, j, j - 1, -1.0);
-      gsl_matrix_set(w->L, j, j, 2.0);
-      gsl_matrix_set(w->L, j, j + 1, -1.0);
-    }
-
-  /* last row = [ 0 ... 0 -1 2 ] */
-  gsl_matrix_set(w->L, w->p - 1, w->p - 2, -1.0);
-  gsl_matrix_set(w->L, w->p - 1, w->p - 1, 2.0);
-
-  /* compute Cholesky decomp and inverse */
-  gsl_linalg_cholesky_decomp(w->L);
-  gsl_linalg_cholesky_invert(w->L);
+    gsl_vector_free(alpha);
+  }
 
   /*
    * precompute Cartesian positions of each current segment for each
@@ -124,7 +132,7 @@ mag_eej_alloc(const int year, const size_t ncurr,
    */
   for (j = 0; j < ncurr; ++j)
     {
-      double qdlat = qdlat_min + j * dlat;
+      double qdlat = -qdlat_max + j * dlat;
 
       for (k = 0; k < nlon; ++k)
         {
@@ -250,8 +258,17 @@ mag_eej_free(mag_eej_workspace *w)
   if (w->L)
     gsl_matrix_free(w->L);
 
-  if (w->tau)
-    gsl_vector_free(w->tau);
+  if (w->Xs)
+    gsl_matrix_free(w->Xs);
+
+  if (w->ys)
+    gsl_vector_free(w->ys);
+
+  if (w->cs)
+    gsl_vector_free(w->cs);
+
+  if (w->M)
+    gsl_matrix_free(w->M);
 
   if (w->rho)
     gsl_vector_free(w->rho);
@@ -277,7 +294,7 @@ mag_eej_proc()
 
 Inputs: track - satellite track
         J     - (output) where to store EEJ height integrated
-                current density in A/m (array of size MAG_EEJ_NCURR)
+                current density in A/m (array of size ncurr)
         w     - workspace
 
 Notes:
@@ -304,7 +321,7 @@ mag_eej_proc(mag_track *track, double *J, mag_eej_workspace *w)
       double bi[3]; /* unit field vector in NEC */
 
       /* ignore data outside [-qd_max,qd_max] */
-      if (fabs(track->qdlat[i]) > MAG_EEJ_QDLAT_MAX)
+      if (fabs(track->qdlat[i]) > w->qdlat_max)
         continue;
 
       /* compute unit magnetic field vector at this point */
@@ -468,57 +485,43 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
 {
   int s = 0;
   const size_t n = X->size1;
+  const size_t p = X->size2;
+  const size_t m = w->L->size1;
+  const size_t npm = n - (p - m);
+  gsl_matrix_view Xs = gsl_matrix_submatrix(w->Xs, 0, 0, npm, m);
+  gsl_vector_view ys = gsl_vector_subvector(w->ys, 0, npm);
+  gsl_vector_view cs = gsl_vector_subvector(w->cs, 0, m);
+  gsl_matrix_view M = (m < p) ? gsl_matrix_submatrix(w->M, 0, 0, p, n) : gsl_matrix_submatrix(w->M, 0, 0, m, p);
   double lambda;
-  size_t j;
 
-  if (n != w->multifit_p->n)
-    {
-      gsl_multifit_linear_free(w->multifit_p);
-      w->multifit_p = gsl_multifit_linear_alloc(n, w->p);
-    }
-
-  /* compute regularization matrix L (second finite difference operator) */
-
-  gsl_matrix_set_zero(w->L);
-
-  /* first row = [2 -1 0 ... ] */
-  gsl_matrix_set(w->L, 0, 0, 2.0);
-  gsl_matrix_set(w->L, 0, 1, -1.0);
-
-  for (j = 1; j < w->p - 1; ++j)
-    {
-      gsl_matrix_set(w->L, j, j - 1, -1.0);
-      gsl_matrix_set(w->L, j, j, 2.0);
-      gsl_matrix_set(w->L, j, j + 1, -1.0);
-    }
-
-  /* last row = [ 0 ... 0 -1 2 ] */
-  gsl_matrix_set(w->L, w->p - 1, w->p - 2, -1.0);
-  gsl_matrix_set(w->L, w->p - 1, w->p - 1, 2.0);
-
-  /* compute SVD of X~ */
-  s = gsl_multifit_linear_ridge_svd2(X, w->L, w->tau, w->multifit_p);
+  /* convert (X, y) to standard form (X~,y~) */
+  s = gsl_multifit_linear_stdform2(w->L, X, y, &Xs.matrix, &ys.vector, &M.matrix, w->multifit_p);
   if (s)
     return s;
 
-  /* compute L-curve and its corner */
-  s = gsl_multifit_linear_ridge_lcurve(y, w->reg_param, w->rho, w->eta, w->multifit_p);
+  /* compute SVD of X~ */
+  s = gsl_multifit_linear_svd(&Xs.matrix, w->multifit_p);
+  if (s)
+    return s;
+
+  /* compute L-curve and its corner of LS system (X~,y~) */
+  s = gsl_multifit_linear_lcurve(&ys.vector, w->reg_param, w->rho, w->eta, w->multifit_p);
   if (s)
     return s;
 
   /* 2015-10-01: found that the corner2 method works better in multiple cases */
-  /*s = gsl_multifit_linear_ridge_lcorner(w->rho, w->eta, &(w->reg_idx));*/
-  s = gsl_multifit_linear_ridge_lcorner2(w->reg_param, w->eta, &(w->reg_idx));
+  s = gsl_multifit_linear_lcorner(w->rho, w->eta, &(w->reg_idx));
+  /*s = gsl_multifit_linear_lcorner2(w->reg_param, w->eta, &(w->reg_idx));*/
   if (s)
     return s;
 
   lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 
   /* solve LS system with optimal lambda */
-  gsl_multifit_linear_ridge_solve(lambda, y, c, cov, &(w->rnorm), &(w->snorm), w->multifit_p);
+  gsl_multifit_linear_solve(lambda, &Xs.matrix, &ys.vector, &cs.vector, &(w->rnorm), &(w->snorm), w->multifit_p);
 
-  /* compute c = L^{-1} c~ */
-  gsl_multifit_linear_ridge_transform2(w->L, w->tau, c, w->multifit_p);
+  /* backtransform c~ to recover c */
+  gsl_multifit_linear_genform2(w->L, X, y, &cs.vector, &M.matrix, c, w->multifit_p);
 
   return s;
 } /* eej_ls() */

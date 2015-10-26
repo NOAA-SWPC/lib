@@ -28,6 +28,12 @@ print_help(char *argv[])
   fprintf(stderr, "\t --lt_max | -b lt_max                - maximum local time (hours)\n");
   fprintf(stderr, "\t --lon_min | -d lon_min              - minimum longitude (degrees)\n");
   fprintf(stderr, "\t --lon_max | -e lon_max              - maximum longitude (degrees)\n");
+  fprintf(stderr, "\t --season_min | -f season_min        - minimum season (doy)\n");
+  fprintf(stderr, "\t --season_max | -g season_max        - maximum season (doy)\n");
+  fprintf(stderr, "\t --season_min2 | -h season_min2      - minimum season 2 (doy)\n");
+  fprintf(stderr, "\t --season_max2 | -j season_max2      - maximum season 2 (doy)\n");
+  fprintf(stderr, "\t --curr_alt | -k curr_alt            - altitude of line current shell (km)\n");
+  fprintf(stderr, "\t --qdmax | -q qdmax                  - maximum QD latitude for line currents (deg)\n");
   fprintf(stderr, "\t --profiles_only | -p                - compute magnetic/current profiles only (no EEF)\n");
 }
 
@@ -42,19 +48,26 @@ main(int argc, char *argv[])
   const double thresh_champ[] = { -1.0, -1.0, -1.0, 120.0 };
 
   const double *thresh = NULL;
-  char *outfile = NULL;
-  char *log_dir = LOG_DIR;
   satdata_mag *data = NULL;
   struct timeval tv0, tv1;
   mag_workspace *mag_workspace_p;
   track_workspace *track_workspace_p;
   mag_params params;
-  int year;
 
+  params.year = -1; /* filled in below */
+  params.log_dir = "log";
+  params.output_file = NULL;
+  params.curr_altitude = 110.0;
+  params.ncurr = 81;
+  params.qdlat_max = 20.0;
   params.lt_min = MAG_LT_MIN;
   params.lt_max = MAG_LT_MAX;
   params.lon_min = -200.0;
   params.lon_max = 200.0;
+  params.season_min = 0.0;
+  params.season_max = 367.0;
+  params.season_min2 = -1.0;
+  params.season_max2 = -1.0;
   params.profiles_only = 0;
 
   while (1)
@@ -71,10 +84,17 @@ main(int argc, char *argv[])
           { "lt_max", required_argument, NULL, 'b' },
           { "lon_min", required_argument, NULL, 'd' },
           { "lon_max", required_argument, NULL, 'e' },
+          { "season_min", required_argument, NULL, 'f' },
+          { "season_max", required_argument, NULL, 'g' },
+          { "season_min2", required_argument, NULL, 'h' },
+          { "season_max2", required_argument, NULL, 'j' },
+          { "curr_alt", required_argument, NULL, 'k' },
+          { "ncurr", required_argument, NULL, 'm' },
+          { "qdmax", required_argument, NULL, 'q' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:d:e:l:o:ps:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:d:e:h:j:k:l:m:o:ps:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -119,6 +139,26 @@ main(int argc, char *argv[])
             params.lon_max = atof(optarg);
             break;
 
+          case 'f':
+            params.season_min = atof(optarg);
+            break;
+
+          case 'g':
+            params.season_max = atof(optarg);
+            break;
+
+          case 'h':
+            params.season_min2 = atof(optarg);
+            break;
+
+          case 'j':
+            params.season_max2 = atof(optarg);
+            break;
+
+          case 'k':
+            params.curr_altitude = atof(optarg);
+            break;
+
           case 's':
             thresh = thresh_swarm;
             fprintf(stderr, "main: reading %s...", optarg);
@@ -141,15 +181,23 @@ main(int argc, char *argv[])
             break;
 
           case 'o':
-            outfile = optarg;
+            params.output_file = optarg;
             break;
 
           case 'l':
-            log_dir = optarg;
+            params.log_dir = optarg;
+            break;
+
+          case 'm':
+            params.ncurr = (size_t) atoi(optarg);
             break;
 
           case 'p':
             params.profiles_only = 1;
+            break;
+
+          case 'q':
+            params.qdlat_max = atof(optarg);
             break;
 
           default:
@@ -165,11 +213,17 @@ main(int argc, char *argv[])
       exit(1);
     }
 
-  fprintf(stderr, "main: maximum allowed kp: %.1f\n", MAG_MAX_KP);
-  fprintf(stderr, "main: LT min:             %.1f [h]\n", params.lt_min);
-  fprintf(stderr, "main: LT max:             %.1f [h]\n", params.lt_max);
-  fprintf(stderr, "main: longitude min:      %.1f [deg]\n", params.lon_min);
-  fprintf(stderr, "main: longitude max:      %.1f [deg]\n", params.lon_max);
+  fprintf(stderr, "main: maximum allowed kp:      %.1f\n", MAG_MAX_KP);
+  fprintf(stderr, "main: line current shell:      %.1f [km]\n", params.curr_altitude);
+  fprintf(stderr, "main: number of line currents: %zu\n", params.ncurr);
+  fprintf(stderr, "main: LT min:                  %.1f [h]\n", params.lt_min);
+  fprintf(stderr, "main: LT max:                  %.1f [h]\n", params.lt_max);
+  fprintf(stderr, "main: longitude min:           %.1f [deg]\n", params.lon_min);
+  fprintf(stderr, "main: longitude max:           %.1f [deg]\n", params.lon_max);
+  fprintf(stderr, "main: season min:              %.1f [deg]\n", params.season_min);
+  fprintf(stderr, "main: season max:              %.1f [deg]\n", params.season_max);
+  fprintf(stderr, "main: season min 2:            %.1f [deg]\n", params.season_min2);
+  fprintf(stderr, "main: season max 2:            %.1f [deg]\n", params.season_max2);
 
   track_workspace_p = track_alloc();
 
@@ -182,9 +236,8 @@ main(int argc, char *argv[])
             nrms, data->n, (double) nrms / (double) data->n * 100.0);
   }
 
-  year = (int) satdata_epoch2year(data->t[0]);
-
-  mag_workspace_p = mag_alloc(year, outfile, log_dir);
+  params.year = (int) satdata_epoch2year(data->t[0]);
+  mag_workspace_p = mag_alloc(&params);
 
   mag_proc(&params, track_workspace_p, data, mag_workspace_p);
 

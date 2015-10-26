@@ -37,7 +37,7 @@ mag_sqfilt_workspace *
 mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
                  const size_t nmax_ext, const size_t mmax_ext)
 {
-  const size_t ndata = 10000;
+  const size_t ndata = 10000; /* maximum data expected in 1 track */
   size_t l;
   mag_sqfilt_workspace *w;
 
@@ -86,7 +86,6 @@ mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
   w->ext_offset = w->int_offset + w->p_int;
 
   w->X = gsl_matrix_alloc(ndata, w->p);
-  w->cov = gsl_matrix_alloc(w->p, w->p);
   w->c = gsl_vector_alloc(w->p);
   w->rhs = gsl_vector_alloc(ndata);
   w->work_p = gsl_vector_alloc(w->p);
@@ -98,6 +97,8 @@ mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
   w->rho = gsl_vector_alloc(w->nreg);
   w->eta = gsl_vector_alloc(w->nreg);
   w->reg_param = gsl_vector_alloc(w->nreg);
+
+  w->multifit_workspace_p = gsl_multifit_linear_alloc(ndata, w->p);
 
   return w;
 } /* mag_sqfilt_alloc() */
@@ -113,9 +114,6 @@ mag_sqfilt_free(mag_sqfilt_workspace *w)
 
   if (w->X)
     gsl_matrix_free(w->X);
-
-  if (w->cov)
-    gsl_matrix_free(w->cov);
 
   if (w->c)
     gsl_vector_free(w->c);
@@ -175,23 +173,23 @@ mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w)
     return s;
 
   /* compute L-curve */
-  s = gsl_multifit_linear_ridge_lcurve(&bv.vector, w->reg_param, w->rho, w->eta, w->multifit_workspace_p);
+  s = gsl_multifit_linear_lcurve(&bv.vector, w->reg_param, w->rho, w->eta, w->multifit_workspace_p);
   if (s)
     return s;
 
   /* compute L-curve corner
    * 2015-10-01: found that the corner2 method has worse performance during storms
    */
-  s = gsl_multifit_linear_ridge_lcorner(w->rho, w->eta, &(w->reg_idx));
-  /*s = gsl_multifit_linear_ridge_lcorner2(w->reg_param, w->eta, &(w->reg_idx));*/
+  s = gsl_multifit_linear_lcorner(w->rho, w->eta, &(w->reg_idx));
+  /*s = gsl_multifit_linear_lcorner2(w->reg_param, w->eta, &(w->reg_idx));*/
   if (s)
     return s;
 
   h = gsl_vector_get(w->reg_param, w->reg_idx);
 
   /* perform damped least squares fit */
-  s = gsl_multifit_linear_ridge_solve(h, &bv.vector, w->c,
-                                      w->cov, &(w->rnorm), &(w->snorm), w->multifit_workspace_p);
+  s = gsl_multifit_linear_solve(h, &Xv.matrix, &bv.vector, w->c,
+                                &(w->rnorm), &(w->snorm), w->multifit_workspace_p);
   if (s)
     return s;
 
@@ -221,7 +219,7 @@ Inputs: mag_p - mag workspace
 Notes:
 1) mag_p->track must be initialized on input with a complete satellite track
 
-2) w->n contains the number of data points to be fitted
+2) On output, w->n contains the number of data points to be fitted
 */
 
 static int
@@ -308,14 +306,6 @@ sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_workspace *w)
       gsl_vector_set(w->rhs, ndata, rhsval);
 
       ++ndata;
-    }
-
-  if (ndata != w->n)
-    {
-      if (w->multifit_workspace_p)
-        gsl_multifit_linear_free(w->multifit_workspace_p);
-
-      w->multifit_workspace_p = gsl_multifit_linear_alloc(ndata, w->p);
     }
 
   w->n = ndata;

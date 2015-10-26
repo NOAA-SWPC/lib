@@ -325,7 +325,7 @@ inverteef_invert_profile(gsl_vector *J_sat, inverteef_workspace *w)
 inverteef_calc()
   Invert satellite profile
 
-Inputs: J_sat   - satellite current vector profile (length MAG_EEJ_NCURR)
+Inputs: J_sat   - satellite current vector profile (length ncurr)
         J_lat_E - PDE solution (E_0, u = 0) (length ntheta = theta grid points)
         J_lat_u - PDE solution (E_0 = 0, u) (length ntheta = theta grid points)
         w       - workspace
