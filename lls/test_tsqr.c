@@ -91,6 +91,18 @@ random_matrix_ill(gsl_matrix *m, const gsl_rng *r)
 }
 
 static void
+random_noise(gsl_vector *y, const gsl_rng *r)
+{
+  size_t i;
+
+  for (i = 0; i < y->size; ++i)
+    {
+      double *ptr = gsl_vector_ptr(y, i);
+      *ptr += 1.0e-3 * gsl_rng_uniform(r);
+    }
+}
+
+static void
 test_solve_tsqr(const double lambda, const gsl_matrix * X, const gsl_vector * y,
                 gsl_vector * c)
 {
@@ -101,6 +113,7 @@ test_solve_tsqr(const double lambda, const gsl_matrix * X, const gsl_vector * y,
   size_t i;
   tsqr_workspace *w = tsqr_alloc(nrows, p);
   size_t rowidx = 0; /* index of current block */
+  double rnorm, snorm;
 
   for (i = 0; i < nblock; ++i)
     {
@@ -114,7 +127,11 @@ test_solve_tsqr(const double lambda, const gsl_matrix * X, const gsl_vector * y,
       rowidx += nr;
     }
 
-  tsqr_solve(lambda, c, w);
+  /* compute SVD of R */
+  tsqr_svd(w);
+
+  /* solve LS system */
+  tsqr_solve(lambda, c, &rnorm, &snorm, w);
 
   tsqr_free(w);
 }
@@ -138,7 +155,7 @@ static int
 test_system(const size_t n, const size_t p, gsl_rng *r)
 {
   int s = 0;
-  const double tol = 1.0e-9;
+  const double tol = 1.0e-5;
   gsl_matrix *X = gsl_matrix_alloc(n, p);
   gsl_vector *c = gsl_vector_alloc(p);
   gsl_vector *c0 = gsl_vector_alloc(p);
@@ -146,29 +163,34 @@ test_system(const size_t n, const size_t p, gsl_rng *r)
   gsl_vector *y = gsl_vector_alloc(n);
   gsl_vector *w = gsl_vector_alloc(n);
   gsl_vector *L = gsl_vector_alloc(p);
-  size_t i;
+  double lambda;
+  size_t i, j;
 
   /* generate ill-conditioned random matrix */
-  /*random_matrix_ill(X, r);*/
-  random_matrix(X, r, -1.0, 1.0);
+  random_matrix_ill(X, r);
 
   /* generate random solution vector */
   random_vector(c, r, -1.0, 1.0);
 
   /* compute y = X*c and add random noise */
   gsl_blas_dgemv(CblasNoTrans, 1.0, X, c, 0.0, y);
-  /*random_vector_noise(y, r);*/
+  random_noise(y, r);
 
-  test_solve_tsqr(0.0, X, y, c0);
-  test_solve_gsl(0.0, X, y, c1);
-
-  /* test c0 = c1 */
-  for (i = 0; i < p; ++i)
+  for (i = 0; i < 5; ++i)
     {
-      double c0i = gsl_vector_get(c0, i);
-      double c1i = gsl_vector_get(c1, i);
+      lambda = pow(10.0, -(double) i);
 
-      gsl_test_rel(c0i, c1i, tol, "tsqr n=%zu p=%zu i=%zu", n, p, i);
+      test_solve_tsqr(lambda, X, y, c0);
+      test_solve_gsl(lambda, X, y, c1);
+
+      /* test c0 = c1 */
+      for (j = 0; j < p; ++j)
+        {
+          double c0j = gsl_vector_get(c0, j);
+          double c1j = gsl_vector_get(c1, j);
+
+          gsl_test_rel(c0j, c1j, tol, "tsqr lambda=%g n=%zu p=%zu j=%zu", lambda, n, p, j);
+        }
     }
 
   gsl_matrix_free(X);
