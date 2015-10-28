@@ -15,6 +15,8 @@ SUBDIRS =     \
 	msis        \
   msynth      \
 	mageq       \
+	peak        \
+	gd          \
 	hwm         \
 	cond        \
   pomme       \

@@ -23,6 +23,7 @@ AC_CONFIG_FILES([     \
   efi/Makefile        \
   estist/Makefile     \
   euler/Makefile      \
+  gd/Makefile         \
   grid/Makefile       \
   hwm/Makefile        \
   invert_eej/Makefile \
@@ -35,6 +36,7 @@ AC_CONFIG_FILES([     \
   mageq/Makefile      \
   msis/Makefile       \
   msynth/Makefile     \
+  peak/Makefile       \
   poltor/Makefile     \
   pomme/Makefile      \
   swarm/Makefile      \

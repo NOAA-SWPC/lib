@@ -491,7 +491,7 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
   gsl_matrix_view Xs = gsl_matrix_submatrix(w->Xs, 0, 0, npm, m);
   gsl_vector_view ys = gsl_vector_subvector(w->ys, 0, npm);
   gsl_vector_view cs = gsl_vector_subvector(w->cs, 0, m);
-  gsl_matrix_view M = (m < p) ? gsl_matrix_submatrix(w->M, 0, 0, p, n) : gsl_matrix_submatrix(w->M, 0, 0, m, p);
+  gsl_matrix_view M = (m < p) ? gsl_matrix_submatrix(w->M, 0, 0, n, p) : gsl_matrix_submatrix(w->M, 0, 0, m, p);
   double lambda;
 
   /* convert (X, y) to standard form (X~,y~) */

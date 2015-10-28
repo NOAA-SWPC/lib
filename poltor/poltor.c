@@ -492,7 +492,7 @@ poltor_solve(poltor_workspace *w)
 
     /* find L-corve corner */
     fprintf(stderr, "poltor_solve: calculating L-curve corner...");
-    gsl_multifit_linear_ridge_lcorner(w->rho, w->eta, &(w->reg_idx));
+    gsl_multifit_linear_lcorner(w->rho, w->eta, &(w->reg_idx));
     lambda = gsl_vector_get(w->reg_param, w->reg_idx);
     fprintf(stderr, "done (lambda = %f)\n", lambda);
 
