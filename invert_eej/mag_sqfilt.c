@@ -38,7 +38,7 @@ mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
                  const size_t nmax_ext, const size_t mmax_ext)
 {
   const size_t ndata = 10000; /* maximum data expected in 1 track */
-  size_t l;
+  size_t l, n;
   mag_sqfilt_workspace *w;
 
   w = calloc(1, sizeof(mag_sqfilt_workspace));
@@ -89,6 +89,7 @@ mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
   w->c = gsl_vector_alloc(w->p);
   w->rhs = gsl_vector_alloc(ndata);
   w->work_p = gsl_vector_alloc(w->p);
+  w->L = gsl_vector_alloc(w->p);
 
   w->ntot = ndata;
   w->n = 0;
@@ -99,6 +100,36 @@ mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
   w->reg_param = gsl_vector_alloc(w->nreg);
 
   w->multifit_workspace_p = gsl_multifit_linear_alloc(ndata, w->p);
+
+  {
+    const double beta = -0.1;
+
+    for (n = 1; n <= nmax_int; ++n)
+      {
+        int M = (int) GSL_MIN(n, mmax_int);
+        int m;
+        double val = pow((double) n, beta);
+
+        for (m = -M; m <= M; ++m)
+          {
+            size_t idx = sqfilt_nmidx(0, n, m, w);
+            gsl_vector_set(w->L, idx, val);
+          }
+      }
+
+    for (n = 1; n <= nmax_ext; ++n)
+      {
+        int M = (int) GSL_MIN(n, mmax_ext);
+        int m;
+        double val = pow((double) n, beta);
+
+        for (m = -M; m <= M; ++m)
+          {
+            size_t idx = sqfilt_nmidx(1, n, m, w);
+            gsl_vector_set(w->L, idx, val);
+          }
+      }
+  }
 
   return w;
 } /* mag_sqfilt_alloc() */
@@ -136,6 +167,9 @@ mag_sqfilt_free(mag_sqfilt_workspace *w)
   if (w->reg_param)
     gsl_vector_free(w->reg_param);
 
+  if (w->L)
+    gsl_vector_free(w->L);
+
   free(w);
 }
 
@@ -158,7 +192,8 @@ mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w)
   int s;
   gsl_vector_view bv;
   gsl_matrix_view Xv;
-  double h; /* final damping parameter */
+  double lambda; /* final damping parameter */
+  double smax;
 
   s = sqfilt_linear_init(mag_p, w);
   if (s)
@@ -166,6 +201,12 @@ mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w)
 
   Xv = gsl_matrix_submatrix(w->X, 0, 0, w->n, w->p);
   bv = gsl_vector_subvector(w->rhs, 0, w->n);
+
+  /* convert to standard form */
+  s = gsl_multifit_linear_stdform1(w->L, &Xv.matrix, &bv.vector,
+                                   &Xv.matrix, &bv.vector, w->multifit_workspace_p);
+  if (s)
+    return s;
 
   /* compute SVD of LS matrix */
   s = gsl_multifit_linear_svd(&Xv.matrix, w->multifit_workspace_p);
@@ -177,23 +218,25 @@ mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w)
   if (s)
     return s;
 
-  /* compute L-curve corner
-   * 2015-10-01: found that the corner2 method has worse performance during storms
-   */
   s = gsl_multifit_linear_lcorner(w->rho, w->eta, &(w->reg_idx));
-  /*s = gsl_multifit_linear_lcorner2(w->reg_param, w->eta, &(w->reg_idx));*/
   if (s)
     return s;
 
-  h = gsl_vector_get(w->reg_param, w->reg_idx);
+  smax = gsl_vector_get(w->multifit_workspace_p->S, 0);
+  lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 0.05*smax);
+  w->reg_idx = bsearch_desc_double(w->reg_param->data, lambda, 0, w->nreg - 1);
+  lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 
-  /* perform damped least squares fit */
-  s = gsl_multifit_linear_solve(h, &Xv.matrix, &bv.vector, w->c,
+  /* solve system with optimal lambda */
+  s = gsl_multifit_linear_solve(lambda, &Xv.matrix, &bv.vector, w->c,
                                 &(w->rnorm), &(w->snorm), w->multifit_workspace_p);
   if (s)
     return s;
 
-  fprintf(stderr, "mag_sqfilt: final regularization factor = %g\n", h);
+  /* convert back to general form */
+  s = gsl_multifit_linear_genform1(w->L, w->c, w->c, w->multifit_workspace_p);
+
+  fprintf(stderr, "mag_sqfilt: final regularization factor = %g\n", lambda);
   fprintf(stderr, "mag_sqfilt: multifit residual norm = %.6e\n", w->rnorm);
   fprintf(stderr, "mag_sqfilt: multifit solution norm = %.6e\n", w->snorm);
 

@@ -139,6 +139,7 @@ typedef struct
   gsl_matrix *X;     /* least squares matrix */
   gsl_vector *c;     /* coefficient vector */
   gsl_vector *rhs;   /* right hand side vector */
+  gsl_vector *L;     /* regularization matrix L */
   size_t p;          /* number of coefficients for Sq model */
   size_t n;          /* number of data for LS fit */
   size_t ntot;       /* total data size allocated */

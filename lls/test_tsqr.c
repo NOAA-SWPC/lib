@@ -106,16 +106,15 @@ static void
 test_solve_tsqr(const double lambda, const gsl_matrix * X, const gsl_vector * y,
                 gsl_vector * c)
 {
-  const size_t nblock = 10;
+  const size_t nblock = 5;
   const size_t n = X->size1;
   const size_t p = X->size2;
   const size_t nrows = n / nblock; /* number of rows per block */
-  size_t i;
   tsqr_workspace *w = tsqr_alloc(nrows, p);
-  size_t rowidx = 0; /* index of current block */
+  size_t rowidx = 0; /* index of start of current block */
   double rnorm, snorm;
 
-  for (i = 0; i < nblock; ++i)
+  while (rowidx < n)
     {
       size_t nleft = n - rowidx;
       size_t nr = GSL_MIN(nrows, nleft);
@@ -207,12 +206,7 @@ test_system(const size_t n, const size_t p, gsl_rng *r)
 void
 test_tsqr(gsl_rng *r)
 {
-  size_t n;
-
-  for (n = 10; n <= 200; n += 10)
-    {
-      test_system(n, n / 3, r);
-      test_system(n, n / 2, r);
-      test_system(n, n - 5, r);
-    }
+  test_system(163, 87, r);
+  test_system(200, 70, r);
+  test_system(503, 452, r);
 }

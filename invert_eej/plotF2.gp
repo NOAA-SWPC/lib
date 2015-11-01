@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'log'
-outdir = 'log/plots'
+logdir = 'log_A'
+outdir = 'log_A/plots'
 #logdir = 'WAMNET/data_C'
 #outdir = 'WAMNET/data_C/plots'
 
