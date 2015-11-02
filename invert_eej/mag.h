@@ -33,14 +33,6 @@
 /* maximum QD latitude for track processing */
 #define MAG_MAX_QD_LATITUDE    (65.0)
 
-/* maximum spherical harmonic degree for internal Sq filter model */
-#define MAG_SQFILT_INT_DEG     (12)
-#define MAG_SQFILT_INT_ORD     (0)
-
-/* maximum spherical harmonic degree for external Sq filter model */
-#define MAG_SQFILT_EXT_DEG     (1)
-#define MAG_SQFILT_EXT_ORD     (1)
-
 /* maximum data in one track */
 #define MAG_MAX_TRACK          4000
 
@@ -57,6 +49,10 @@ typedef struct
   double season_max;              /* maximum season (doy) */
   double season_min2;             /* minimum season 2 (doy) */
   double season_max2;             /* maximum season 2 (doy) */
+  size_t sq_nmax_int;             /* Sq filter internal nmax */
+  size_t sq_mmax_int;             /* Sq filter internal mmax */
+  size_t sq_nmax_ext;             /* Sq filter external nmax */
+  size_t sq_mmax_ext;             /* Sq filter external mmax */
   double curr_altitude;           /* altitude of line currents (km) */
   size_t ncurr;                   /* number of line currents */
   double qdlat_max;               /* maximum QD latitude for line currents (deg) */

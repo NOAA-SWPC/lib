@@ -236,7 +236,7 @@ mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w)
   /* convert back to general form */
   s = gsl_multifit_linear_genform1(w->L, w->c, w->c, w->multifit_workspace_p);
 
-  fprintf(stderr, "mag_sqfilt: final regularization factor = %g\n", lambda);
+  fprintf(stderr, "mag_sqfilt: final regularization factor = %g (smax = %g)\n", lambda, smax);
   fprintf(stderr, "mag_sqfilt: multifit residual norm = %.6e\n", w->rnorm);
   fprintf(stderr, "mag_sqfilt: multifit solution norm = %.6e\n", w->snorm);
 
@@ -465,11 +465,6 @@ sqfilt_calc_F2(const gsl_vector *c, mag_workspace *w)
   mag_track *track = &(w->track);
   gsl_vector *v = sqfilt_p->work_p;
 
-  gsl_vector_const_view c_int = gsl_vector_const_subvector(c, sqfilt_p->int_offset, sqfilt_p->p_int);
-  gsl_vector_const_view c_ext = gsl_vector_const_subvector(c, sqfilt_p->ext_offset, sqfilt_p->p_ext);
-  gsl_vector_const_view v_int = gsl_vector_const_subvector(v, sqfilt_p->int_offset, sqfilt_p->p_int);
-  gsl_vector_const_view v_ext = gsl_vector_const_subvector(v, sqfilt_p->ext_offset, sqfilt_p->p_ext);
-
   for (i = 0; i < track->n; ++i)
     {
       double r = track->r[i];
@@ -487,12 +482,28 @@ sqfilt_calc_F2(const gsl_vector *c, mag_workspace *w)
       sqfilt_linear_matrix_row(r, thetaq, phi, b_int, v, w);
 
       /* compute internal model = b . M */
-      gsl_blas_ddot(&v_int.vector, &c_int.vector, &val);
-      track->Sq_int[i] = val;
+      if (sqfilt_p->p_int > 0)
+        {
+          gsl_vector_const_view c_int = gsl_vector_const_subvector(c, sqfilt_p->int_offset, sqfilt_p->p_int);
+          gsl_vector_const_view v_int = gsl_vector_const_subvector(v, sqfilt_p->int_offset, sqfilt_p->p_int);
+
+          gsl_blas_ddot(&v_int.vector, &c_int.vector, &val);
+          track->Sq_int[i] = val;
+        }
+      else
+          track->Sq_int[i] = 0.0;
 
       /* compute external model = b . K */
-      gsl_blas_ddot(&v_ext.vector, &c_ext.vector, &val);
-      track->Sq_ext[i] = val;
+      if (sqfilt_p->p_ext > 0)
+        {
+          gsl_vector_const_view c_ext = gsl_vector_const_subvector(c, sqfilt_p->ext_offset, sqfilt_p->p_ext);
+          gsl_vector_const_view v_ext = gsl_vector_const_subvector(v, sqfilt_p->ext_offset, sqfilt_p->p_ext);
+
+          gsl_blas_ddot(&v_ext.vector, &c_ext.vector, &val);
+          track->Sq_ext[i] = val;
+        }
+      else
+          track->Sq_ext[i] = 0.0;
 
       track->F2[i] = track->F1[i] - (track->Sq_int[i] + track->Sq_ext[i]);
     }

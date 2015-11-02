@@ -59,7 +59,7 @@ mag_log_profile(const int header, const size_t ntrack,
 
   F2_peak = interp_xy(track->qdlat, track->F2, track->n, 0.0);
 
-  log_proc(w->log_profile, "%5zu %ld %9.4f %6.3f %7.3f %6.2f %9.6f %3.1f %2d\n",
+  log_proc(w->log_profile, "%5zu %ld %9.4f %6.3f %7.3f %6.2f %8.3f %3.1f %2d\n",
            ntrack,
            t,
            track->phi_eq * 180.0 / M_PI,

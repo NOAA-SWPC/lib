@@ -99,7 +99,7 @@ mag_eej_alloc(const int year, const size_t ncurr,
   w->Xs = gsl_matrix_alloc(n, w->p);
   w->ys = gsl_vector_alloc(n);
   w->cs = gsl_vector_alloc(w->p);
-  w->M = gsl_matrix_alloc(w->p, n);
+  w->M = gsl_matrix_alloc(n, w->p);
 
   w->multifit_p = gsl_multifit_linear_alloc(n, w->p);
   w->nreg = 200;
@@ -108,6 +108,13 @@ mag_eej_alloc(const int year, const size_t ncurr,
   w->reg_param = gsl_vector_alloc(w->nreg);
 
   /* construct smoothing matrix L */
+#if 1
+  {
+    const size_t k = 2;
+    w->L = gsl_matrix_alloc(w->p - k, w->p);
+    gsl_multifit_linear_Lk(w->p, k, w->L);
+  }
+#else
   w->L = gsl_matrix_alloc(w->p, w->p);
 
   {
@@ -120,6 +127,7 @@ mag_eej_alloc(const int year, const size_t ncurr,
 
     gsl_vector_free(alpha);
   }
+#endif
 
   /*
    * precompute Cartesian positions of each current segment for each
@@ -519,10 +527,10 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
 
   /*
    * sometimes the corner finding routine fails if there are local corners;
-   * therefore set a lower bound on lambda as 0.1*smax
+   * therefore set a lower bound on lambda
    */
   smax = gsl_vector_get(w->multifit_p->S, 0);
-  lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 0.1*smax);
+  lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 1.0e-3*smax);
   w->reg_idx = bsearch_desc_double(w->reg_param->data, lambda, 0, w->nreg - 1);
   lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 

@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'log_A'
-outdir = 'log_A/plots'
+logdir = 'grav_C'
+outdir = 'grav_C/plots'
 #logdir = 'WAMNET/data_C'
 #outdir = 'WAMNET/data_C/plots'
 
@@ -26,10 +26,12 @@ tarr=""
 phiarr=""
 ltarr=""
 kparr=""
+dirarr=""
 plot fileprof us ( tarr=tarr.stringcolumn(2).' ', \
                    phiarr=phiarr.stringcolumn(3).' ', \
                    ltarr=ltarr.stringcolumn(4).' ', \
-                   kparr=kparr.stringcolumn(8).' ', $1):2
+                   kparr=kparr.stringcolumn(8).' ', \
+                   dirarr=dirarr.stringcolumn(9).' ', $1):2
 
 nrow = 3
 ncol = 1
@@ -71,6 +73,14 @@ lthour = int(lt)
 ltmin = int((lt - lthour) * 60)
 ltstr = sprintf('%02d:%02d', lthour, ltmin)
 
+# Retrieve satellite direction of equator crossing
+dir = word(dirarr, np) + 0
+if (dir > 0) {
+  dirstr="upleg"
+} else {
+  dirstr="downleg"
+}
+
 cmd = sprintf('/data/palken/lib/common/time2str3 %s', word(tarr, np))
 fstr = system(cmd)
 outstr = sprintf('%s/plot_%s.png', outdir, fstr)
@@ -89,7 +99,7 @@ set xlabel "QD latitude (degrees)"
 set ylabel "scalar residual (nT)"
 load 'lines2.cfg'
 
-set title tstr.', {/Symbol \152} = '.phistr.'{/Symbol \260}'.', LT = '.ltstr.', kp = '.word(kparr, np).', track '.np
+set title tstr.', {/Symbol \152} = '.phistr.'{/Symbol \260}'.', LT = '.ltstr.', kp = '.word(kparr, np).', '.dirstr.', track '.np
 
 plot fileF2 us 7:11 index idx w li lt 5 lw 4 ti "F^{(1)}", \
      fileF2 us 7:12 index idx w li lw 2 dt 2 ti "Sq internal", \
@@ -106,7 +116,7 @@ set xrange [-30:30]
 #set y2range [-0.25:0.15]
 
 load 'xy2bordercol3.cfg'
-set y2label "current density (A/m)"
+set y2label "current density (mA/m)"
 
 plot fileF2 us 7:14 index idx w li lw 4 ti "F^{(2)}", \
      fileF2 us 7:15 index idx w li lw 2 ti "F^{(2)} fit", \

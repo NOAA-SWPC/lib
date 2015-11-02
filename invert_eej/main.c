@@ -58,7 +58,7 @@ main(int argc, char *argv[])
   params.log_dir = "log";
   params.output_file = NULL;
   params.curr_altitude = 110.0;
-  params.ncurr = 81;
+  params.ncurr = 161;
   params.qdlat_max = 20.0;
   params.lt_min = MAG_LT_MIN;
   params.lt_max = MAG_LT_MAX;
@@ -69,6 +69,12 @@ main(int argc, char *argv[])
   params.season_min2 = -1.0;
   params.season_max2 = -1.0;
   params.profiles_only = 0;
+
+  /* spherical harmonic degrees for Sq filter */
+  params.sq_nmax_int = 12;
+  params.sq_mmax_int = 0;
+  params.sq_nmax_ext = 1;
+  params.sq_mmax_ext = 1;
 
   while (1)
     {
@@ -91,10 +97,14 @@ main(int argc, char *argv[])
           { "curr_alt", required_argument, NULL, 'k' },
           { "ncurr", required_argument, NULL, 'm' },
           { "qdmax", required_argument, NULL, 'q' },
+          { "sq_nmax_int", required_argument, NULL, 't' },
+          { "sq_mmax_int", required_argument, NULL, 'u' },
+          { "sq_nmax_ext", required_argument, NULL, 'v' },
+          { "sq_mmax_ext", required_argument, NULL, 'w' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:d:e:h:j:k:l:m:o:ps:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:s:t:u:v:w:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -200,6 +210,22 @@ main(int argc, char *argv[])
             params.qdlat_max = atof(optarg);
             break;
 
+          case 't':
+            params.sq_nmax_int = (size_t) atoi(optarg);
+            break;
+
+          case 'u':
+            params.sq_mmax_int = (size_t) atoi(optarg);
+            break;
+
+          case 'v':
+            params.sq_nmax_ext = (size_t) atoi(optarg);
+            break;
+
+          case 'w':
+            params.sq_mmax_int = (size_t) atoi(optarg);
+            break;
+
           default:
             print_help(argv);
             exit(1);
@@ -224,6 +250,10 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: season max:              %.1f [deg]\n", params.season_max);
   fprintf(stderr, "main: season min 2:            %.1f [deg]\n", params.season_min2);
   fprintf(stderr, "main: season max 2:            %.1f [deg]\n", params.season_max2);
+  fprintf(stderr, "main: Sq internal nmax         %zu\n", params.sq_nmax_int);
+  fprintf(stderr, "main: Sq internal mmax         %zu\n", params.sq_mmax_int);
+  fprintf(stderr, "main: Sq external nmax         %zu\n", params.sq_nmax_ext);
+  fprintf(stderr, "main: Sq external mmax         %zu\n", params.sq_mmax_ext);
 
   track_workspace_p = track_alloc();
 

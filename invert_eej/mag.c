@@ -59,10 +59,10 @@ mag_alloc(mag_params *params)
   w->ncurr = params->ncurr;
   w->EEJ = malloc(w->ncurr * sizeof(double));
 
-  w->green_workspace_p = green_alloc(MAG_SQFILT_INT_DEG);
+  w->green_workspace_p = green_alloc(params->sq_nmax_int);
 
-  w->sqfilt_workspace_p = mag_sqfilt_alloc(MAG_SQFILT_INT_DEG, MAG_SQFILT_INT_ORD,
-                                           MAG_SQFILT_EXT_DEG, MAG_SQFILT_EXT_ORD);
+  w->sqfilt_workspace_p = mag_sqfilt_alloc(params->sq_nmax_int, params->sq_mmax_int,
+                                           params->sq_nmax_ext, params->sq_mmax_ext);
 
   w->eej_workspace_p = mag_eej_alloc(params->year, params->ncurr,
                                      params->curr_altitude, params->qdlat_max);
