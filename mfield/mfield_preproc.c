@@ -48,9 +48,6 @@
 
 static size_t model_flags(const size_t magdata_flags, const double t,
                           const double theta, const double phi, const double qdlat);
-size_t flag_local_time(const double lt_min, const double lt_max,
-                       const double euler_lt_min, const double euler_lt_max,
-                       satdata_mag *data);
 
 /* local-time range for main field modeling */
 #define MFIELD_LT_MIN              (5.0)
@@ -90,185 +87,6 @@ typedef struct
   int flag_rms;       /* use track rms test */
   size_t downsample;  /* downsampling factor */
 } preprocess_parameters;
-
-#if 0
-/*
-copy_track()
-  Copy a single track to magdata structure
-
-Inputs: track_idx - track index
-        data      - satellite data
-        track_p   - track data
-        mdata     - (output) where to store new data
-        ndata     - (output) updated to count scalar/vector/euler/gradient
-                    data
-                    ndata[0] = # scalar measurements for MF modeling
-                    ndata[1] = # vector measurements for MF modeling
-                    ndata[2] = # vector measurements for Euler angles
-                    ndata[3] = # along-track gradient measurements
-*/
-
-size_t
-copy_track(const size_t track_idx, const satdata_mag *data,
-           const track_workspace *track_p, magdata *mdata,
-           size_t npts[4])
-{
-  int s = 0;
-  size_t i, k;
-  track_data *tptr = &(track_p->tracks[track_idx]);
-  const size_t start_idx = tptr->start_idx;
-  const size_t end_idx = tptr->end_idx;
-  const size_t grad_idx = (size_t) MFIELD_GRAD_DT;
-  const double grad_dt_min = MFIELD_GRAD_DT - 2.0;
-  const double grad_dt_max = MFIELD_GRAD_DT + 2.0;
-  const size_t grad_mask = 0xffffffff & ~SATDATA_FLG_DOWNSAMPLE;
-  magdata_datum datum;
-  size_t ngrad = 0;
-  int flagged_start = 0;
-
-  for (i = start_idx; i <= end_idx; ++i)
-    {
-      size_t flags = 0;     /* final magdata flags */
-      size_t fitting_flags;
-
-      if (SATDATA_BadData(data->flags[i]))
-        continue;
-
-      if (data->flags[i] & SATDATA_FLG_DOWNSAMPLE)
-        continue;
-
-      /*
-       * determine whether this data point will be used for MF coefficients,
-       * Euler angles, or both
-       */
-      fitting_flags = model_flags(mdata->global_flags, i, data);
-      if (fitting_flags == 0)
-        continue; /* this point will not be used in the modeling */
-
-      flags |= fitting_flags;
-
-      /* initialize to 0 */
-      magdata_datum_init(&datum);
-
-      if (!flagged_start)
-        {
-          flags |= MAGDATA_FLG_TRACK_START;
-          flagged_start = 1;
-        }
-
-      datum.B_nec[0] = SATDATA_VEC_X(data->B, i);
-      datum.B_nec[1] = SATDATA_VEC_Y(data->B, i);
-      datum.B_nec[2] = SATDATA_VEC_Z(data->B, i);
-      datum.B_vfm[0] = SATDATA_VEC_X(data->B_VFM, i);
-      datum.B_vfm[1] = SATDATA_VEC_Y(data->B_VFM, i);
-      datum.B_vfm[2] = SATDATA_VEC_Z(data->B_VFM, i);
-      datum.F = data->F[i];
-
-      for (k = 0; k < 4; ++k)
-        datum.q[k] = data->q[4 * i + k];
-
-      /* subtract external field model from measurements */
-      datum.B_model[0] = SATDATA_VEC_X(data->B_ext, i);
-      datum.B_model[1] = SATDATA_VEC_Y(data->B_ext, i);
-      datum.B_model[2] = SATDATA_VEC_Z(data->B_ext, i);
-
-#if MFIELD_INC_CRUSTAL
-      /* subtract crustal field also */
-      datum.B_model[0] += SATDATA_VEC_X(data->B_crust, i);
-      datum.B_model[1] += SATDATA_VEC_Y(data->B_crust, i);
-      datum.B_model[2] += SATDATA_VEC_Z(data->B_crust, i);
-#endif
-
-      {
-        size_t j = GSL_MIN(i + grad_idx, data->n - 1);
-        double dt = (data->t[j] - data->t[i]) / 1000.0; /* in s */
-
-        /*
-         * if data j is flagged due to downsampling, that's ok, but reject
-         * point if any other flags are set
-         */
-        if (!(data->flags[j] & grad_mask) &&
-            (dt >= grad_dt_min && dt <= grad_dt_max))
-          {
-            assert(data->flags[j] == 0 || data->flags[j] == SATDATA_FLG_DOWNSAMPLE);
-
-            datum.B_nec_ns[0] = SATDATA_VEC_X(data->B, j);
-            datum.B_nec_ns[1] = SATDATA_VEC_Y(data->B, j);
-            datum.B_nec_ns[2] = SATDATA_VEC_Z(data->B, j);
-            datum.F_ns = data->F[j];
-
-            /* subtract external field model from measurements */
-            datum.B_model_ns[0] = SATDATA_VEC_X(data->B_ext, j);
-            datum.B_model_ns[1] = SATDATA_VEC_Y(data->B_ext, j);
-            datum.B_model_ns[2] = SATDATA_VEC_Z(data->B_ext, j);
-
-#if MFIELD_INC_CRUSTAL
-            datum.B_model_ns[0] += SATDATA_VEC_X(data->B_crust, j);
-            datum.B_model_ns[1] += SATDATA_VEC_Y(data->B_crust, j);
-            datum.B_model_ns[2] += SATDATA_VEC_Z(data->B_crust, j);
-#endif
-
-            datum.r_ns = data->altitude[j] + data->R;
-            datum.theta_ns = M_PI / 2.0 - data->latitude[j] * M_PI / 180.0;
-            datum.phi_ns = data->longitude[j] * M_PI / 180.0;
-            datum.qdlat_ns = data->qdlat[j];
-
-            /* set gradient flag to indicate gradient information available */
-            flags |= MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS;
-          }
-      }
-
-      /* scalar measurement available (only for MF fitting) */
-      if (fitting_flags & MAGDATA_FLG_FIT_MF)
-        flags |= MAGDATA_FLG_F;
-
-      /* vector measurement available for both MF and Euler (if below MFIELD_VECTOR_QDLAT) */
-      if (fabs(data->qdlat[i]) <= MFIELD_VECTOR_QDLAT)
-        flags |= MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z;
-
-      if (!(flags & (MAGDATA_FLG_F|MAGDATA_FLG_X|MAGDATA_FLG_Y|MAGDATA_FLG_Z)))
-        {
-          fprintf(stderr, "UH OH\n");
-        }
-
-      datum.t = data->t[i];
-      datum.r = data->altitude[i] + data->R;
-      datum.theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
-      datum.phi = data->longitude[i] * M_PI / 180.0;
-      datum.qdlat = data->qdlat[i];
-      datum.satdir = satdata_mag_satdir(i, data);
-      datum.flags = flags;
-
-      s = magdata_add(&datum, mdata);
-      if (s == 0)
-        {
-          if (flags & MAGDATA_FLG_FIT_MF)
-            {
-              if (flags & MAGDATA_FLG_F)
-                ++(npts[0]);
-
-              if (flags & (MAGDATA_FLG_X|MAGDATA_FLG_Y|MAGDATA_FLG_Z))
-                ++(npts[1]);
-            }
-
-          if (flags & MAGDATA_FLG_FIT_EULER)
-            {
-              if (flags & (MAGDATA_FLG_X|MAGDATA_FLG_Y|MAGDATA_FLG_Z))
-                ++(npts[2]);
-            }
-
-          if (flags & MAGDATA_FLG_DZ_NS)
-            ++npts[3];
-        }
-
-      if (s == 0 && flags & MAGDATA_FLG_DZ_NS)
-        ++ngrad;
-    }
-
-  return ngrad;
-} /* copy_track() */
-
-#endif
 
 magdata *
 copy_data(const size_t magdata_flags, const satdata_mag *data, const track_workspace *track_p)
@@ -312,11 +130,7 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
       if (tptr->flags)
         continue;
 
-#if 0
-      ngrad += copy_track(i, data, track_p, mdata, npts);
-#else
       magdata_copy_track(&params, i, data, track_p, mdata, npts);
-#endif
     }
 
   /*
@@ -342,17 +156,6 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
       mdata->flags[i] |= fitting_flags;
     }
 
-#if 0
-  fprintf(stderr, "\n");
-  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) scalar measurements for MF modeling\n",
-          npts[0], mdata->n, (double) npts[0] / (double) mdata->n * 100.0);
-  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements for MF modeling\n",
-          npts[1], mdata->n, (double) npts[1] / (double) mdata->n * 100.0);
-  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements for Euler angle modeling\n",
-          npts[2], mdata->n, (double) npts[2] / (double) mdata->n * 100.0);
-  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) along-track gradient data available\n",
-          ngrad, ndata, (double)ngrad / (double)ndata * 100.0);
-#else
   fprintf(stderr, "\n");
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) scalar measurements available\n",
           npts[0], mdata->n, (double) npts[0] / (double) mdata->n * 100.0);
@@ -369,7 +172,6 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
           nmodel[1], mdata->n, (double) nmodel[1] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements selected for Euler angle modeling\n",
           nmodel[2], mdata->n, (double) nmodel[2] / (double) mdata->n * 100.0);
-#endif
 
   return mdata;
 }
@@ -488,76 +290,6 @@ model_flags(const size_t magdata_flags, const double t,
     }
 
   return flags;
-}
-
-/*
-flag_local_time()
-
-Inputs: lt_min       - min LT for modeling
-        lt_max       - max LT for modeling
-        euler_lt_min - min LT for Euler angles
-        euler_lt_max - max LT for Euler angles
-        data         - satellite data
-*/
-
-size_t
-flag_local_time(const double lt_min, const double lt_max,
-                const double euler_lt_min, const double euler_lt_max,
-                satdata_mag *data)
-{
-  size_t i;
-  size_t cnt = 0;
-  solarpos_workspace *work_sp = solarpos_alloc();
-
-  for (i = 0; i < data->n; ++i)
-    {
-      time_t unix_time;
-      double lt;
-
-      /* ignore already flagged data to improve speed */
-      if (data->flags[i])
-        continue;
-
-      unix_time = satdata_epoch2timet(data->t[i]);
-      lt = get_localtime(unix_time, data->longitude[i]*M_PI/180.0);
-
-#if 0 /* XXX */
-      /* check if data point should be used for Euler angles */
-      if (lt <= euler_lt_min || lt >= euler_lt_max)
-        data->flags[i] |= SATDATA_FLG_EULER;
-#endif
-
-      /*
-       * at high latitudes, calculate solar zenith angle for a better
-       * measure of darkness/sunlight than local time
-       */
-      if (fabs(data->qdlat[i]) > 60.0)
-        {
-          double lat = data->latitude[i] * M_PI / 180.0;
-          double lon = wrappi(data->longitude[i] * M_PI / 180.0);
-          double zenith;
-
-          solarpos_calc_zenith(unix_time, lat, lon, &zenith, work_sp);
-          zenith *= 180.0 / M_PI;
-          assert(zenith >= 0.0);
-
-          /* small zenith angle means sunlight so flag it */
-          if (zenith < MFIELD_MAX_ZENITH)
-            {
-              ++cnt;
-              data->flags[i] |= SATDATA_FLG_LT;
-            }
-        }
-      else if (lt >= lt_min && lt <= lt_max)
-        {
-          ++cnt;
-          data->flags[i] |= SATDATA_FLG_LT;
-        }
-    }
-
-  solarpos_free(work_sp);
-
-  return cnt;
 }
 
 int

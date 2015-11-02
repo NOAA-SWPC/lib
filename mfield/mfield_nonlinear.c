@@ -214,7 +214,7 @@ mfield_init_nonlinear(mfield_workspace *w)
       for (j = 0; j < mptr->n; ++j)
         {
           /* check if data point is discarded due to time interval */
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
           if (mptr->flags[j] & MAGDATA_FLG_X)
@@ -223,11 +223,11 @@ mfield_init_nonlinear(mfield_workspace *w)
             ++nres;
           if (mptr->flags[j] & MAGDATA_FLG_Z)
             ++nres;
-          if (mptr->flags[j] & MAGDATA_FLG_F)
-            {
-              assert(mptr->flags[j] & MAGDATA_FLG_FIT_MF);
-              ++nres;
-            }
+
+          /* don't increase nres if only fitting Euler angles */
+          if (MAGDATA_ExistScalar(mptr->flags[j]) &&
+              MAGDATA_FitMF(mptr->flags[j]))
+            ++nres;
 
           ++ndata;
         }
@@ -280,7 +280,7 @@ mfield_init_nonlinear(mfield_workspace *w)
           {
             double wt; /* spatial weight */
 
-            if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+            if (MAGDATA_Discarded(mptr->flags[j]))
               continue;
 
             track_weight_get(mptr->phi[j], mptr->theta[j], &wt, w->weight_workspace_p);
@@ -294,7 +294,7 @@ mfield_init_nonlinear(mfield_workspace *w)
             if (mptr->flags[j] & MAGDATA_FLG_Z)
               gsl_vector_set(w->wts_spatial, idx++, MFIELD_WEIGHT_Z * wt);
 
-            if (mptr->flags[j] & MAGDATA_FLG_F)
+            if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
               gsl_vector_set(w->wts_spatial, idx++, MFIELD_WEIGHT_F * wt);
           }
       }
@@ -351,7 +351,7 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
           double dB_ext[3];
 #endif
 
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
           vx = gsl_matrix_row(dX, didx);
@@ -449,7 +449,8 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
               ++ridx;
             }
 
-          if (mptr->flags[j] & MAGDATA_FLG_F)
+          if (MAGDATA_ExistScalar(mptr->flags[j]) &&
+              MAGDATA_FitMF(mptr->flags[j]))
             {
               double F = gsl_hypot3(B_total[0], B_total[1], B_total[2]);
               double F_obs = mptr->F[j];
@@ -514,7 +515,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
                                      x, dB_ext, w);
 #endif
 
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
 #if MFIELD_FIT_EULER
@@ -548,7 +549,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
           if (mptr->flags[j] & MAGDATA_FLG_X)
             {
               /* check if fitting MF to this data point */
-              if (mptr->flags[j] & MAGDATA_FLG_FIT_MF)
+              if (MAGDATA_FitMF(mptr->flags[j]))
                 {
                   gsl_vector_view Jv, vx;
 
@@ -580,7 +581,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 
 #if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (mptr->flags[j] & MAGDATA_FLG_FIT_EULER)
+              if (MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, -B_nec_alpha[0]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, -B_nec_beta[0]);
@@ -594,7 +595,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
           if (mptr->flags[j] & MAGDATA_FLG_Y)
             {
               /* check if fitting MF to this data point */
-              if (mptr->flags[j] & MAGDATA_FLG_FIT_MF)
+              if (MAGDATA_FitMF(mptr->flags[j]))
                 {
                   gsl_vector_view Jv, vy;
 
@@ -626,7 +627,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 
 #if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (mptr->flags[j] & MAGDATA_FLG_FIT_EULER)
+              if (MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, -B_nec_alpha[1]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, -B_nec_beta[1]);
@@ -640,7 +641,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
           if (mptr->flags[j] & MAGDATA_FLG_Z)
             {
               /* check if fitting MF to this data point */
-              if (mptr->flags[j] & MAGDATA_FLG_FIT_MF)
+              if (MAGDATA_FitMF(mptr->flags[j]))
                 {
                   gsl_vector_view Jv, vz;
 
@@ -672,7 +673,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 
 #if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (mptr->flags[j] & MAGDATA_FLG_FIT_EULER)
+              if (MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, -B_nec_alpha[2]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, -B_nec_beta[2]);
@@ -683,7 +684,8 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
               ++ridx;
             }
 
-          if (mptr->flags[j] & MAGDATA_FLG_F)
+          if (MAGDATA_ExistScalar(mptr->flags[j]) &&
+              MAGDATA_FitMF(mptr->flags[j]))
             {
               gsl_vector_view Jv = gsl_matrix_row(J, ridx++);
               gsl_vector_view vx = gsl_matrix_row(dX, didx);
@@ -777,7 +779,7 @@ mfield_nonlinear_matrices(gsl_matrix *dX, gsl_matrix *dY,
           double theta = mptr->theta[j];
           double phi = mptr->phi[j];
 
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
           /* compute basis functions for spherical harmonic expansions */
