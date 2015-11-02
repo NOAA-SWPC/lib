@@ -26,5 +26,6 @@ SUBDIRS =     \
   champ       \
   estist      \
   poltor      \
-	invert_eej  \
+  invert_eej  \
+  mfield      \
   swarm

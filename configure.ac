@@ -34,6 +34,7 @@ AC_CONFIG_FILES([     \
   lls/Makefile        \
   magdata/Makefile    \
   mageq/Makefile      \
+  mfield/Makefile     \
   msis/Makefile       \
   msynth/Makefile     \
   peak/Makefile       \
