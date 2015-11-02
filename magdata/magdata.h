@@ -133,6 +133,15 @@ typedef struct
   track_weight_workspace *weight_workspace_p;
 } magdata;
 
+/* parameters for copying tracks into magdata structure */
+typedef struct
+{
+  double grad_dt_ns;   /* time interval for along-track differences */
+  int model_main;      /* include main field in B_model */
+  int model_crust;     /* include crustal field in B_model */
+  int model_ext;       /* include external field in B_model */
+} magdata_params;
+
 /*
  * Prototypes
  */
@@ -157,8 +166,8 @@ size_t magdata_ndiscard(const magdata *data);
 size_t magdata_neuler(const magdata *data);
 int magdata_clear(magdata *data);
 int magdata_flag_t(const double t0, const double t1, magdata *data);
-int magdata_copy_track(const size_t track_idx, const satdata_mag *data,
-                       const track_workspace *track_p, magdata *mdata,
-                       size_t ntype[4]);
+int magdata_copy_track(const magdata_params *params, const size_t track_idx,
+                       const satdata_mag *data, const track_workspace *track_p,
+                       magdata *mdata, size_t ntype[4]);
 
 #endif /* INCLUDED_magdata_h */

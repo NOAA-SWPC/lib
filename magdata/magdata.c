@@ -1054,7 +1054,8 @@ must be available or point is discarded.
   The start of the track is flagged with MAGDATA_FLG_TRACK_START
 for later printing purposes.
 
-Inputs: track_idx - track index
+Inputs: params    - parameters
+        track_idx - track index
         data      - satellite data
         track_p   - track workspace
         mdata     - (output) where to store data
@@ -1071,19 +1072,18 @@ Notes:
 */
 
 int
-magdata_copy_track(const size_t track_idx, const satdata_mag *data,
-                   const track_workspace *track_p, magdata *mdata,
-                   size_t ntype[4])
+magdata_copy_track(const magdata_params *params, const size_t track_idx,
+                   const satdata_mag *data, const track_workspace *track_p,
+                   magdata *mdata, size_t ntype[4])
 {
   int s = 0;
   size_t i;
   track_data *tptr = &(track_p->tracks[track_idx]);
   const size_t start_idx = tptr->start_idx;
   const size_t end_idx = tptr->end_idx;
-  const double grad_dt_sec = 40.0;
-  const size_t grad_idx = (size_t) grad_dt_sec;
-  const double grad_dt_min = grad_dt_sec - 2.0;
-  const double grad_dt_max = grad_dt_sec + 2.0;
+  const size_t grad_idx = (size_t) params->grad_dt_ns;
+  const double grad_dt_min = params->grad_dt_ns - 2.0;
+  const double grad_dt_max = params->grad_dt_ns + 2.0;
   magdata_datum datum;
   int flagged_start = 0;
 
@@ -1122,15 +1122,26 @@ magdata_copy_track(const size_t track_idx, const satdata_mag *data,
 
       datum.F = data->F[i];
 
-      datum.B_model[0] = SATDATA_VEC_X(data->B_main, i) +
-                         SATDATA_VEC_X(data->B_crust, i) +
-                         SATDATA_VEC_X(data->B_ext, i);
-      datum.B_model[1] = SATDATA_VEC_Y(data->B_main, i) +
-                         SATDATA_VEC_Y(data->B_crust, i) +
-                         SATDATA_VEC_Y(data->B_ext, i);
-      datum.B_model[2] = SATDATA_VEC_Z(data->B_main, i) +
-                         SATDATA_VEC_Z(data->B_crust, i) +
-                         SATDATA_VEC_Z(data->B_ext, i);
+      if (params->model_main)
+        {
+          datum.B_model[0] += SATDATA_VEC_X(data->B_main, i);
+          datum.B_model[1] += SATDATA_VEC_Y(data->B_main, i);
+          datum.B_model[2] += SATDATA_VEC_Z(data->B_main, i);
+        }
+
+      if (params->model_crust)
+        {
+          datum.B_model[0] += SATDATA_VEC_X(data->B_crust, i);
+          datum.B_model[1] += SATDATA_VEC_Y(data->B_crust, i);
+          datum.B_model[2] += SATDATA_VEC_Z(data->B_crust, i);
+        }
+
+      if (params->model_ext)
+        {
+          datum.B_model[0] += SATDATA_VEC_X(data->B_ext, i);
+          datum.B_model[1] += SATDATA_VEC_Y(data->B_ext, i);
+          datum.B_model[2] += SATDATA_VEC_Z(data->B_ext, i);
+        }
 
       {
         size_t j = GSL_MIN(i + grad_idx, data->n - 1);
@@ -1160,15 +1171,26 @@ magdata_copy_track(const size_t track_idx, const satdata_mag *data,
                 datum.B_vfm_ns[2] = SATDATA_VEC_Z(data->B_VFM, j);
               }
 
-            datum.B_model_ns[0] = SATDATA_VEC_X(data->B_main, j) +
-                                  SATDATA_VEC_X(data->B_crust, j) +
-                                  SATDATA_VEC_X(data->B_ext, j);
-            datum.B_model_ns[1] = SATDATA_VEC_Y(data->B_main, j) +
-                                  SATDATA_VEC_Y(data->B_crust, j) +
-                                  SATDATA_VEC_Y(data->B_ext, j);
-            datum.B_model_ns[2] = SATDATA_VEC_Z(data->B_main, j) +
-                                  SATDATA_VEC_Z(data->B_crust, j) +
-                                  SATDATA_VEC_Z(data->B_ext, j);
+            if (params->model_main)
+              {
+                datum.B_model_ns[0] += SATDATA_VEC_X(data->B_main, j);
+                datum.B_model_ns[1] += SATDATA_VEC_Y(data->B_main, j);
+                datum.B_model_ns[2] += SATDATA_VEC_Z(data->B_main, j);
+              }
+
+            if (params->model_crust)
+              {
+                datum.B_model_ns[0] += SATDATA_VEC_X(data->B_crust, j);
+                datum.B_model_ns[1] += SATDATA_VEC_Y(data->B_crust, j);
+                datum.B_model_ns[2] += SATDATA_VEC_Z(data->B_crust, j);
+              }
+
+            if (params->model_ext)
+              {
+                datum.B_model_ns[0] += SATDATA_VEC_X(data->B_ext, j);
+                datum.B_model_ns[1] += SATDATA_VEC_Y(data->B_ext, j);
+                datum.B_model_ns[2] += SATDATA_VEC_Z(data->B_ext, j);
+              }
 
             datum.r_ns = data->altitude[j] + data->R;
             datum.theta_ns = M_PI / 2.0 - data->latitude[j] * M_PI / 180.0;
