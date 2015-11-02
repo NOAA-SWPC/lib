@@ -1,6 +1,6 @@
 noinst_LTLIBRARIES = libmagdata.la
 
-AM_CPPFLAGS = -I$(top_builddir)/common -I$(top_builddir)/track
+AM_CPPFLAGS = -I$(top_builddir)/common -I$(top_builddir)/track -I$(top_builddir)/msynth
 
 libmagdata_la_SOURCES = magdata.c
 

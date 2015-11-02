@@ -7,16 +7,17 @@
 
 #include <satdata/satdata.h>
 
+#include "track.h"
 #include "track_weight.h"
 
 /* data flags */
-#define MAGDATA_FLG_X                 (1 << 0)  /* X measurement available */
-#define MAGDATA_FLG_Y                 (1 << 1)  /* Y measurement available */
-#define MAGDATA_FLG_Z                 (1 << 2)  /* Z measurement available */
+#define MAGDATA_FLG_X                 (1 << 0)  /* X measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_Y                 (1 << 1)  /* Y measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_Z                 (1 << 2)  /* Z measurement available (both VFM and NEC) */
 #define MAGDATA_FLG_F                 (1 << 3)  /* F measurement available */
-#define MAGDATA_FLG_DX_NS             (1 << 4)  /* along-track DX measurement available */
-#define MAGDATA_FLG_DY_NS             (1 << 5)  /* along-track DY measurement available */
-#define MAGDATA_FLG_DZ_NS             (1 << 6)  /* along-track DZ measurement available */
+#define MAGDATA_FLG_DX_NS             (1 << 4)  /* along-track DX measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_DY_NS             (1 << 5)  /* along-track DY measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_DZ_NS             (1 << 6)  /* along-track DZ measurement available (both VFM and NEC) */
 #define MAGDATA_FLG_DF_NS             (1 << 7)  /* along-track DF measurement available */
 #define MAGDATA_FLG_TRACK_START       (1 << 8)  /* start of track in data structure */
 #define MAGDATA_FLG_FIT_MF            (1 << 9)  /* fit main field to this data point */
@@ -65,6 +66,7 @@ typedef struct
   double phi_ns;         /* longitude for along-track point (radians) */
   double qdlat_ns;       /* QD latitude for along-track point (degrees) */
   double B_nec_ns[3];    /* along-track magnetic field vector in NEC frame (nT) */
+  double B_vfm_ns[3];    /* along-track magnetic field vector in VFM frame (nT) */
   double B_model_ns[3];  /* along-track main/crustal/external field model in NEC frame (nT) */
   double F_ns;           /* along-track magnetic field scalar measurement (nT) */
 
@@ -155,5 +157,8 @@ size_t magdata_ndiscard(const magdata *data);
 size_t magdata_neuler(const magdata *data);
 int magdata_clear(magdata *data);
 int magdata_flag_t(const double t0, const double t1, magdata *data);
+int magdata_copy_track(const size_t track_idx, const satdata_mag *data,
+                       const track_workspace *track_p, magdata *mdata,
+                       size_t ntype[4]);
 
 #endif /* INCLUDED_magdata_h */
