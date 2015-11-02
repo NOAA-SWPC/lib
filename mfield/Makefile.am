@@ -1,0 +1,33 @@
+bin_PROGRAMS = mfield mfield_preproc mfield_ascii mfield_covar mfield_eval_main mfield_dBdt mfield_residuals mfield_compare mfield_plot
+
+mfield_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_main.c
+mfield_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/common/libcommon.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib
+
+mfield_preproc_SOURCES = mfield_preproc.c
+mfield_preproc_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -llapack -lcdf -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib -lgsl -lptcblas -lptf77blas -latlas
+
+mfield_ascii_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_ascii.c
+mfield_ascii_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lpthread -lgfortran -L/home/palken/usr/lib
+
+mfield_covar_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_covar.c
+mfield_covar_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lpthread -lgfortran -L/home/palken/usr/lib
+
+mfield_compare_SOURCES = mfield_compare.c
+mfield_compare_LDADD = $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -lgsl -lptcblas -lptf77blas -latlas -lindices -lpthread -L/home/palken/usr/lib
+
+mfield_plot_SOURCES = mfield_plot.c
+mfield_plot_LDADD = $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -lgsl -lptcblas -lptf77blas -latlas -lindices -lpthread -L/home/palken/usr/lib
+
+mfield_eval_main_SOURCES = mfield_eval_main.c mfield_eval.c
+mfield_eval_main_LDADD = -lm /home/palken/usr/lib/libgsl.a -lgslcblas
+
+#mfield_sht_test_SOURCES = mfield_eval.c mfield_sht.c mfield_sht_test.c
+#mfield_sht_test_LDADD = $(top_builddir)/common/libcommon.la -lm -lnfft3 /home/palken/usr/lib/libgsl.a -lgslcblas
+
+mfield_residuals_SOURCES = mfield_residuals.c mfield_eval.c
+mfield_residuals_LDADD = -lm -lcdf -lsatdata -lindices -lgsl -lgslcblas -L/home/palken/usr/lib
+
+mfield_dBdt_SOURCES = mfield_dBdt.c mfield.c mfield_data.c mfield_green.c
+mfield_dBdt_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lpthread -lgfortran -L/home/palken/usr/lib
+
+AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/apex -I$(top_builddir)/mageq -I$(top_builddir)/msynth -I$(top_builddir)/lls -I$(top_builddir)/track -I$(top_builddir)/magdata -I$(top_builddir)/euler
