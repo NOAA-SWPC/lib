@@ -46,6 +46,9 @@
 #define MAGDATA_FitEuler(x)           (MAGDATA_ExistVector(x) && \
                                        ((x) & MAGDATA_FLG_FIT_EULER))
 
+/* check if fitting MF model to this data point */
+#define MAGDATA_FitMF(x)              ((x) & MAGDATA_FLG_FIT_MF)
+
 typedef struct
 {
   double t;              /* timestamp (CDF_EPOCH) */

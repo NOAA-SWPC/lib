@@ -1160,7 +1160,8 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
             /* check for vector measurement at along-track point */
             if (MAGDATA_ExistVector(flags) && SATDATA_ExistVector(data->flags[j]))
               {
-                assert(data->flags[j] == 0 || data->flags[j] == SATDATA_FLG_DOWNSAMPLE);
+                assert(data->flags[j] == 0 || data->flags[j] == SATDATA_FLG_DOWNSAMPLE ||
+                       data->flags[j] == SATDATA_FLG_FILTER);
                 flags |= MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS;
 
                 datum.B_nec_ns[0] = SATDATA_VEC_X(data->B, j);
@@ -1213,9 +1214,9 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
         return s;
 
       /* update counts */
-      if (flags & MAGDATA_FLG_F)
+      if (MAGDATA_ExistScalar(flags))
         ++(ntype[0]);
-      if (flags & MAGDATA_FLG_Z)
+      if (MAGDATA_ExistVector(flags))
         ++(ntype[1]);
       if (flags & MAGDATA_FLG_DF_NS)
         ++(ntype[2]);
