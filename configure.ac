@@ -15,6 +15,7 @@ AC_PROG_LIBTOOL
 AC_CONFIG_FILES([     \
   Makefile            \
   apex/Makefile       \
+  apex/apex.h         \
   champ/Makefile      \
   chaos/Makefile      \
   common/Makefile     \
@@ -37,6 +38,7 @@ AC_CONFIG_FILES([     \
   mfield/Makefile     \
   msis/Makefile       \
   msynth/Makefile     \
+  msynth/msynth.h     \
   peak/Makefile       \
   poltor/Makefile     \
   pomme/Makefile      \

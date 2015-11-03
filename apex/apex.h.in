@@ -10,7 +10,7 @@
 #define APEX_NLON    72
 #define APEX_NALT    300
 
-#define APEX_DATAFILE "/data/palken/lib/apex/apexsh.dat"
+#define APEX_DATAFILE "@abs_top_builddir@/apex/apexsh.dat"
 
 typedef struct
 {
