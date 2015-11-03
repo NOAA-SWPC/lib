@@ -14,9 +14,11 @@ down_sample="1"
 
 cdfdir="/data/SWARM/MAG/Unzipped_Data"
 outdir="/data/SWARM/MAG/Stage1_CHAOS"
+lpdir="/data/SWARM/EFI/LP_Unzipped"
 
 # Use CHAOS external field model
 extra_flags="-c"
+#extra_flags=""
 
 prog="/data/palken/lib/swarm/stage1"
 
@@ -37,9 +39,18 @@ for file in $(ls ${cdfdir}/*MAG${sat}*LR_1B_${year}*.cdf); do
   bname=$(basename "${file}" .cdf)
   outfile="${outdir}/${bname}_Stage1.cdf"
 
+  # Find LP data file for this date
+  lp_arg=""
+  cursat=$(echo ${bname} | sed -r 's/.*MAG([A-Z]).*/\1/')
+  tstr=$(echo ${bname} | sed -r 's/.*_1B_([0-9]*).*/\1/')
+  lpfile=$(find ${lpdir} -name "SW*EFI${cursat}*_1B_${tstr}T*.txt")
+  if [[ -f "${lpfile}" ]]; then
+    lp_arg="-l ${lpfile}"
+  fi
+
   # Check first if we already processed this file
   if [[ ! -f "${outfile}" ]]; then
     echo "Processing: ${file}"
-    ${prog} -d ${down_sample} -i ${file} -o ${outfile} ${extra_flags}
+    ${prog} -d ${down_sample} -i ${file} -o ${outfile} ${lp_arg} ${extra_flags}
   fi
 done

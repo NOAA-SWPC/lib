@@ -36,7 +36,9 @@
 int
 main(int argc, char *argv[])
 {
-  satdata_mag *data_in, *data_out;
+  satdata_mag *data_in = NULL;
+  satdata_mag *data_out;
+  satdata_lp *lp_data = NULL;
   struct timeval tv0, tv1;
   int c;
   char *outfile = NULL;
@@ -45,7 +47,7 @@ main(int argc, char *argv[])
   int use_chaos = 0;
   int status;
 
-  while ((c = getopt(argc, argv, "a:ci:o:d:")) != (-1))
+  while ((c = getopt(argc, argv, "a:ci:o:d:l:")) != (-1))
     {
       switch (c)
         {
@@ -93,6 +95,18 @@ main(int argc, char *argv[])
             down_sample = atoi(optarg);
             break;
 
+          case 'l':
+            fprintf(stderr, "main: reading Langmuir data from %s...", optarg);
+            gettimeofday(&tv0, NULL);
+
+            lp_data = satdata_swarm_lp_read(optarg, 0);
+
+            gettimeofday(&tv1, NULL);
+            fprintf(stderr, "done (%zu data read, %g seconds)\n", lp_data->n,
+                    time_diff(tv0, tv1));
+
+            break;
+
           default:
             break;
         }
@@ -103,6 +117,13 @@ main(int argc, char *argv[])
       fprintf(stderr, "Usage: %s <-i swarm_cdf_file> <-a swarm_asmv_cdf_file> <-o output_cdf_file> [-d down_sample] [-c]\n",
               argv[0]);
       exit(1);
+    }
+
+  if (lp_data)
+    {
+      fprintf(stderr, "main: filling Ne data...");
+      satdata_mag_fill_ne(data_in, lp_data);
+      fprintf(stderr, "done\n");
     }
 
   if (use_chaos)
