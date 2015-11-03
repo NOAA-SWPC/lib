@@ -1,0 +1,108 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+
+\begin{document}
+
+\section{Introduction}
+
+\section{Internal field}
+\label{sec:internal}
+
+The internal scalar potential is given in geocentric spherical coordinates by
+\begin{equation}
+V_{int}(r,\theta,\phi) = a \sum_{nm} \left( \frac{a}{r} \right)^{n+1} \left( g_{nm} \cos{m \phi} + h_{nm} \sin{m \phi} \right)
+P_{nm}(\cos{\theta})
+\end{equation}
+Defining $\mathbf{B} = - \nabla V$ gives
+\begin{align}
+B_x = -B_{\theta} = \frac{1}{r} \frac{\partial V}{\partial \theta} &= \sum_{nm} \left( \frac{a}{r} \right)^{n+2}
+\left( g_{nm} \cos{m \phi} + h_{nm}\sin{m \phi} \right) \frac{\partial}{\partial \theta} P_{nm}(\cos{\theta}) \\
+B_y = B_{\phi} = -\frac{1}{r \sin{\theta}} \frac{\partial V}{\partial \phi} &= \frac{1}{\sin{\theta}} \sum_{nm}
+\left( \frac{a}{r} \right)^{n+2} m \left( g_{nm} \sin{m \phi} - h_{nm} \cos{m \phi} \right) P_{nm}(\cos{\theta}) \\
+B_z = -B_r = \frac{\partial V}{\partial r} &= -\sum_{nm} (n + 1) \left( \frac{a}{r} \right)^{n+2}
+\left( g_{nm} \cos{m \phi} + h_{nm}\sin{m \phi} \right) P_{nm}(\cos{\theta})
+\end{align}
+
+\section{Complex Internal field}
+\label{sec:internal_complex}
+
+The complex internal scalar potential is given in geocentric spherical coordinates by
+\begin{equation}
+V_{int}(r,\theta,\phi) = a \sum_{nm} \left( \frac{a}{r} \right)^{n+1} g_{nm} Y_{nm}(\theta,\phi)
+\end{equation}
+where the coefficients $g_{nm}$ are complex and $Y_{nm} = P_{nm}(\cos{\theta}) \exp{im\phi}$.
+Defining $\mathbf{B} = - \nabla V$ gives
+\begin{align}
+B_x = -B_{\theta} = \frac{1}{r} \frac{\partial V}{\partial \theta} &= \sum_{nm} \left( \frac{a}{r} \right)^{n+2}
+g_{nm} \frac{\partial}{\partial \theta} Y_{nm} \\
+B_y = B_{\phi} = -\frac{1}{r \sin{\theta}} \frac{\partial V}{\partial \phi} &= -\frac{1}{\sin{\theta}} \sum_{nm}
+im \left( \frac{a}{r} \right)^{n+2} g_{nm} Y_{nm} \\
+B_z = -B_r = \frac{\partial V}{\partial r} &= -\sum_{nm} (n + 1) \left( \frac{a}{r} \right)^{n+2} g_{nm} Y_{nm}
+\end{align}
+
+\section{External field}
+
+The external scalar potential is given in geocentric spherical coordinates by
+\begin{equation}
+V_{ext}(r,\theta,\phi) = a \sum_{nm} \left( \frac{r}{a} \right)^n \left( q_{nm} \cos{m \phi} + k_{nm} \sin{m \phi} \right)
+P_{nm}(\cos{\theta})
+\end{equation}
+
+The magnetic field components are
+\begin{align}
+B_x &= \sum_{nm} \left( \frac{r}{a} \right)^{n-1} \left( q_{nm} \cos{m \phi} + k_{nm} \sin{m \phi} \right)
+\frac{\partial}{\partial \theta} P_{nm}(\cos{\theta}) \\
+B_y &= \frac{1}{\sin{\theta}} \sum_{nm} \left( \frac{r}{a} \right)^{n-1} m
+\left( q_{nm} \sin{m \phi} - k_{nm} \cos{m \phi} \right) P_{nm}(\cos{\theta}) \\
+B_z &= \sum_{nm} n \left( \frac{r}{a} \right)^{n-1} \left( q_{nm} \cos{m \phi} + k_{nm} \sin{m \phi} \right)
+P_{nm}(\cos{\theta})
+\end{align}
+
+\section{Complex External field}
+
+The complex external scalar potential is given in geocentric spherical coordinates by
+\begin{equation}
+V_{ext}(r,\theta,\phi) = a \sum_{nm} k_{nm} \left( \frac{r}{a} \right)^n Y_{nm}(\theta,\phi)
+\end{equation}
+
+The magnetic field components are
+\begin{align}
+B_x &= \sum_{nm} k_{nm} \left( \frac{r}{a} \right)^{n-1} \frac{\partial}{\partial \theta} Y_{nm} \\
+B_y &= -\frac{1}{\sin{\theta}} \sum_{nm} im k_{nm} \left( \frac{r}{a} \right)^{n-1} Y_{nm} \\
+B_z &= \sum_{nm} n k_{nm} \left( \frac{r}{a} \right)^{n-1} Y_{nm}
+\end{align}
+
+\section{Modeling}
+
+The penalty function which is minimized is
+\begin{equation}
+\chi^2 = \sum_{i=1}^{N_{vec}} \boldsymbol{\epsilon}_i \cdot \boldsymbol{\epsilon}_i + \sum_{i=1}^{N_{scal}} f_i^2
+\end{equation}
+where the residuals are
+\begin{align}
+\boldsymbol{\epsilon}_i & = R_q R_3(\alpha,\beta,\gamma) \mathbf{B}^{VFM}_i - \mathbf{B}^{model}(\mathbf{g},\mathbf{k}) \\
+f_i & = || \mathbf{B}^{model}(\mathbf{g},\mathbf{k}) || - F_i
+\end{align}
+Here, $\mathbf{B}^{VFM}_i$ is the vector measurement in the VFM instrument frame and $F_i$ is the scalar field
+measurement. The matrix $R_3(\alpha,\beta,\gamma)$ rotates a vector from the VFM frame to the CRF frame defined
+by the star camera using the Euler angles $\alpha,\beta,\gamma$. The matrix $R_q$ then rotates from CRF to NEC
+(see Olsen et al, 2013). The vector model is given by
+\begin{equation}
+\mathbf{B}^{model}(\mathbf{g},\mathbf{r}) = \mathbf{B}^{int}(\mathbf{g}) + \mathbf{B}^{crust} + \mathbf{B}^{ext,pomme} + \mathbf{B}^{ext,correction}(\mathbf{k})
+\end{equation}
+where $\mathbf{B}^{int}(\mathbf{g})$ is an internal field model defined in Sec.~\ref{sec:internal},
+$\mathbf{B}^{crust}$ is the MF7 crustal field model from degree 16 to 133,
+$\mathbf{B}^{ext,pomme}$ is the POMME-8 external field model, and $\mathbf{B}^{ext,correction}(\mathbf{k})$ is a daily
+ring current correction, parameterized as
+\begin{equation}
+\mathbf{B}^{ext,correction}(\mathbf{k}) = k(t) \left( 0.7 \mathbf{B}^{ext,dipole} + 0.3 \mathbf{B}^{int,dipole} \right)
+\end{equation}
+where $\mathbf{B}^{ext,dipole}$ and $\mathbf{B}^{int,dipole}$ are degree 1 external and internal dipole fields,
+whose coefficients are aligned with the main field dipole (ie: $g_{10},g_{11},h_{11}$). For each day, there is
+one coefficient $k(t)$ for that day which is determined through the least
+squares minimization. The crustal field term, $\mathbf{B}^{crust}$, can
+optionally be set to zero, in order to fit a high degree crustal field
+in $\mathbf{B}^{int}$.
+
+\end{document}
