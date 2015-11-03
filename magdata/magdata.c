@@ -1077,7 +1077,7 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
                    magdata *mdata, size_t ntype[4])
 {
   int s = 0;
-  size_t i;
+  size_t i, k;
   track_data *tptr = &(track_p->tracks[track_idx]);
   const size_t start_idx = tptr->start_idx;
   const size_t end_idx = tptr->end_idx;
@@ -1121,6 +1121,9 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
         }
 
       datum.F = data->F[i];
+
+      for (k = 0; k < 4; ++k)
+        datum.q[k] = data->q[4 * i + k];
 
       if (params->model_main)
         {

@@ -202,15 +202,6 @@ int mfield_set_sa(gsl_vector *c, const size_t idx, const double x,
 
 /* mfield_euler.c */
 size_t mfield_euler_idx(const size_t sat_idx, const double t, const mfield_workspace *w);
-int mfield_nec2vfm(const double alpha, const double beta,
-                   const double gamma, const double q[],
-                   const double B_in[3], double B_out[3]);
-int mfield_vfm2nec(const double alpha, const double beta,
-                   const double gamma, const double q[],
-                   const double B_in[3], double B_out[3]);
-int mfield_vfm2nec_deriv(const size_t flags, const double alpha, const double beta,
-                         const double gamma, const double q[],
-                         const double B_in[3], double B_out[3]);
 int mfield_euler_print(const char *filename, const size_t sat_idx,
                        const mfield_workspace *w);
 

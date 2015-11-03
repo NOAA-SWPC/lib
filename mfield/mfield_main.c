@@ -40,6 +40,7 @@
 #include <satdata/satdata.h>
 
 #include "common.h"
+#include "euler.h"
 #include "oct.h"
 #include "magdata.h"
 #include "mfield.h"
@@ -48,8 +49,8 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              5
-#define NMAX_SV              5
+#define NMAX_MF              15
+#define NMAX_SV              15
 #define NMAX_SA              12
 
 #define MAX_BUFFER           2048
@@ -122,7 +123,7 @@ replace_synthetic_data(mfield_workspace *w)
           size_t n;
           int m;
 
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
           gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, nmax,
@@ -180,7 +181,7 @@ replace_synthetic_data(mfield_workspace *w)
             B_nec[1] = Y;
             B_nec[2] = Z;
 
-            mfield_nec2vfm(alpha, beta, gamma, q, B_nec, B_vfm);
+            euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B_nec, B_vfm);
 
             mptr->Bx_vfm[j] = B_vfm[0];
             mptr->By_vfm[j] = B_vfm[1];
@@ -464,7 +465,7 @@ print_residuals(const char *filename, mfield_workspace *w)
               B_nec[2] = mptr->Bz_vfm[j];
 
               /* rotate to NEC with computed Euler angles */
-              mfield_vfm2nec(alpha, beta, gamma, q, B_nec, B_nec);
+              euler_vfm2nec(EULER_FLG_ZYX, alpha, beta, gamma, q, B_nec, B_nec);
             }
           else
 #endif

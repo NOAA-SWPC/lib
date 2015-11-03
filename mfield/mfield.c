@@ -44,6 +44,7 @@
 #include "mfield_green.h"
 
 #include "common.h"
+#include "euler.h"
 #include "lls.h"
 #include "mfield.h"
 #include "oct.h"
