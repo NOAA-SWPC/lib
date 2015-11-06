@@ -256,3 +256,18 @@ curvefit_residual(const curvefit_workspace *w)
 
   return rnorm;
 }
+
+int
+curvefit_residuals(const double *x, const double *y, double *r,
+                   curvefit_workspace *w)
+{
+  size_t i;
+
+  for (i = 0; i < w->n; ++i)
+    {
+      double yest = curvefit_eval(x[i], w);
+      r[i] = y[i] - yest;
+    }
+
+  return GSL_SUCCESS;
+}

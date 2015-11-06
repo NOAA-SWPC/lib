@@ -52,6 +52,8 @@ int curvefit_init(const int standardize, const double *x, const double *y,
 int curvefit_solve(curvefit_workspace *w);
 double curvefit_eval(const double x, curvefit_workspace *w);
 double curvefit_residual(const curvefit_workspace *w);
+int curvefit_residuals(const double *x, const double *y, double *r,
+                       curvefit_workspace *w);
 
 extern const curvefit_type * curvefit_bspline;
 extern const curvefit_type * curvefit_poly;
