@@ -45,6 +45,9 @@ euler_workspace *euler_alloc(const size_t flags);
 void euler_free(euler_workspace *w);
 euler_workspace *euler_read(const char *filename);
 int euler_write(const char *filename, const euler_workspace *w);
+int euler_write_swarm(const double fday_start, const double fday_end,
+                      const double fday_step, const char *filename,
+                      const euler_workspace *w);
 int euler_add(const double t, const gsl_vector *x, euler_workspace *w);
 int euler_apply(satdata_mag *data, const euler_workspace *w);
 int euler_nec2vfm_t(const double t, const double q[],

@@ -7,6 +7,7 @@
 #include <math.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 
 #include <satdata/satdata.h>
 
@@ -15,6 +16,8 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_statistics.h>
+#include <gsl/gsl_interp.h>
+#include <gsl/gsl_spline.h>
 
 #include "common.h"
 
@@ -173,7 +176,7 @@ euler_write(const char *filename, const euler_workspace *w)
 
       fprintf(fp, "%f %.4f %.10f %.10f %.10f %f %f %f\n",
               t,
-              satdata_epoch2year(t),
+              satdata_epoch2year(w->t[i]),
               wrap180(alpha * 180.0 / M_PI),
               wrap180(beta * 180.0 / M_PI),
               wrap180(gamma * 180.0 / M_PI),
@@ -181,6 +184,79 @@ euler_write(const char *filename, const euler_workspace *w)
               (beta - beta_mean) * 180.0 / M_PI * 3600.0,
               (gamma - gamma_mean) * 180.0 / M_PI * 3600.0);
     }
+
+  fclose(fp);
+
+  return 0;
+}
+
+/*
+euler_write_swarm()
+  Write Euler angles in Swarm format, interpolating between
+start and end dates with a given step size
+*/
+
+int
+euler_write_swarm(const double fday_start, const double fday_end,
+                  const double fday_step, const char *filename,
+                  const euler_workspace *w)
+{
+  const gsl_interp_type *T = gsl_interp_linear;
+  FILE *fp;
+  time_t t = time(NULL);
+  gsl_spline *spline_alpha, *spline_beta, *spline_gamma;
+  gsl_interp_accel *acc;
+  double fday;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "euler_write_swarm: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  spline_alpha = gsl_spline_alloc(T, w->n);
+  spline_beta = gsl_spline_alloc(T, w->n);
+  spline_gamma = gsl_spline_alloc(T, w->n);
+  acc = gsl_interp_accel_alloc();
+
+  gsl_spline_init(spline_alpha, w->t, w->alpha, w->n);
+  gsl_spline_init(spline_beta, w->t, w->beta, w->n);
+  gsl_spline_init(spline_gamma, w->t, w->gamma, w->n);
+
+  fprintf(fp, "# Euler angles (1-2-3 representation, in degrees)\n");
+  fprintf(fp, "# Extracted from BOUMME model on %s", ctime(&t));
+  fprintf(fp, "# %8s %11s %11s %11s %11s %11s %11s %11s %11s %11s\n",
+          "MD2000",
+          "SW-A(alpha)",
+          "SW-A(beta)",
+          "SW-A(gamma)",
+          "SW-B(alpha)",
+          "SW-B(beta)",
+          "SW-B(gamma)",
+          "SW-C(alpha)",
+          "SW-C(beta)",
+          "SW-C(gamma)");
+
+  for (fday = fday_start; fday <= fday_end; fday += fday_step)
+    {
+      double t = satdata_fday2epoch(fday);
+      double alpha = gsl_spline_eval(spline_alpha, t, acc);
+      double beta = gsl_spline_eval(spline_beta, t, acc);
+      double gamma = gsl_spline_eval(spline_gamma, t, acc);
+
+      fprintf(fp, "%10.2f %11.6f %11.6f %11.6f\n",
+              fday,
+              wrap180(alpha * 180.0 / M_PI),
+              wrap180(beta * 180.0 / M_PI),
+              wrap180(gamma * 180.0 / M_PI));
+    }
+
+  gsl_spline_free(spline_alpha);
+  gsl_spline_free(spline_beta);
+  gsl_spline_free(spline_gamma);
+  gsl_interp_accel_free(acc);
 
   fclose(fp);
 
