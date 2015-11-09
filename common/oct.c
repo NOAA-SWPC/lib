@@ -22,11 +22,11 @@ print_octave(const gsl_matrix *m, const char *str)
   if (!fp)
     return;
 
-  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
-  fprintf(fp, "# name: %s\n", str);
-  fprintf(fp, "# type: matrix\n");
-  fprintf(fp, "# rows: %zu\n", N);
-  fprintf(fp, "# columns: %zu\n", M);
+  fprintf(fp, "%% Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "%% name: %s\n", str);
+  fprintf(fp, "%% type: matrix\n");
+  fprintf(fp, "%% rows: %zu\n", N);
+  fprintf(fp, "%% columns: %zu\n", M);
 
   for (i = 0; i < N; ++i)
     {
@@ -55,11 +55,11 @@ printv_octave(const gsl_vector *v, const char *str)
   if (!fp)
     return;
 
-  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
-  fprintf(fp, "# name: %s\n", str);
-  fprintf(fp, "# type: matrix\n");
-  fprintf(fp, "# rows: %zu\n", N);
-  fprintf(fp, "# columns: %u\n", 1);
+  fprintf(fp, "%% Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "%% name: %s\n", str);
+  fprintf(fp, "%% type: matrix\n");
+  fprintf(fp, "%% rows: %zu\n", N);
+  fprintf(fp, "%% columns: %u\n", 1);
 
   for (i = 0; i < N; ++i)
     {
@@ -82,11 +82,11 @@ printc_octave(const gsl_matrix_complex *m, const char *str)
   if (!fp)
     return;
 
-  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
-  fprintf(fp, "# name: %s\n", str);
-  fprintf(fp, "# type: complex matrix\n");
-  fprintf(fp, "# rows: %zu\n", N);
-  fprintf(fp, "# columns: %zu\n", M);
+  fprintf(fp, "%% Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "%% name: %s\n", str);
+  fprintf(fp, "%% type: complex matrix\n");
+  fprintf(fp, "%% rows: %zu\n", N);
+  fprintf(fp, "%% columns: %zu\n", M);
 
   for (i = 0; i < N; ++i)
     {
@@ -118,11 +118,11 @@ printsym_octave(const gsl_matrix *m, const char *str)
   if (!fp)
     return;
 
-  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
-  fprintf(fp, "# name: %s\n", str);
-  fprintf(fp, "# type: matrix\n");
-  fprintf(fp, "# rows: %zu\n", N);
-  fprintf(fp, "# columns: %zu\n", M);
+  fprintf(fp, "%% Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "%% name: %s\n", str);
+  fprintf(fp, "%% type: matrix\n");
+  fprintf(fp, "%% rows: %zu\n", N);
+  fprintf(fp, "%% columns: %zu\n", M);
 
   for (i = 0; i < N; ++i)
     {
@@ -159,11 +159,11 @@ printherm_octave(const gsl_matrix_complex *m, const char *str)
   if (!fp)
     return;
 
-  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
-  fprintf(fp, "# name: %s\n", str);
-  fprintf(fp, "# type: complex matrix\n");
-  fprintf(fp, "# rows: %zu\n", N);
-  fprintf(fp, "# columns: %zu\n", M);
+  fprintf(fp, "%% Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "%% name: %s\n", str);
+  fprintf(fp, "%% type: complex matrix\n");
+  fprintf(fp, "%% rows: %zu\n", N);
+  fprintf(fp, "%% columns: %zu\n", M);
 
   for (i = 0; i < N; ++i)
     {
@@ -199,11 +199,11 @@ printcv_octave(const gsl_vector_complex *v, const char *str)
   if (!fp)
     return;
 
-  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
-  fprintf(fp, "# name: %s\n", str);
-  fprintf(fp, "# type: complex matrix\n");
-  fprintf(fp, "# rows: %zu\n", N);
-  fprintf(fp, "# columns: %u\n", 1);
+  fprintf(fp, "%% Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "%% name: %s\n", str);
+  fprintf(fp, "%% type: complex matrix\n");
+  fprintf(fp, "%% rows: %zu\n", N);
+  fprintf(fp, "%% columns: %u\n", 1);
 
   for (i = 0; i < N; ++i)
     {
@@ -231,11 +231,11 @@ printtri_octave(const gsl_matrix *m, const char *str)
   if (!fp)
     return;
 
-  fprintf(fp, "# Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
-  fprintf(fp, "# name: %s\n", str);
-  fprintf(fp, "# type: matrix\n");
-  fprintf(fp, "# rows: %zu\n", N);
-  fprintf(fp, "# columns: %zu\n", M);
+  fprintf(fp, "%% Created by Octave 2.1.73, Tue Aug 01 15:00:27 2006 MDT <blah@blah>\n");
+  fprintf(fp, "%% name: %s\n", str);
+  fprintf(fp, "%% type: matrix\n");
+  fprintf(fp, "%% rows: %zu\n", N);
+  fprintf(fp, "%% columns: %zu\n", M);
 
   for (i = 0; i < N; ++i)
     {

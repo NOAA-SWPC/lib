@@ -12,6 +12,7 @@
 #include <assert.h>
 
 #include <gsl/gsl_rstat.h>
+#include <gsl/gsl_statistics.h>
 
 #include "bin.h"
 
@@ -39,6 +40,10 @@ bin_alloc(const double xmin, const double xmax, const size_t nx)
       return 0;
     }
 
+  w->z1 = malloc(w->nbins * sizeof(double *));
+  w->z2 = malloc(w->nbins * sizeof(double *));
+  w->n = calloc(1, w->nbins * sizeof(size_t));
+
   for (i = 0; i < w->nbins; ++i)
     {
       w->bins[i] = gsl_rstat_alloc();
@@ -48,6 +53,9 @@ bin_alloc(const double xmin, const double xmax, const size_t nx)
           bin_free(w);
           return 0;
         }
+
+      w->z1[i] = malloc(MAX_DATA_PER_BIN * sizeof(double));
+      w->z2[i] = malloc(MAX_DATA_PER_BIN * sizeof(double));
     }
 
   w->nx = nx;
@@ -66,10 +74,22 @@ bin_free(bin_workspace *w)
     {
       if (w->bins[i])
         gsl_rstat_free(w->bins[i]);
+
+      if (w->z1[i])
+        free(w->z1[i]);
+
+      if (w->z2[i])
+        free(w->z2[i]);
     }
 
   if (w->bins)
     free(w->bins);
+
+  if (w->z1)
+    free(w->z1);
+
+  if (w->z2)
+    free(w->z2);
 
   free(w);
 } /* bin_free() */
@@ -92,6 +112,57 @@ bin_add_element(const double x, const double y, bin_workspace *w)
 
   return s;
 } /* bin_add_element() */
+
+int
+bin_add_element_corr(double x, double data1, double data2, bin_workspace *w)
+{
+  int s = 0;
+  size_t bin;
+  double *z1, *z2;
+  size_t n;
+
+  if (x < w->xmin || x > w->xmax)
+    {
+      fprintf(stderr, "bin_add_element_corr: error: x outside allowed range: %f\n", x);
+      return -1;
+    }
+
+  bin = bin_findbin(x, w->xmin, w->xmax, w->nx);
+
+  z1 = w->z1[bin];
+  z2 = w->z2[bin];
+  n = w->n[bin];
+
+  if (n >= MAX_DATA_PER_BIN)
+    {
+      fprintf(stderr, "bin_add_element_corr: MAX_DATA_PER_BIN too small\n");
+      return -1;
+    }
+
+  z1[n] = data1;
+  z2[n] = data2;
+  w->n[bin] = ++n;
+
+  /* to update 'n' count */
+  gsl_rstat_add(data1, w->bins[bin]);
+
+  return s;
+}
+
+double
+bin_correlation(const double x, const bin_workspace *w)
+{
+  size_t bin = bin_findbin(x, w->xmin, w->xmax, w->nx);
+  double *z1 = w->z1[bin];
+  double *z2 = w->z2[bin];
+  size_t n = w->n[bin];
+  double r = 0.0;
+  
+  if (n > 1)
+    r = gsl_stats_correlation(z1, 1, z2, 1, n);
+
+  return r;
+} /* bin_correlation() */
 
 double
 bin_mean(const double x, bin_workspace *w)
