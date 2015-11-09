@@ -73,6 +73,7 @@ print_data(const int down_sample, const print_parameters *params,
   printf("# Field %zu: altitude (km)\n", i++);
   printf("# Field %zu: QD latitude (degrees)\n", i++);
   printf("# Field %zu: satellite direction\n", i++);
+  printf("# Field %zu: electron density (cm^{-3})\n", i++);
   printf("# Field %zu: scalar field (nT)\n", i++);
   printf("# Field %zu: X field (nT)\n", i++);
   printf("# Field %zu: Y field (nT)\n", i++);
@@ -146,7 +147,7 @@ print_data(const int down_sample, const print_parameters *params,
       B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
       B_res[3] = data->F[i] - B_model[3];
 
-      printf("%ld %.8f %.2f %.2f %6.2f %5.1f %10.4f %8.4f %10.4f %10.4f %d %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
+      printf("%ld %.8f %.2f %.2f %6.2f %5.1f %10.4f %8.4f %10.4f %10.4f %d %10.4e %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
              unix_time,
              satdata_epoch2year(data->t[i]),
              get_ut(unix_time),
@@ -158,6 +159,7 @@ print_data(const int down_sample, const print_parameters *params,
              data->altitude[i],
              qdlat,
              satdata_mag_satdir(i, data),
+             data->ne[i],
              data->F[i],
              SATDATA_VEC_X(data->B, i),
              SATDATA_VEC_Y(data->B, i),

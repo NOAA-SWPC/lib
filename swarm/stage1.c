@@ -119,6 +119,15 @@ main(int argc, char *argv[])
       exit(1);
     }
 
+  {
+    size_t nF;
+
+    fprintf(stderr, "main: replacing missing scalar data from vector...");
+    satdata_swarm_filter_instrument(0, data_in);
+    nF = satdata_mag_fill_F(data_in);
+    fprintf(stderr, "done (%zu missing scalar data replaced)\n", nF);
+  }
+
   if (lp_data)
     {
       fprintf(stderr, "main: filling Ne data...");
