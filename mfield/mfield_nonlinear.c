@@ -235,6 +235,7 @@ mfield_init_nonlinear(mfield_workspace *w)
 
   fprintf(stderr, "mfield_init_nonlinear: %zu total data points\n", ndata);
   fprintf(stderr, "mfield_init_nonlinear: %zu total residuals\n", nres);
+  fprintf(stderr, "mfield_init_nonlinear: %zu total parameters\n", p);
 
   /* precomputing these matrices make computing the residuals faster */
   w->mat_dX = gsl_matrix_alloc(ndata, nnm);
