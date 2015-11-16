@@ -7,6 +7,7 @@
 
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
+#include <gsl/gsl_complex.h>
 
 void print_octave(const gsl_matrix *m, const char *str);
 void printv_octave(const gsl_vector *v, const char *str);
