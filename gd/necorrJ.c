@@ -22,11 +22,16 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_test.h>
 #include <gsl/gsl_statistics.h>
+#include <gsl/gsl_spline.h>
+#include <gsl/gsl_sort.h>
+#include <gsl/gsl_sort_vector.h>
 
 #include "apex.h"
-#include "bin3d.h"
+#include "bin.h"
+#include "bin2d.h"
 #include "bsearch.h"
 #include "common.h"
+#include "curvefit.h"
 #include "interp.h"
 #include "peak.h"
 #include "track.h"
@@ -45,14 +50,22 @@
 
 #define MAX_BUFFER                 4096
 
+size_t find_ne_peaks(const double qd_min, const double qd_max, const size_t width_points,
+                     const gsl_vector *qdlat, const gsl_vector *ne, size_t idx[],
+                     peak_workspace *peak_p);
+
 typedef struct
 {
   time_t t;        /* timestamp of equator crossing */
   double phi;      /* longitude of equator crossing (deg) */
   double J[NCURR]; /* line current values in mA/m */
 
-  double qdlat_peak;
-  double J_peak;
+  double qdlat_J;
+  double peak_J;
+
+  double qdlat_Ne; /* QD latitude of Ne peak */
+  double peak_Ne;  /* magnitude of Ne peak cm^{-3} */
+  double ctr_Ne;   /* crest-to-trough of Ne peak cm^{-3} */
 
   size_t peak_idx[MAX_PEAKS]; /* index into J of peak locations */
   size_t npeak;               /* number of peaks found */
@@ -118,7 +131,7 @@ read_lc(const char *filename, current_data *data)
 
 /* interpolate Ne data near time t to latitude qdlat */
 double
-interp_ne(const time_t t, const double qdlat, const satdata_lp *data)
+interp_ne(const time_t t, const double qdlat, const satdata_mag *data)
 {
   double t_cdf = satdata_timet2epoch(t);
   double Ne;
@@ -146,6 +159,105 @@ interp_ne(const time_t t, const double qdlat, const satdata_lp *data)
 }
 
 /*
+search_Ne_peak()
+  Search for Ne density peak for track corresponding to time
+t within [peak_qd_min,peak_qd_max] QD latitude
+*/
+
+int
+search_Ne_peak(const time_t t, const double peak_qd_min,
+               const double peak_qd_max, const track_workspace *track_p,
+               const satdata_mag *data, curr_profile *prof)
+{
+  int s = 0;
+  size_t i;
+  int track_idx = -1;
+
+  for (i = 0; i < track_p->n; ++i)
+    {
+      track_data *tptr = &(track_p->tracks[i]);
+      time_t t_eq = satdata_epoch2timet(tptr->t_eq);
+
+      if (abs(t - t_eq) < 10)
+        {
+          track_idx = (int) i;
+          break;
+        }
+    }
+
+  if (track_idx < 0)
+    {
+      fprintf(stderr, "search_Ne_peak: track not found for time %ld\n", t);
+      return -1;
+    }
+
+  {
+    const size_t width_points = 100;        /* number of points in half-width of peak */
+    track_data *tptr = &(track_p->tracks[track_idx]);
+    size_t sidx = tptr->start_idx;
+    size_t n = tptr->n;
+    gsl_vector_view qd = gsl_vector_view_array(&(data->qdlat[sidx]), n);
+    gsl_vector_view ne = gsl_vector_view_array(&(data->ne[sidx]), n);
+    size_t npeak;
+    peak_workspace *peak_p = peak_alloc(n);
+    size_t ne_idx[MAX_PEAKS];
+
+    npeak = find_ne_peaks(peak_qd_min, peak_qd_max, width_points,
+                          &qd.vector, &ne.vector, ne_idx, peak_p);
+
+    /* if more than 1 peak found, choose the largest */
+    if (npeak > 1)
+      {
+        double max_Ne = -1.0e6;
+        size_t max_idx = 0;
+
+        for (i = 0; i < npeak; ++i)
+          {
+            size_t idx = ne_idx[i];
+            double Ne = gsl_vector_get(&ne.vector, idx);
+
+            if (Ne > max_Ne)
+              {
+                max_Ne = Ne;
+                max_idx = idx;
+              }
+          }
+
+        ne_idx[0] = max_idx;
+        npeak = 1;
+      }
+
+    if (npeak == 1)
+      {
+        gsl_vector *qdvec = gsl_vector_alloc(n);
+        gsl_vector *nevec = gsl_vector_alloc(n);
+        double eq_Ne; /* value of Ne at equator */
+
+        gsl_vector_memcpy(qdvec, &qd.vector);
+        gsl_vector_memcpy(nevec, &ne.vector);
+        gsl_sort_vector2(qdvec, nevec);
+
+        eq_Ne = interp_xy(qdvec->data, nevec->data, n, 0.0);
+
+        prof->qdlat_Ne = gsl_vector_get(&qd.vector, ne_idx[0]);
+        prof->peak_Ne = gsl_vector_get(&ne.vector, ne_idx[0]);
+        prof->ctr_Ne = prof->peak_Ne - eq_Ne;
+
+        gsl_vector_free(qdvec);
+        gsl_vector_free(nevec);
+
+        s = 0;
+      }
+    else
+      s = -1; /* peak not found */
+
+    peak_free(peak_p);
+  }
+
+  return s;
+}
+
+/*
 find_J_peaks()
   Go through each profile in 'data' and search for
 1 peak in the north hemisphere, and 1 peak in the south hemisphere.
@@ -155,25 +267,26 @@ Inputs: peak_qd_min - search for peaks in [peak_qd_min,peak_qd_max]
         minheight   - minimum height needed for peak (mA/m)
         peak_file   - output file for peaks
         prof_file   - output file for profiles
-        lp_data     - Langmuir probe data
+        mag_data    - magnetic data
+        track_p     - track workspace
         data        - profile data
 
 On output:
 1) If exactly 1 peak is found, 'npeak' is set to 1 and
-the qdlat_peak and J_peak fields are set appropriately
+the qdlat_J and peak_J fields are set appropriately
 */
 
 int
 find_J_peaks(const double peak_qd_min, const double peak_qd_max,
              const double minheight, const char *peak_file,
-             const char *prof_file, const satdata_lp *lp_data,
-             current_data *data)
+             const char *prof_file, const satdata_mag *mag_data,
+             const track_workspace *track_p, current_data *data)
 {
   int s;
   FILE *fp_peak, *fp_prof;
-  const size_t width_points = 20;                                 /* number of points in half-width of peak */
+  const size_t width_points = 15;                                 /* number of points in half-width of peak */
   const size_t smooth_window = width_points / 2;                  /* smoothing window size */
-  const double minslope = 0.5 * pow((double) width_points, -2.0); /* minimum slope of first derivative */
+  const double minslope = 0.4 * pow((double) width_points, -2.0); /* minimum slope of first derivative */
   peak_workspace *peak_p = peak_alloc(NCURR);
 
   const double qdlat_max = 30.0;
@@ -206,12 +319,16 @@ find_J_peaks(const double peak_qd_min, const double peak_qd_max,
   fprintf(fp_peak, "# Field %zu: smoothed derivative of current (mA/m/deg)\n", i++);
   fprintf(fp_peak, "# Field %zu: electron density (cm^{-3})\n", i++);
   fprintf(fp_peak, "# Field %zu: current peak density (mA/m)\n", i++);
+  fprintf(fp_peak, "# Field %zu: Ne peak density (cm^{-3})\n", i++);
 
   i = 1;
   fprintf(fp_prof, "# Field %zu: timestamp of equator crossing (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
   fprintf(fp_prof, "# Field %zu: longitude of equator crossing (degrees)\n", i++);
   fprintf(fp_prof, "# Field %zu: QD latitude of J peak (degrees)\n", i++);
   fprintf(fp_prof, "# Field %zu: current density of J peak (mA/m)\n", i++);
+  fprintf(fp_prof, "# Field %zu: QD latitude of Ne peak (degrees)\n", i++);
+  fprintf(fp_prof, "# Field %zu: magnitude of Ne peak (cm^{-3})\n", i++);
+  fprintf(fp_prof, "# Field %zu: crest-trough of Ne peak (cm^{-3})\n", i++);
 
   for (i = 0; i < NCURR; ++i)
     qdlat[i] = -qdlat_max + i * qdlat_step;
@@ -235,9 +352,10 @@ find_J_peaks(const double peak_qd_min, const double peak_qd_max,
             {
               size_t pidx = peak_p->pidx; /* index into arrays of peak location */
               double center = qdlat[pidx];
+              double J = prof->J[pidx];
 
               /* test if peak center is in [peak_qd_min,peak_qd_max] */
-              if (center >= peak_qd_min && center <= peak_qd_max)
+              if (fabs(J) <= 30.0 && center >= peak_qd_min && center <= peak_qd_max)
                 {
                   /* found a peak, store location */
                   prof->peak_idx[prof->npeak] = pidx;
@@ -250,18 +368,51 @@ find_J_peaks(const double peak_qd_min, const double peak_qd_max,
         }
       while (s == GSL_CONTINUE);
 
+      /* if more than 1 peak found, choose the highest peak */
+      if (prof->npeak > 1)
+        {
+          double max_J = -1.0e6;
+          size_t max_idx = 0;
+
+          for (j = 0; j < prof->npeak; ++j)
+            {
+              size_t idx = prof->peak_idx[j];
+
+              if (prof->J[idx] > max_J)
+                {
+                  max_J = prof->J[idx];
+                  max_idx = idx;
+                }
+            }
+
+          prof->peak_idx[0] = max_idx;
+          prof->npeak = 1;
+        }
+
       if (prof->npeak == 1)
         {
           size_t idx = prof->peak_idx[0];
 
-          prof->qdlat_peak = qdlat[idx];
-          prof->J_peak = prof->J[idx];
+          prof->qdlat_J = qdlat[idx];
+          prof->peak_J = prof->J[idx];
+          prof->qdlat_Ne = 1.0 / 0.0;
+          prof->peak_Ne = 1.0 / 0.0;
+          prof->ctr_Ne = 1.0 / 0.0;
 
-          fprintf(fp_prof, "%ld %8.3f %8.3f %6.2f\n",
+          if (mag_data)
+            {
+              /*s = search_Ne_peak(prof->t, peak_qd_min, peak_qd_max, track_p, mag_data, prof);*/
+              s = search_Ne_peak(prof->t, prof->qdlat_J - 5.0, prof->qdlat_J + 5.0, track_p, mag_data, prof);
+            }
+
+          fprintf(fp_prof, "%ld %8.3f %8.3f %6.2f %8.3f %e %e\n",
                   prof->t,
                   prof->phi,
-                  prof->qdlat_peak,
-                  prof->J_peak);
+                  prof->qdlat_J,
+                  prof->peak_J,
+                  prof->qdlat_Ne,
+                  prof->peak_Ne,
+                  prof->ctr_Ne);
 
           ++cnt;
         }
@@ -273,22 +424,28 @@ find_J_peaks(const double peak_qd_min, const double peak_qd_max,
 
       for (j = 0; j < NCURR; ++j)
         {
-          double J = 1.0 / 0.0;
-          double Ne = interp_ne(prof->t, qdlat[j], lp_data);
+          double J_peak = 1.0 / 0.0;
+          double Ne_peak = 1.0 / 0.0;
+          double Ne = mag_data ? interp_ne(prof->t, qdlat[j], mag_data) : 0.0;
 
           if (prof->npeak == 1)
             {
-              if (fabs(qdlat[j] - prof->qdlat_peak) < 10.0)
-                J = prof->J[j];
+              if (fabs(qdlat[j] - prof->qdlat_J) < 10.0)
+                J_peak = prof->J[j];
+
+              if (isfinite(prof->qdlat_Ne) &&
+                  fabs(qdlat[j] - prof->qdlat_Ne) < 10.0)
+                Ne_peak = Ne;
             }
 
-          fprintf(fp_peak, "%f %f %f %f %e %f\n",
+          fprintf(fp_peak, "%f %f %f %f %e %f %e\n",
                   qdlat[j],
                   prof->J[j],
                   peak_deriv(j, peak_p),
                   peak_sderiv(j, peak_p),
                   Ne,
-                  J);
+                  J_peak,
+                  Ne_peak);
         }
 
       fprintf(fp_peak, "\n\n");
@@ -331,46 +488,6 @@ find_ne_peaks(const double qd_min, const double qd_max, const size_t width_point
           double center = gsl_vector_get(qdlat, pidx);
 
           /* test if peak center is in [qd_min,qd_max] */
-          if (fabs(center) >= qd_min && fabs(center) <= qd_max)
-            {
-              /* found a peak, store Gaussian parameters */
-              idx[npeak++] = pidx;
-
-              if (npeak >= MAX_PEAKS)
-                break;
-            }
-        }
-    }
-  while (s == GSL_CONTINUE);
-
-  return npeak;
-}
-
-size_t
-find_F_peaks(const double qd_min, const double qd_max, const size_t width_points,
-             const gsl_vector *qdlat, const gsl_vector *F, size_t idx[],
-             peak_workspace *peak_p)
-{
-  int s;
-  const size_t smooth_window = width_points / 2;                  /* smoothing window size */
-  const double minslope = 1.0 * pow((double) width_points, -2.0); /* minimum slope of first derivative */
-  const double minheight = -1.0e6;                                /* minimum peak height */
-  size_t npeak = 0;
-
-  /* initialize peak search */
-  peak_init(smooth_window, qdlat, F, peak_p);
-
-  do
-    {
-      /*s = peak_find(-1, minslope, minheight, qdlat, F, peak_p);*/
-      s = peak_find(0, minslope, minheight, qdlat, F, peak_p);
-
-      if (s == GSL_CONTINUE)
-        {
-          size_t pidx = peak_p->pidx; /* index into arrays of peak location */
-          double center = gsl_vector_get(qdlat, pidx);
-
-          /* test if peak center is in [qd_min,qd_max] */
           if (center >= qd_min && center <= qd_max)
             {
               /* found a peak, store Gaussian parameters */
@@ -386,235 +503,263 @@ find_F_peaks(const double qd_min, const double qd_max, const size_t width_points
   return npeak;
 }
 
+/* correlate centers of J/Ne peaks and magnitudes of J/Ne peaks */
 int
-correlate(const char *peak_file, const char *corr_file, const satdata_mag *data, const track_workspace *w)
+docorr(current_data *data, double *corr_center, double *corr_peak)
 {
-  int s = 0;
-  size_t i, j;
-  const size_t width_points = 100;                                /* number of points in half-width of peak */
-  const size_t fit_width = width_points * 1.5;                    /* gaussian fit window size */
-  const size_t half_width = fit_width / 2;
-  FILE *fp_peak, *fp_corr;
+  double qd_J[10000], qd_Ne[10000];
+  double peak_J[10000], peak_Ne[10000];
+  size_t n = 0;
+  size_t i;
 
-  size_t ne_idx[MAX_PEAKS];                                       /* indices for centers of Ne peaks */
-  size_t F_idx[MAX_PEAKS];                                        /* indices for centers of F peaks */
-  gsl_vector *ne_coef[MAX_PEAKS];                                 /* save gauss parameters for each peak */
-  const size_t p = 3;
-
-  const double qd_min = 4.0;                                      /* search for peaks only in [qd_min,qd_max] */
-  const double qd_max = 30.0;
-
-  fp_peak = fopen(peak_file, "w");
-  fp_corr = fopen(corr_file, "w");
-
-  i = 1;
-  fprintf(fp_peak, "# Field %zu: QD latitude (degrees)\n", i++);
-  fprintf(fp_peak, "# Field %zu: electron density (cm^{-3})\n", i++);
-  fprintf(fp_peak, "# Field %zu: scalar field residual (nT)\n", i++);
-  fprintf(fp_peak, "# Field %zu: N_e first derivative (cm^{-3})\n", i++);
-  fprintf(fp_peak, "# Field %zu: smoothed N_e first derivative (cm^{-3})\n", i++);
-  fprintf(fp_peak, "# Field %zu: F first derivative (nT)\n", i++);
-  fprintf(fp_peak, "# Field %zu: smoothed F first derivative (nT)\n", i++);
-  fprintf(fp_peak, "# Field %zu: N_e data used for 1st peak fit (cm^{-3})\n", i++);
-  fprintf(fp_peak, "# Field %zu: N_e data used for 2nd peak fit (cm^{-3})\n", i++);
-  fprintf(fp_peak, "# Field %zu: scalar field peak 1 used for correlation (nT)\n", i++);
-  fprintf(fp_peak, "# Field %zu: scalar field peak 2 used for correlation (nT)\n", i++);
-
-  i = 1;
-  fprintf(fp_corr, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
-  fprintf(fp_corr, "# Field %zu: time (decimal year)\n", i++);
-  fprintf(fp_corr, "# Field %zu: longitude (degrees)\n", i++);
-  fprintf(fp_corr, "# Field %zu: local time (hours)\n", i++);
-  fprintf(fp_corr, "# Field %zu: altitude (km)\n", i++);
-  fprintf(fp_corr, "# Field %zu: season (day of year)\n", i++);
-  fprintf(fp_corr, "# Field %zu: N_e peak center in northern hemisphere (degrees QD latitude)\n", i++);
-  fprintf(fp_corr, "# Field %zu: N_e peak height in northern hemisphere (cm^{-3})\n", i++);
-  fprintf(fp_corr, "# Field %zu: N_e peak center in southern hemisphere (degrees QD latitude)\n", i++);
-  fprintf(fp_corr, "# Field %zu: N_e peak height in southern hemisphere (cm^{-3})\n", i++);
-  fprintf(fp_corr, "# Field %zu: F peak center in northern hemisphere (degrees QD latitude)\n", i++);
-  fprintf(fp_corr, "# Field %zu: F peak height in northern hemisphere (nT)\n", i++);
-  fprintf(fp_corr, "# Field %zu: F peak center in southern hemisphere (degrees QD latitude)\n", i++);
-  fprintf(fp_corr, "# Field %zu: F peak height in southern hemisphere (nT)\n", i++);
-  fprintf(fp_corr, "# Field %zu: corr(F,N_e) in northern hemisphere\n", i++);
-  fprintf(fp_corr, "# Field %zu: corr(F,N_e) in southern hemisphere\n", i++);
-
-  for (i = 0; i < MAX_PEAKS; ++i)
-    ne_coef[i] = gsl_vector_alloc(p);
-
-  for (i = 0; i < w->n; ++i)
+  for (i = 0; i < data->n; ++i)
     {
-      time_t unix_time;
-      track_data *tptr = &(w->tracks[i]);
-      size_t sidx = tptr->start_idx;
-      size_t n = tptr->n;
-      peak_workspace *peak_ne = peak_alloc(n);
-      peak_workspace *peak_F = peak_alloc(n);
-      gsl_vector_view qd = gsl_vector_view_array(&(data->qdlat[sidx]), n);
-      gsl_vector_view ne = gsl_vector_view_array(&(data->ne[sidx]), n);
-      gsl_vector_view F = gsl_vector_view_array(tptr->Bf, n);
-      size_t npeak_ne, npeak_F;
-      double corr1, corr2;
-      size_t ne_idx0[2], ne_idx1[2];
-      size_t F_idx0[2], F_idx1[2];
-      double ne_center1, ne_center2;
+      curr_profile *prof = &(data->profiles[i]);
 
-      /* discard flagged tracks */
-      if (tptr->flags)
+      if (prof->npeak == 0)
         continue;
 
-      npeak_ne = find_ne_peaks(qd_min, qd_max, width_points, &qd.vector, &ne.vector, ne_idx, peak_ne);
-
-      if (npeak_ne != 2)
+      if (!isfinite(prof->qdlat_Ne))
         continue;
 
-      /* store QD latitudes of peak centers */
-      ne_center1 = gsl_vector_get(&qd.vector, ne_idx[0]);
-      ne_center2 = gsl_vector_get(&qd.vector, ne_idx[1]);
+      qd_J[n] = prof->qdlat_J;
+      qd_Ne[n] = prof->qdlat_Ne;
 
-      if (ne_center1 * ne_center2 > 0.0)
-        {
-          fprintf(stderr, "correlate: detected two peaks in the same hemisphere\n");
-          continue;
-        }
+      peak_J[n] = prof->peak_J;
+      peak_Ne[n] = prof->peak_Ne;
 
-      /* search for corresponding peaks in F data */
-      {
-        const double qd_width = 5.0;
-
-        /* search for an F peak within ne_center +/- qd_width */
-        npeak_F = find_F_peaks(ne_center1 - qd_width, ne_center1 + qd_width, width_points, &qd.vector, &F.vector, F_idx, peak_F);
-        if (npeak_F != 1)
-          continue; /* no corresponding F peak found */
-
-        npeak_F = find_F_peaks(ne_center2 - qd_width, ne_center2 + qd_width, width_points, &qd.vector, &F.vector, &(F_idx[1]), peak_F);
-        if (npeak_F != 1)
-          continue; /* no corresponding F peak found */
-      }
-
-      ne_idx0[0] = ne_idx[0] - half_width;
-      ne_idx1[0] = ne_idx[0] + half_width;
-      ne_idx0[1] = ne_idx[1] - half_width;
-      ne_idx1[1] = ne_idx[1] + half_width;
-
-      F_idx0[0] = F_idx[0] - half_width;
-      F_idx1[0] = F_idx[0] + half_width;
-      F_idx0[1] = F_idx[1] - half_width;
-      F_idx1[1] = F_idx[1] + half_width;
-
-      fprintf(stderr, "correlate: track %zu: found %zu N_e peaks\n", i + 1, npeak_ne);
-
-      {
-        size_t n1 = ne_idx1[0] - ne_idx0[0] + 1; /* number of points for correlation of peak 1 */
-        size_t n2 = ne_idx1[1] - ne_idx0[1] + 1; /* number of points for correlation of peak 2 */
-
-        corr1 = gsl_stats_correlation(&ne.vector.data[ne_idx0[0]], 1, &tptr->Bf[F_idx0[0]], 1, n1);
-        corr2 = gsl_stats_correlation(&ne.vector.data[ne_idx0[1]], 1, &tptr->Bf[F_idx0[1]], 1, n2);
-
-        /* make sure corr1 is always the peak in the northern hemisphere */
-        if (ne_center1 < 0.0)
-          {
-            SWAP(corr1, corr2);
-          }
-      }
-
-      for (j = 0; j < n; ++j)
-        {
-          double qdj = gsl_vector_get(&qd.vector, j);
-          double ne1, ne2, F1, F2;
-
-          if (j >= ne_idx0[0] && j <= ne_idx1[0])
-            ne1 = gsl_vector_get(&ne.vector, j);
-          else
-            ne1 = 1.0/0.0;
-
-          if (j >= ne_idx0[1] && j <= ne_idx1[1])
-            ne2 = gsl_vector_get(&ne.vector, j);
-          else
-            ne2 = 1.0/0.0;
-
-          if (j >= F_idx0[0] && j <= F_idx1[0])
-            F1 = tptr->Bf[j];
-          else
-            F1 = 1.0/0.0;
-
-          if (j >= F_idx0[1] && j <= F_idx1[1])
-            F2 = tptr->Bf[j];
-          else
-            F2 = 1.0/0.0;
-
-          fprintf(fp_peak, "%f %.12e %f %.12e %.12e %f %f %.12e %.12e %f %f\n",
-                  qdj,
-                  gsl_vector_get(&ne.vector, j),
-                  tptr->Bf[j],
-                  peak_deriv(j, peak_ne),
-                  peak_sderiv(j, peak_ne),
-                  peak_deriv(j, peak_F),
-                  peak_sderiv(j, peak_F),
-                  ne1,
-                  ne2,
-                  F1,
-                  F2);
-        }
-
-      fprintf(fp_peak, "\n\n");
-
-      unix_time = satdata_epoch2timet(tptr->t_eq);
-      fprintf(fp_corr, "%ld %f %f %f %f %f %f %e %f %e %f %f %f %f %f %f\n",
-              unix_time,
-              satdata_epoch2year(tptr->t_eq),
-              tptr->lon_eq,
-              tptr->lt_eq,
-              tptr->meanalt,
-              get_season(unix_time),
-              gsl_vector_get(&qd.vector, ne_idx[0]),
-              gsl_vector_get(&ne.vector, ne_idx[0]),
-              gsl_vector_get(&qd.vector, ne_idx[1]),
-              gsl_vector_get(&ne.vector, ne_idx[1]),
-              gsl_vector_get(&qd.vector, F_idx[0]),
-              gsl_vector_get(&F.vector, F_idx[0]),
-              gsl_vector_get(&qd.vector, F_idx[1]),
-              gsl_vector_get(&F.vector, F_idx[1]),
-              corr1,
-              corr2);
-
-      /*exit(1);*/
-
-      peak_free(peak_ne);
-      peak_free(peak_F);
+      ++n;
     }
 
-  for (i = 0; i < MAX_PEAKS; ++i)
-    gsl_vector_free(ne_coef[i]);
+  *corr_center = gsl_stats_correlation(qd_J, 1, qd_Ne, 1, n);
+  *corr_peak = gsl_stats_correlation(peak_J, 1, peak_Ne, 1, n);
 
-  fclose(fp_peak);
-  fclose(fp_corr);
+  fprintf(stderr, "docorr: n = %zu\n", n);
+
+  return 0;
+}
+
+int
+analyze_hemisphere(const double peak_qd_min, const double peak_qd_max,
+                   const char *peak_file,
+                   const char *prof_file, const satdata_mag *mag_data,
+                   const track_workspace *track_p, current_data *data)
+{
+  fprintf(stderr, "main: searching for northern J peaks in satellite...");
+  find_J_peaks(peak_qd_min, peak_qd_max, -100.0, peak_file, prof_file, mag_data, track_p, data);
+  fprintf(stderr, "done\n");
+
+  {
+    double corr_center, corr_peak;
+
+    docorr(data, &corr_center, &corr_peak);
+
+    fprintf(stderr, "main: north hemisphere corr(QD(J), QD(Ne))     = %f\n",
+            corr_center);
+    fprintf(stderr, "main: north hemisphere corr(peak(J), peak(Ne)) = %f\n",
+            corr_peak);
+  }
+  
+  fprintf(stderr, "main: peak data written to %s\n", peak_file);
+  fprintf(stderr, "main: profile data written to %s\n", prof_file);
+
+  return 0;
+}
+
+/* find profile which is closest in time to t */
+int
+find_profile_t(const time_t t, current_data *data, size_t *prof_idx)
+{
+  int s = -1;
+  size_t i;
+  time_t dt_min = 1e6;
+  int idx = -1;
+
+  for (i = 0; i < data->n; ++i)
+    {
+      curr_profile *prof = &(data->profiles[i]);
+      time_t dt = prof->t - t;
+
+      if (abs(dt) < dt_min)
+        {
+          dt_min = abs(dt);
+          idx = (int) i;
+          s = 0;
+        }
+    }
+
+  *prof_idx = (size_t) idx;
 
   return s;
 }
 
 int
-fill_qd(satdata_lp *lp_data)
+correlateJ(const char *data_file, const char *corr_file, current_data *data1, current_data *data2)
 {
-  size_t i;
-  time_t t = satdata_epoch2timet(lp_data->t[0]);
-  int year = get_year(t);
-  apex_workspace *apex_p = apex_alloc(year);
+  int s = 0;
+  size_t i, j;
+  bin2d_workspace *bin2d_p;
+  bin_workspace *bin_p;
+  const double phi_min = -5.0;
+  const double phi_max = 25.0;
+  const size_t nphi = 7;
+  const double t_min = -60.0;
+  const double t_max = 60.0;
+  const size_t nt = 2;
+  FILE *fp_data, *fp_corr;
+  double *dp, *x, *y, *r;
+  size_t n = 0;
+  double sigma;
 
-  for (i = 0; i < lp_data->n; ++i)
+  fp_data = fopen(data_file, "w");
+  fp_corr = fopen(corr_file, "w");
+
+  bin2d_p = bin2d_alloc(phi_min, phi_max, nphi, t_min, t_max, nt);
+  bin_p = bin_alloc(phi_min, phi_max, nphi);
+  dp = malloc(data1->n * sizeof(double));
+  x = malloc(data1->n * sizeof(double));
+  y = malloc(data1->n * sizeof(double));
+  r = malloc(data1->n * sizeof(double));
+
+  i = 1;
+  fprintf(fp_data, "# Field %zu: timestamp of satellite 1 crossing (UT)\n", i++);
+  fprintf(fp_data, "# Field %zu: delta t (minutes)\n", i++);
+  fprintf(fp_data, "# Field %zu: delta phi (degrees)\n", i++);
+  fprintf(fp_data, "# Field %zu: satellite 1 peak current (mA/m)\n", i++);
+  fprintf(fp_data, "# Field %zu: satellite 2 peak current (mA/m)\n", i++);
+
+  for (i = 0; i < data1->n; ++i)
     {
-      double alon, alat, qdlat;
-      double phi = lp_data->longitude[i] * M_PI / 180.0;
-      double theta = M_PI / 2.0 - lp_data->latitude[i] * M_PI / 180.0;
-      double r = lp_data->r[i] * 1.0e3;
+      curr_profile *prof = &(data1->profiles[i]);
+      curr_profile *prof2;
+      time_t dt;
+      double dphi, dt_min;
+      size_t idx;
+      double lt = get_localtime(prof->t, prof->phi * M_PI / 180.0);
 
-      apex_transform(theta, phi, r, &alon, &alat, &qdlat,
-                     NULL, NULL, NULL, apex_p);
-      lp_data->qdlat[i] = qdlat;
+      s = find_profile_t(prof->t, data2, &idx);
+      if (s)
+        continue;
+
+      prof2 = &(data2->profiles[idx]);
+
+      if (prof->npeak != 1 || prof2->npeak != 1)
+        continue;
+
+#if 0
+      if (prof->peak_J > 20.0)
+        continue; /* a couple outliers */
+#endif
+
+#if 0
+      if (lt > 20.0)
+        continue;
+#endif
+
+      dt = prof2->t - prof->t;
+      dphi = wrap180(prof2->phi - prof->phi);
+      dt_min = (double)dt / 60.0;
+
+#if 0
+      bin2d_add_element_corr(dphi, dt_min, prof->peak_J, prof2->peak_J, bin2d_p);
+#endif
+
+      if (fabs(dt_min) <= 30.0 && dphi >= phi_min && dphi <= phi_max)
+        {
+          /* store this point */
+          x[n] = prof->peak_J;
+          y[n] = prof2->peak_J;
+          dp[n] = dphi;
+          ++n;
+
+          fprintf(fp_data, "%ld %f %f %f %f\n",
+                  prof->t,
+                  dt_min,
+                  dphi,
+                  prof->peak_J,
+                  prof2->peak_J);
+        }
     }
 
-  apex_free(apex_p);
+  /* robust fit straight line to (x,y) */
+  {
+    curvefit_workspace *curvefit_p = curvefit_alloc(gsl_multifit_robust_bisquare, curvefit_poly, n, 2);
+    curvefit(0, x, y, curvefit_p);
+    curvefit_residuals(x, y, r, curvefit_p);
+    curvefit_free(curvefit_p);
+    const double alpha = 2.5;
 
-  return 0;
+    sigma = gsl_stats_sd(r, 1, n);
+    fprintf(stderr, "sigma = %f\n", sigma);
+
+    /* loop through again and add (J1,J2) points which aren't outliers */
+    for (i = 0; i < n; ++i)
+      {
+        if (fabs(r[i]) > alpha*sigma)
+          continue;
+
+        bin_add_element_corr(dp[i], x[i], y[i], bin_p);
+      }
+  }
+
+#if 0
+  i = 1;
+  fprintf(fp_corr, "# Field %zu: delta longitude (degrees)\n", i++);
+  fprintf(fp_corr, "# Field %zu: delta t (minutes)\n", i++);
+  fprintf(fp_corr, "# Field %zu: correlation\n", i++);
+  fprintf(fp_corr, "# Field %zu: number of points in bin\n", i++);
+
+  for (i = 0; i < nphi; ++i)
+    {
+      for (j = 0; j < nt; ++j)
+        {
+          double dt, dlon;
+          size_t n;
+          double r;
+
+          bin2d_xyval(i, j, &dlon, &dt, bin2d_p);
+          n = bin2d_n(dlon, dt, bin2d_p);
+          r = bin2d_correlation(dlon, dt, bin2d_p);
+
+          fprintf(fp_corr, "%f %f %f %zu\n",
+                  dlon,
+                  dt,
+                  r,
+                  n);
+        }
+
+      fprintf(fp_corr, "\n");
+    }
+#else
+  i = 1;
+  fprintf(fp_corr, "# Field %zu: delta longitude (degrees)\n", i++);
+  fprintf(fp_corr, "# Field %zu: correlation\n", i++);
+  fprintf(fp_corr, "# Field %zu: number of points in bin\n", i++);
+
+  for (i = 0; i < nphi; ++i)
+    {
+      double dlon;
+      size_t n;
+      double r;
+
+      bin_xval(i, &dlon, bin_p);
+      n = bin_n(dlon, bin_p);
+      r = bin_correlation(dlon, bin_p);
+
+      fprintf(fp_corr, "%f %f %zu\n",
+              dlon,
+              r,
+              n);
+    }
+#endif
+
+  fclose(fp_data);
+  fclose(fp_corr);
+  free(x);
+  free(y);
+  free(r);
+
+  return s;
 }
 
 void
@@ -622,9 +767,9 @@ print_help(char *argv[])
 {
   fprintf(stderr, "Usage: %s [options]\n", argv[0]);
   fprintf(stderr, "Options:\n");
-  fprintf(stderr, "\t --curr_file | -j line_current_file          - Line current file\n");
-  fprintf(stderr, "\t --champ_plp_file | -b champ_plp_index_file  - CHAMP PLP index file\n");
-  fprintf(stderr, "\t --swarm_lp_file | -f swarm_lp_index_file    - Swarm LP index file\n");
+  fprintf(stderr, "\t --curr_file  | -j line_current_file         - Line current file for satellite 1\n");
+  fprintf(stderr, "\t --curr_file2 | -k line_current_file2        - Line current file for satellite 2\n");
+  fprintf(stderr, "\t --swarm_file | -s swarm_index_file          - Swarm magnetic index file\n");
   fprintf(stderr, "\t --all | -a                                  - print all tracks (no filtering)\n");
 }
 
@@ -633,12 +778,15 @@ main(int argc, char *argv[])
 {
   const char *peak_file1 = "peak1.dat";
   const char *prof_file1 = "prof1.dat";
-  const char *corr_file = "corr.dat";
-  satdata_lp *lp_data = NULL;
-  current_data sat1;
+  const char *peak_file2 = "peak2.dat";
+  const char *prof_file2 = "prof2.dat";
+  satdata_mag *data = NULL;
+  current_data sat1, sat2;
   peak_workspace *peak_workspace_p;
+  struct timeval tv0, tv1;
 
   sat1.n = 0;
+  sat2.n = 0;
 
   while (1)
     {
@@ -647,12 +795,12 @@ main(int argc, char *argv[])
       static struct option long_options[] =
         {
           { "curr_file", required_argument, NULL, 'j' },
-          { "champ_plp_file", required_argument, NULL, 'b' },
-          { "swarm_plp_file", required_argument, NULL, 'f' },
+          { "curr_file2", required_argument, NULL, 'k' },
+          { "swarm_file", required_argument, NULL, 's' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "b:j:f:", long_options, &option_index);
+      c = getopt_long(argc, argv, "j:k:s:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -664,16 +812,22 @@ main(int argc, char *argv[])
             fprintf(stderr, "done (%zu profiles read)\n", sat1.n);
             break;
 
-          case 'b':
-            fprintf(stderr, "main: reading CHAMP PLP data from %s...", optarg);
-            lp_data = satdata_champ_plp_read_idx(optarg, 0);
-            fprintf(stderr, "done\n");
+          case 'k':
+            fprintf(stderr, "main: reading %s...", optarg);
+            read_lc(optarg, &sat2);
+            fprintf(stderr, "done (%zu profiles read)\n", sat2.n);
             break;
 
-          case 'f':
-            fprintf(stderr, "main: reading Swarm LP data from %s...", optarg);
-            lp_data = satdata_swarm_lp_read_idx(optarg, 0);
-            fprintf(stderr, "done\n");
+          case 's':
+            fprintf(stderr, "main: reading %s...", optarg);
+            gettimeofday(&tv0, NULL);
+            data = satdata_swarm_read_idx(optarg, 0);
+            gettimeofday(&tv1, NULL);
+            if (!data)
+              exit(1);
+            fprintf(stderr, "done (%zu points read, %g seconds)\n",
+                    data->n, time_diff(tv0, tv1));
+
             break;
 
           default:
@@ -689,30 +843,58 @@ main(int argc, char *argv[])
       exit(1);
     }
 
-  if (lp_data)
-    {
-      fprintf(stderr, "main: filling QD latitudes for LP data...");
-      fill_qd(lp_data);
-      fprintf(stderr, "done\n");
-    }
-
   peak_workspace_p = peak_alloc(NCURR);
 
-  fprintf(stderr, "main: searching for northern J peaks in satellite 1...");
-  find_J_peaks(5.0, 23.0, 1.0, peak_file1, prof_file1, lp_data, &sat1);
-  fprintf(stderr, "done\n");
-  
-  fprintf(stderr, "main: peak data written to %s\n", peak_file1);
-  fprintf(stderr, "main: profile data written to %s\n", prof_file1);
+  if (data)
+    {
+      track_workspace *track_p = track_alloc();
 
-#if 0
-  fprintf(stderr, "main: computing correlations...");
-  correlate(peak_file, corr_file, data, track_p);
-  fprintf(stderr, "done (outputs: %s, %s)\n", peak_file, corr_file);
-#endif
+      fprintf(stderr, "main: separating into tracks...");
+      track_init(data, NULL, track_p);
+      fprintf(stderr, "done\n");
 
-  if (lp_data)
-    satdata_lp_free(lp_data);
+      /* north hemisphere peak finding */
+      analyze_hemisphere(-3.0, 23.0, peak_file1, prof_file1, data, track_p, &sat1);
+
+      /* south hemisphere peak finding */
+      analyze_hemisphere(-23.0, 0.0, peak_file2, prof_file2, data, track_p, &sat1);
+
+      satdata_mag_free(data);
+      track_free(track_p);
+    }
+  else if (sat2.n > 0)
+    {
+      const char *data_file1 = "data.dat.north";
+      const char *corr_file1 = "corr.dat.north";
+      const char *data_file2 = "data.dat.south";
+      const char *corr_file2 = "corr.dat.south";
+
+      fprintf(stderr, "main: searching for northern J peaks in satellite 1...");
+      find_J_peaks(5.0, 23.0, -100.0, peak_file1, prof_file1, NULL, NULL, &sat1);
+      fprintf(stderr, "done\n");
+
+      fprintf(stderr, "main: searching for northern J peaks in satellite 2...");
+      find_J_peaks(5.0, 23.0, -100.0, peak_file2, prof_file2, NULL, NULL, &sat2);
+      fprintf(stderr, "done\n");
+
+      correlateJ(data_file1, corr_file1, &sat1, &sat2);
+
+      fprintf(stderr, "main: data printed to %s\n", data_file1);
+      fprintf(stderr, "main: correlation data printed to %s\n", corr_file1);
+
+      fprintf(stderr, "main: searching for northern J peaks in satellite 2...");
+      find_J_peaks(-23.0, -5.0, -100.0, peak_file1, prof_file1, NULL, NULL, &sat1);
+      fprintf(stderr, "done\n");
+
+      fprintf(stderr, "main: searching for northern J peaks in satellite 2...");
+      find_J_peaks(-23.0, -5.0, -100.0, peak_file2, prof_file2, NULL, NULL, &sat2);
+      fprintf(stderr, "done\n");
+
+      correlateJ(data_file2, corr_file2, &sat1, &sat2);
+
+      fprintf(stderr, "main: data printed to %s\n", data_file2);
+      fprintf(stderr, "main: correlation data printed to %s\n", corr_file2);
+    }
 
   peak_free(peak_workspace_p);
 

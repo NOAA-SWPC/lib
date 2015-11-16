@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'grav_B'
-outdir = 'grav_B/plots'
+logdir = 'grav_A'
+outdir = 'grav_A/plots'
 #logdir = 'WAMNET/data_C'
 #outdir = 'WAMNET/data_C/plots'
 
@@ -128,7 +128,7 @@ load 'xyborder.cfg'
 load 'incrow.cfg'
 
 set xlabel "residual norm ||y - A x||"
-set ylabel "solution norm ||x||
+set ylabel "solution norm ||x||"
 load 'lines.cfg'
 load 'xylogon.cfg'
 
