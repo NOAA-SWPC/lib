@@ -49,8 +49,8 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              15
-#define NMAX_SV              15
+#define NMAX_MF              5
+#define NMAX_SV              5
 #define NMAX_SA              12
 
 #define MAX_BUFFER           2048

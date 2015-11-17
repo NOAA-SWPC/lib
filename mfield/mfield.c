@@ -39,6 +39,7 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_multifit_nlin.h>
+#include <gsl/gsl_multilarge_nlin.h>
 #include <gsl/gsl_sf_legendre.h>
 
 #include "mfield_green.h"
@@ -100,6 +101,7 @@ mfield_workspace *
 mfield_alloc(const mfield_parameters *params)
 {
   mfield_workspace *w;
+  const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_lmnormal;
   const size_t plm_size = gsl_sf_legendre_array_n(params->nmax_mf);
   const size_t ntheta = 100;
   const size_t nphi = 100;
@@ -241,6 +243,15 @@ mfield_alloc(const mfield_parameters *params)
 
   w->niter = 0;
 
+  /* maximum observations to accumulate at once in LS system */
+  w->datablock = 20000;
+  
+  /* add factor 4 for (X,Y,Z,F) */
+  w->J = gsl_matrix_alloc(4 * w->datablock, w->p);
+  w->f = gsl_vector_alloc(4 * w->datablock);
+
+  w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, w->p);
+
   return w;
 } /* mfield_alloc() */
 
@@ -324,6 +335,15 @@ mfield_free(mfield_workspace *w)
 
   if (w->weight_workspace_p)
     track_weight_free(w->weight_workspace_p);
+
+  if (w->J)
+    gsl_matrix_free(w->J);
+
+  if (w->f)
+    gsl_vector_free(w->f);
+
+  if (w->nlinear_workspace_p)
+    gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
 
   free(w);
 } /* mfield_free() */

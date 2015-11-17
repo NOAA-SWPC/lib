@@ -12,6 +12,7 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_multifit_nlin.h>
+#include <gsl/gsl_multilarge_nlin.h>
 #include <gsl/gsl_histogram.h>
 
 #include "mfield_data.h"
@@ -19,7 +20,7 @@
 
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      0
+#define MFIELD_SYNTH_DATA      1
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
@@ -35,7 +36,7 @@
 #define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    1
+#define MFIELD_FIT_EXTFIELD    0
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)
@@ -127,7 +128,12 @@ typedef struct
   gsl_matrix *mat_dY;      /* dY/dg ndata-by-nnm */
   gsl_matrix *mat_dZ;      /* dZ/dg ndata-by-nnm */
   gsl_multifit_fdfridge *fdf_s;
+  gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
+  gsl_matrix *J;           /* Jacobian matrix, 4*obsblock-by-p */
+  gsl_vector *f;           /* residual vector, 4*obsblock-by-1 */
+  size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
+  size_t datablock;        /* maximum observations to accumulate at once in LS system */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   double lambda_mf;        /* main field damping */
   double lambda_sv;        /* SV damping */
