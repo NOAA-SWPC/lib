@@ -814,10 +814,8 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 static int
 mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
 {
-  int s = GSL_SUCCESS;
+  int s;
   mfield_workspace *w = (mfield_workspace *) params;
-  gsl_matrix *J = gsl_matrix_alloc(w->nres, w->p);
-  gsl_vector *f = gsl_vector_alloc(w->nres);
   gsl_matrix *dX = w->mat_dX;
   gsl_matrix *dY = w->mat_dY;
   gsl_matrix *dZ = w->mat_dZ;
@@ -828,14 +826,13 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
   size_t euler_idx = 0;
   double B_nec_alpha[3], B_nec_beta[3], B_nec_gamma[3];
   size_t i, j, k;
-  size_t ridx = 0; /* index of residual */
-  size_t didx = 0; /* index of data point */
+  size_t ridx = 0;   /* index of residual */
+  size_t didx = 0;   /* index of data point */
+  size_t dbidx = 0;  /* index of data point */
   size_t rowidx = 0; /* row index in (J,f) */
 
   /* avoid unused variable warnings */
   (void)extcoeff;
-
-  gsl_matrix_set_zero(J);
 
   /* loop over satellites */
   for (i = 0; i < w->nsat; ++i)
@@ -929,76 +926,113 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
 
           if (mptr->flags[j] & MAGDATA_FLG_X)
             {
-              gsl_vector_view Jv = gsl_matrix_row(J, ridx);
-
               /* set residual vector X component */
-              gsl_vector_set(f, ridx, B_total[0] - B_obs[0]);
+              gsl_vector_set(w->f, rowidx, B_total[0] - B_obs[0]);
 
-              mfield_jacobian_row(t, mptr->flags[j], &vx.vector,
-                                  extidx, dB_ext[0], euler_idx, B_nec_alpha[0],
-                                  B_nec_beta[0], B_nec_gamma[0], &Jv.vector, w);
+              if (eval_J)
+                {
+                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  mfield_jacobian_row(t, mptr->flags[j], &vx.vector,
+                                      extidx, dB_ext[0], euler_idx, B_nec_alpha[0],
+                                      B_nec_beta[0], B_nec_gamma[0], &Jv.vector, w);
+                }
 
               ++ridx;
+              ++rowidx;
             }
 
           if (mptr->flags[j] & MAGDATA_FLG_Y)
             {
-              gsl_vector_view Jv = gsl_matrix_row(J, ridx);
-
               /* set residual vector Y component */
-              gsl_vector_set(f, ridx, B_total[1] - B_obs[1]);
+              gsl_vector_set(w->f, rowidx, B_total[1] - B_obs[1]);
 
-              mfield_jacobian_row(t, mptr->flags[j], &vy.vector,
-                                  extidx, dB_ext[1], euler_idx, B_nec_alpha[1],
-                                  B_nec_beta[1], B_nec_gamma[1], &Jv.vector, w);
+              if (eval_J)
+                {
+                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  mfield_jacobian_row(t, mptr->flags[j], &vy.vector,
+                                      extidx, dB_ext[1], euler_idx, B_nec_alpha[1],
+                                      B_nec_beta[1], B_nec_gamma[1], &Jv.vector, w);
+                }
 
               ++ridx;
+              ++rowidx;
             }
 
           if (mptr->flags[j] & MAGDATA_FLG_Z)
             {
-              gsl_vector_view Jv = gsl_matrix_row(J, ridx);
-
               /* set residual vector Z component */
-              gsl_vector_set(f, ridx, B_total[2] - B_obs[2]);
+              gsl_vector_set(w->f, rowidx, B_total[2] - B_obs[2]);
 
-              mfield_jacobian_row(t, mptr->flags[j], &vz.vector,
-                                  extidx, dB_ext[2], euler_idx, B_nec_alpha[2],
-                                  B_nec_beta[2], B_nec_gamma[2], &Jv.vector, w);
+              if (eval_J)
+                {
+                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  mfield_jacobian_row(t, mptr->flags[j], &vz.vector,
+                                      extidx, dB_ext[2], euler_idx, B_nec_alpha[2],
+                                      B_nec_beta[2], B_nec_gamma[2], &Jv.vector, w);
+                }
 
               ++ridx;
+              ++rowidx;
             }
 
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
               MAGDATA_FitMF(mptr->flags[j]))
             {
-              gsl_vector_view Jv = gsl_matrix_row(J, ridx);
               double F_obs = mptr->F[j];
 
               B_total[3] = gsl_hypot3(B_total[0], B_total[1], B_total[2]);
 
               /* set scalar residual */
-              gsl_vector_set(f, ridx, B_total[3] - F_obs);
+              gsl_vector_set(w->f, rowidx, B_total[3] - F_obs);
 
-              mfield_jacobian_row_F(t, &vx.vector, &vy.vector, &vz.vector,
-                                    B_total, extidx, dB_ext, &Jv.vector, w);
+              if (eval_J)
+                {
+                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  mfield_jacobian_row_F(t, &vx.vector, &vy.vector, &vz.vector,
+                                        B_total, extidx, dB_ext, &Jv.vector, w);
+                }
 
               ++ridx;
+              ++rowidx;
+            }
+
+          ++dbidx;
+
+          if (dbidx == w->data_block)
+            {
+              gsl_matrix_view Jm = gsl_matrix_submatrix(w->J, 0, 0, rowidx, w->p);
+              gsl_vector_view fv = gsl_vector_subvector(w->f, 0, rowidx);
+
+              /* accumulate this (J,f) block into LS system */
+              s = gsl_multilarge_nlinear_waccumulate(NULL, &Jm.matrix, &fv.vector, work);
+              if (s)
+                return s;
+
+              /* reset for new block of observations */
+              rowidx = 0;
+              dbidx = 0;
             }
 
           ++didx;
         }
     }
 
+  /* check for 1 last block of observations to accumulate */
+  if (rowidx > 0)
+    {
+      gsl_matrix_view Jm = gsl_matrix_submatrix(w->J, 0, 0, rowidx, w->p);
+      gsl_vector_view fv = gsl_vector_subvector(w->f, 0, rowidx);
+
+      /* accumulate last (J,f) block into LS system */
+      s = gsl_multilarge_nlinear_waccumulate(NULL, &Jm.matrix, &fv.vector, work);
+      if (s)
+        return s;
+    }
+
   assert(ridx == w->nres);
+  assert(didx == w->ndata);
 
-  /* accumulate (J,f) into LS system */
-  s = gsl_multilarge_nlinear_waccumulate(w->wts_final, J, f, work);
-
-  gsl_matrix_free(J);
-  gsl_vector_free(f);
-
-  return s;
+  return GSL_SUCCESS;
 } /* mfield_calc_fdf() */
 
 /*
@@ -1028,6 +1062,8 @@ mfield_jacobian_row(const double t, const size_t flags, gsl_vector * dB_int,
                     const double B_nec_beta, const double B_nec_gamma,
                     gsl_vector *J, const mfield_workspace *w)
 {
+  gsl_vector_set_zero(J);
+
   /* check if fitting MF to this data point */
   if (MAGDATA_FitMF(flags))
     {
@@ -1099,6 +1135,8 @@ mfield_jacobian_row_F(const double t, gsl_vector * dX, gsl_vector * dY,
                       gsl_vector *J, const mfield_workspace *w)
 {
   size_t k;
+
+  gsl_vector_set_zero(J);
 
   /* compute (X dX + Y dY + Z dZ) */
   for (k = 0; k < w->nnm_mf; ++k)

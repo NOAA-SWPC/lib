@@ -27,7 +27,7 @@
 
 /* define to fit secular acceleration coefficients */
 #if MFIELD_FIT_SECVAR
-#define MFIELD_FIT_SECACC      0
+#define MFIELD_FIT_SECACC      1
 #else
 #define MFIELD_FIT_SECACC      0
 #endif
@@ -129,11 +129,11 @@ typedef struct
   gsl_matrix *mat_dZ;      /* dZ/dg ndata-by-nnm */
   gsl_multifit_fdfridge *fdf_s;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
-  gsl_matrix *J;           /* Jacobian matrix, 4*obsblock-by-p */
-  gsl_vector *f;           /* residual vector, 4*obsblock-by-1 */
+  gsl_matrix *J;           /* Jacobian matrix, 4*data_block-by-p */
+  gsl_vector *f;           /* residual vector, 4*data_block-by-1 */
   size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
-  size_t datablock;        /* maximum observations to accumulate at once in LS system */
+  size_t data_block;       /* maximum observations to accumulate at once in LS system */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   double lambda_mf;        /* main field damping */
   double lambda_sv;        /* SV damping */

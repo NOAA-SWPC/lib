@@ -244,11 +244,11 @@ mfield_alloc(const mfield_parameters *params)
   w->niter = 0;
 
   /* maximum observations to accumulate at once in LS system */
-  w->datablock = 20000;
+  w->data_block = 20000;
   
   /* add factor 4 for (X,Y,Z,F) */
-  w->J = gsl_matrix_alloc(4 * w->datablock, w->p);
-  w->f = gsl_vector_alloc(4 * w->datablock);
+  w->J = gsl_matrix_alloc(4 * w->data_block, w->p);
+  w->f = gsl_vector_alloc(4 * w->data_block);
 
   w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, w->p);
 
@@ -311,6 +311,9 @@ mfield_free(mfield_workspace *w)
 
   if (w->wts_spatial)
     gsl_vector_free(w->wts_spatial);
+
+  if (w->wts_final)
+    gsl_vector_free(w->wts_final);
 
   if (w->fdf_s)
     gsl_multifit_fdfridge_free(w->fdf_s);

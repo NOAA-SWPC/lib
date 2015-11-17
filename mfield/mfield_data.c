@@ -78,11 +78,23 @@ mfield_data_free(mfield_data_workspace *w)
   if (w->t1)
     free(w->t1);
 
-  if (w->mdata)
-    free(w->mdata);
-
   if (w->rstat_workspace_p)
     gsl_rstat_free(w->rstat_workspace_p);
+
+  if (w->mdata)
+    {
+      size_t i;
+
+      for (i = 0; i < w->nsources; ++i)
+        {
+          magdata *mdata = w->mdata[i];
+
+          if (mdata)
+            magdata_free(mdata);
+        }
+
+      free(w->mdata);
+    }
 
   free(w);
 }
