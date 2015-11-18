@@ -230,7 +230,6 @@ mfield_alloc(const mfield_parameters *params)
   gsl_histogram_set_ranges_uniform(w->hz, -40.0, 40.0);
 
   w->nobs_cnt = 0;
-  w->nobs_rej = 0;
 
   /* these are computed later in mfield_init() */
   w->t_mu = 0.0;
@@ -247,8 +246,17 @@ mfield_alloc(const mfield_parameters *params)
   w->data_block = 20000;
   
   /* add factor 4 for (X,Y,Z,F) */
-  w->J = gsl_matrix_alloc(4 * w->data_block, w->p);
-  w->f = gsl_vector_alloc(4 * w->data_block);
+  w->block_J = gsl_matrix_alloc(4 * w->data_block, w->p);
+  w->block_f = gsl_vector_alloc(4 * w->data_block);
+  w->wts = gsl_vector_alloc(4 * w->data_block);
+
+  w->block_dX = gsl_matrix_alloc(w->data_block, w->nnm_mf);
+  w->block_dY = gsl_matrix_alloc(w->data_block, w->nnm_mf);
+  w->block_dZ = gsl_matrix_alloc(w->data_block, w->nnm_mf);
+  w->fp_dX = fopen("mat/dX.dat", "w+");
+  w->fp_dY = fopen("mat/dY.dat", "w+");
+  w->fp_dZ = fopen("mat/dZ.dat", "w+");
+  w->accum = 1;
 
   w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, w->p);
 
@@ -339,11 +347,32 @@ mfield_free(mfield_workspace *w)
   if (w->weight_workspace_p)
     track_weight_free(w->weight_workspace_p);
 
-  if (w->J)
-    gsl_matrix_free(w->J);
+  if (w->block_J)
+    gsl_matrix_free(w->block_J);
 
-  if (w->f)
-    gsl_vector_free(w->f);
+  if (w->block_f)
+    gsl_vector_free(w->block_f);
+
+  if (w->wts)
+    gsl_vector_free(w->wts);
+
+  if (w->block_dX)
+    gsl_matrix_free(w->block_dX);
+
+  if (w->block_dY)
+    gsl_matrix_free(w->block_dY);
+
+  if (w->block_dZ)
+    gsl_matrix_free(w->block_dZ);
+
+  if (w->fp_dX)
+    fclose(w->fp_dX);
+
+  if (w->fp_dY)
+    fclose(w->fp_dY);
+
+  if (w->fp_dZ)
+    fclose(w->fp_dZ);
 
   if (w->nlinear_workspace_p)
     gsl_multilarge_nlinear_free(w->nlinear_workspace_p);

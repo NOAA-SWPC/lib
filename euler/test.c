@@ -80,7 +80,7 @@ int
 main(int argc, char *argv[])
 {
   euler_workspace *euler_p;
-  char *euler_file = "euler.HL.0";
+  char *euler_file = "euler.0";
 
   fprintf(stderr, "main: reading Euler angles from %s...", euler_file);
   euler_p = euler_read(euler_file);

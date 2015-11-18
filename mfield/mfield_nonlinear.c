@@ -20,6 +20,8 @@ static inline int mfield_jacobian_row_F(const double t, gsl_vector * dX, gsl_vec
                                         gsl_vector *J, const mfield_workspace *w);
 static int mfield_nonlinear_matrices(gsl_matrix *dX, gsl_matrix *dY,
                                      gsl_matrix *dZ, mfield_workspace *w);
+static int mfield_nonlinear_matrices2(mfield_workspace *w);
+static int mfield_read_matrix_block(const size_t nblock, mfield_workspace *w);
 static double mfield_nonlinear_model_int(const double t, const gsl_vector *v,
                                          const gsl_vector *g, mfield_workspace *w);
 static int mfield_nonlinear_model_ext(const double r, const double theta,
@@ -49,11 +51,11 @@ mfield_calc_nonlinear()
   Solve linear least squares system, using previously stored
 satellite data
 
-Inputs: c - (input/output)
-            on input, initial guess for coefficient vector
-            on output, final coefficients
-            units of nT, nT/year, nT/year^2
-        w - workspace
+Inputs: c    - (input/output)
+               on input, initial guess for coefficient vector
+               on output, final coefficients
+               units of nT, nT/year, nT/year^2
+        w    - workspace
 
 Notes:
 1) On input, w->data_workspace_p must be filled with satellite data
@@ -113,31 +115,42 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   mfield_print_residuals(1, fp_res, NULL, NULL, NULL);
 
   /* compute robust weights with coefficients from previous iteration */
-  {
-    size_t i;
+  if (w->niter > 0)
+    {
+      size_t i;
 
-    /* compute f = Y_model - y_data with previous coefficients */
-    mfield_calc_f(c, w, w->fvec);
+      /* compute f = Y_model - y_data with previous coefficients */
+#if 0
+      mfield_calc_f(c, w, w->fvec);
+#else
+      w->accum = 0;
+      mfield_calc_fdf(0, c, w, NULL);
+      w->accum = 1;
+#endif
 
-    gsl_vector_memcpy(w->wfvec, w->fvec);
+      gsl_vector_memcpy(w->wfvec, w->fvec);
 
-    /* compute weighted residuals r = sqrt(W) (Y - y) */
-    for (i = 0; i < n; ++i)
-      {
-        double wi = gsl_vector_get(w->wts_spatial, i);
-        double *ri = gsl_vector_ptr(w->wfvec, i);
+      /* compute weighted residuals r = sqrt(W) (Y - y) */
+      for (i = 0; i < n; ++i)
+        {
+          double wi = gsl_vector_get(w->wts_spatial, i);
+          double *ri = gsl_vector_ptr(w->wfvec, i);
 
-        *ri *= sqrt(wi);
-      }
+          *ri *= sqrt(wi);
+        }
 
-    /* compute robust weights */
-    gsl_multifit_robust_weights(w->wfvec, w->wts_final, w->robust_workspace_p);
+      /* compute robust weights */
+      gsl_multifit_robust_weights(w->wfvec, w->wts_final, w->robust_workspace_p);
 
-    mfield_print_residuals(0, fp_res, w->fvec, w->wts_final, w->wts_spatial);
+      mfield_print_residuals(0, fp_res, w->fvec, w->wts_final, w->wts_spatial);
 
-    /* compute final weights = wts_robust .* wts_spatial */
-    gsl_vector_mul(w->wts_final, w->wts_spatial);
-  }
+      /* compute final weights = wts_robust .* wts_spatial */
+      gsl_vector_mul(w->wts_final, w->wts_spatial);
+    }
+  else
+    {
+      gsl_vector_memcpy(w->wts_final, w->wts_spatial);
+    }
 
   fprintf(stderr, "mfield_calc_nonlinear: wrote residuals to %s\n",
           resfile);
@@ -311,6 +324,12 @@ mfield_init_nonlinear(mfield_workspace *w)
     {
       GSL_ERROR("error allocating dX, dY, dZ", GSL_ENOMEM);
     }
+
+  fprintf(stderr, "mfield_init_nonlinear: writing matrices for nonlinear fit...");
+  gettimeofday(&tv0, NULL);
+  mfield_nonlinear_matrices2(w);
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   fprintf(stderr, "mfield_init_nonlinear: building matrices for nonlinear fit...");
   gettimeofday(&tv0, NULL);
@@ -811,14 +830,23 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
   return s;
 } /* mfield_calc_df() */
 
+/*
+mfield_calc_fdf()
+  Accumulate Jacobian and residual vector (J,f) into nonlinear LS
+solver
+
+Notes:
+1) On output, w->fvec contains full residual vector
+
+2) If w->accum == 0, then (J,f) are NOT accumulated into LS workspace,
+   but w->fvec is still computed
+*/
+
 static int
 mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
 {
   int s;
   mfield_workspace *w = (mfield_workspace *) params;
-  gsl_matrix *dX = w->mat_dX;
-  gsl_matrix *dY = w->mat_dY;
-  gsl_matrix *dZ = w->mat_dZ;
   double dB_ext[3] = { 0.0, 0.0, 0.0 };
   double B_extcorr[3] = { 0.0, 0.0, 0.0 }; /* external field correction model */
   size_t extidx = 0;
@@ -826,13 +854,20 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
   size_t euler_idx = 0;
   double B_nec_alpha[3], B_nec_beta[3], B_nec_gamma[3];
   size_t i, j, k;
-  size_t ridx = 0;   /* index of residual */
-  size_t didx = 0;   /* index of data point */
-  size_t dbidx = 0;  /* index of data point */
-  size_t rowidx = 0; /* row index in (J,f) */
+  size_t ridx = 0;   /* index of residual in [0:nres-1] */
+  size_t didx = 0;   /* index of data point in [0:ndata-1] */
+  size_t dbidx = 0;  /* index of data point in current block, [0:data_block-1] */
+  size_t rowidx = 0; /* row index in (J,f) in [0:4*data_block-1] */
+  size_t nblock = 0; /* number of row blocks accumulated */
 
   /* avoid unused variable warnings */
   (void)extcoeff;
+
+  /*
+   * read first block of internal Green's functions from disk,
+   * stored in w->block_{dX,dY,dZ}
+   */
+  mfield_read_matrix_block(nblock, w);
 
   /* loop over satellites */
   for (i = 0; i < w->nsat; ++i)
@@ -855,9 +890,9 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
-          vx = gsl_matrix_row(dX, didx);
-          vy = gsl_matrix_row(dY, didx);
-          vz = gsl_matrix_row(dZ, didx);
+          vx = gsl_matrix_row(w->block_dX, dbidx);
+          vy = gsl_matrix_row(w->block_dY, dbidx);
+          vz = gsl_matrix_row(w->block_dZ, dbidx);
 
           /* compute internal field model */
           B_int[0] = mfield_nonlinear_model_int(t, &vx.vector, x, w);
@@ -927,11 +962,15 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
           if (mptr->flags[j] & MAGDATA_FLG_X)
             {
               /* set residual vector X component */
-              gsl_vector_set(w->f, rowidx, B_total[0] - B_obs[0]);
+              gsl_vector_set(w->block_f, rowidx, B_total[0] - B_obs[0]);
+              gsl_vector_set(w->fvec, ridx, B_total[0] - B_obs[0]);
+
+              /* store data weight for this observation */
+              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
               if (eval_J)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row(t, mptr->flags[j], &vx.vector,
                                       extidx, dB_ext[0], euler_idx, B_nec_alpha[0],
                                       B_nec_beta[0], B_nec_gamma[0], &Jv.vector, w);
@@ -944,11 +983,15 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
           if (mptr->flags[j] & MAGDATA_FLG_Y)
             {
               /* set residual vector Y component */
-              gsl_vector_set(w->f, rowidx, B_total[1] - B_obs[1]);
+              gsl_vector_set(w->block_f, rowidx, B_total[1] - B_obs[1]);
+              gsl_vector_set(w->fvec, ridx, B_total[1] - B_obs[1]);
+
+              /* store data weight for this observation */
+              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
               if (eval_J)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row(t, mptr->flags[j], &vy.vector,
                                       extidx, dB_ext[1], euler_idx, B_nec_alpha[1],
                                       B_nec_beta[1], B_nec_gamma[1], &Jv.vector, w);
@@ -961,11 +1004,15 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
           if (mptr->flags[j] & MAGDATA_FLG_Z)
             {
               /* set residual vector Z component */
-              gsl_vector_set(w->f, rowidx, B_total[2] - B_obs[2]);
+              gsl_vector_set(w->block_f, rowidx, B_total[2] - B_obs[2]);
+              gsl_vector_set(w->fvec, ridx, B_total[2] - B_obs[2]);
+
+              /* store data weight for this observation */
+              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
               if (eval_J)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row(t, mptr->flags[j], &vz.vector,
                                       extidx, dB_ext[2], euler_idx, B_nec_alpha[2],
                                       B_nec_beta[2], B_nec_gamma[2], &Jv.vector, w);
@@ -983,11 +1030,15 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
               B_total[3] = gsl_hypot3(B_total[0], B_total[1], B_total[2]);
 
               /* set scalar residual */
-              gsl_vector_set(w->f, rowidx, B_total[3] - F_obs);
+              gsl_vector_set(w->block_f, rowidx, B_total[3] - F_obs);
+              gsl_vector_set(w->fvec, ridx, B_total[3] - F_obs);
+
+              /* store data weight for this observation */
+              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
               if (eval_J)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->J, rowidx);
+                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row_F(t, &vx.vector, &vy.vector, &vz.vector,
                                         B_total, extidx, dB_ext, &Jv.vector, w);
                 }
@@ -996,21 +1047,27 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
               ++rowidx;
             }
 
-          ++dbidx;
-
-          if (dbidx == w->data_block)
+          if (++dbidx == w->data_block)
             {
-              gsl_matrix_view Jm = gsl_matrix_submatrix(w->J, 0, 0, rowidx, w->p);
-              gsl_vector_view fv = gsl_vector_subvector(w->f, 0, rowidx);
+              gsl_matrix_view Jm = gsl_matrix_submatrix(w->block_J, 0, 0, rowidx, w->p);
+              gsl_vector_view fv = gsl_vector_subvector(w->block_f, 0, rowidx);
+              gsl_vector_view wv = gsl_vector_subvector(w->wts, 0, rowidx);
 
               /* accumulate this (J,f) block into LS system */
-              s = gsl_multilarge_nlinear_waccumulate(NULL, &Jm.matrix, &fv.vector, work);
-              if (s)
-                return s;
+              if (w->accum)
+                {
+                  s = gsl_multilarge_nlinear_waccumulate(&wv.vector, &Jm.matrix, &fv.vector, work);
+                  if (s)
+                    return s;
+                }
 
               /* reset for new block of observations */
               rowidx = 0;
               dbidx = 0;
+
+              /* read next block of internal Green's functions from disk */
+              ++nblock;
+              mfield_read_matrix_block(nblock, w);
             }
 
           ++didx;
@@ -1018,13 +1075,14 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
     }
 
   /* check for 1 last block of observations to accumulate */
-  if (rowidx > 0)
+  if (rowidx > 0 && w->accum == 1)
     {
-      gsl_matrix_view Jm = gsl_matrix_submatrix(w->J, 0, 0, rowidx, w->p);
-      gsl_vector_view fv = gsl_vector_subvector(w->f, 0, rowidx);
+      gsl_matrix_view Jm = gsl_matrix_submatrix(w->block_J, 0, 0, rowidx, w->p);
+      gsl_vector_view fv = gsl_vector_subvector(w->block_f, 0, rowidx);
+      gsl_vector_view wv = gsl_vector_subvector(w->wts, 0, rowidx);
 
       /* accumulate last (J,f) block into LS system */
-      s = gsl_multilarge_nlinear_waccumulate(NULL, &Jm.matrix, &fv.vector, work);
+      s = gsl_multilarge_nlinear_waccumulate(&wv.vector, &Jm.matrix, &fv.vector, work);
       if (s)
         return s;
     }
@@ -1230,6 +1288,138 @@ mfield_nonlinear_matrices(gsl_matrix *dX, gsl_matrix *dY,
 
   return s;
 } /* mfield_nonlinear_matrices() */
+
+/*
+mfield_nonlinear_matrices2()
+  Precompute matrices to evaluate residual vector and Jacobian
+quickly in calc_fdf
+
+The ndata-by-nnm_mf matrices computed are:
+
+[dX] = dX/dg
+[dY] = dY/dg
+[dZ] = dZ/dg
+
+Inputs: w - workspace
+
+Notes:
+1) w->block_{dX,dY,dZ} are used to construct row blocks
+of matrices, which are then written to disk
+*/
+
+static int
+mfield_nonlinear_matrices2(mfield_workspace *w)
+{
+  int s = GSL_SUCCESS;
+  size_t i, j;
+  size_t idx = 0;
+
+  for (i = 0; i < w->nsat; ++i)
+    {
+      magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      size_t n;
+      int m;
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          double r = mptr->r[j];
+          double theta = mptr->theta[j];
+          double phi = mptr->phi[j];
+
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          /* compute basis functions for spherical harmonic expansions */
+          mfield_green(r, theta, phi, w);
+
+          for (n = 1; n <= w->nmax_mf; ++n)
+            {
+              int ni = (int) n;
+
+              for (m = -ni; m <= ni; ++m)
+                {
+                  size_t cidx = mfield_coeff_nmidx(n, m);
+
+                  gsl_matrix_set(w->block_dX, idx, cidx, w->dX[cidx]);
+                  gsl_matrix_set(w->block_dY, idx, cidx, w->dY[cidx]);
+                  gsl_matrix_set(w->block_dZ, idx, cidx, w->dZ[cidx]);
+                }
+            }
+
+          if (++idx == w->data_block)
+            {
+              /* write this block of rows to disk */
+              gsl_matrix_fwrite(w->fp_dX, w->block_dX);
+              gsl_matrix_fwrite(w->fp_dY, w->block_dY);
+              gsl_matrix_fwrite(w->fp_dZ, w->block_dZ);
+              idx = 0;
+            }
+        } /* for (j = 0; j < mptr->n; ++j) */
+    } /* for (i = 0; i < w->nsat; ++i) */
+
+  /* check for final partial block and write to disk */
+  if (idx > 0)
+    {
+      gsl_matrix_view m;
+
+      m = gsl_matrix_submatrix(w->block_dX, 0, 0, idx, w->nnm_mf);
+      gsl_matrix_fwrite(w->fp_dX, &m.matrix);
+
+      m = gsl_matrix_submatrix(w->block_dY, 0, 0, idx, w->nnm_mf);
+      gsl_matrix_fwrite(w->fp_dY, &m.matrix);
+
+      m = gsl_matrix_submatrix(w->block_dZ, 0, 0, idx, w->nnm_mf);
+      gsl_matrix_fwrite(w->fp_dZ, &m.matrix);
+    }
+
+  return s;
+} /* mfield_nonlinear_matrices() */
+
+/*
+mfield_read_matrix_block()
+  Read a block of rows from the dX, dY, dZ matrices
+previously stored to disk
+
+Inputs: nblock - which block to read, [0:max_block-1], where
+                 max_block = ndata / data_block
+        w      - workspace
+
+Return: success/error
+
+Notes:
+1) This function is designed to be called in-order with successive blocks,
+nblock = 0, 1, 2, ...
+
+2) The current block is stored in w->block_{dX,dY,dZ}
+*/
+
+static int
+mfield_read_matrix_block(const size_t nblock, mfield_workspace *w)
+{
+  /* number of rows left in file */
+  const size_t nleft = w->ndata - nblock * w->data_block;
+
+  /* number of rows in current block */
+  const size_t nrows = GSL_MIN(nleft, w->data_block);
+
+  gsl_matrix_view mx = gsl_matrix_submatrix(w->block_dX, 0, 0, nrows, w->nnm_mf);
+  gsl_matrix_view my = gsl_matrix_submatrix(w->block_dY, 0, 0, nrows, w->nnm_mf);
+  gsl_matrix_view mz = gsl_matrix_submatrix(w->block_dZ, 0, 0, nrows, w->nnm_mf);
+
+  if (nblock == 0)
+    {
+      /* rewind file pointers to beginning of file */
+      fseek(w->fp_dX, 0L, SEEK_SET);
+      fseek(w->fp_dY, 0L, SEEK_SET);
+      fseek(w->fp_dZ, 0L, SEEK_SET);
+    }
+
+  gsl_matrix_fread(w->fp_dX, &mx.matrix);
+  gsl_matrix_fread(w->fp_dY, &my.matrix);
+  gsl_matrix_fread(w->fp_dZ, &mz.matrix);
+
+  return GSL_SUCCESS;
+}
 
 /*
 mfield_nonlinear_model_int()

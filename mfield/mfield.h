@@ -20,14 +20,14 @@
 
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      1
+#define MFIELD_SYNTH_DATA      0
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
 
 /* define to fit secular acceleration coefficients */
 #if MFIELD_FIT_SECVAR
-#define MFIELD_FIT_SECACC      1
+#define MFIELD_FIT_SECACC      0
 #else
 #define MFIELD_FIT_SECACC      0
 #endif
@@ -36,7 +36,7 @@
 #define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    0
+#define MFIELD_FIT_EXTFIELD    1
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)
@@ -78,7 +78,6 @@ typedef struct
   size_t p_int;     /* number of model coefficients for internal field only */
 
   size_t nobs_cnt;
-  size_t nobs_rej;
 
   double *t;        /* data timestamps minus epoch (t - t0) in units of years */
   double t_mu;      /* time array mean (years) */
@@ -122,22 +121,31 @@ typedef struct
   gsl_histogram *hz; /* histogram of Z residuals */
 
   /* nonlinear least squares parameters */
-  gsl_vector *wts_spatial; /* spatial weights */
-  gsl_vector *wts_final;   /* final weights (robust x spatial) */
+  gsl_vector *wts_spatial; /* spatial weights, nres-by-1 */
+  gsl_vector *wts_final;   /* final weights (robust x spatial), nres-by-1 */
   gsl_matrix *mat_dX;      /* dX/dg ndata-by-nnm */
   gsl_matrix *mat_dY;      /* dY/dg ndata-by-nnm */
   gsl_matrix *mat_dZ;      /* dZ/dg ndata-by-nnm */
   gsl_multifit_fdfridge *fdf_s;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
-  gsl_matrix *J;           /* Jacobian matrix, 4*data_block-by-p */
-  gsl_vector *f;           /* residual vector, 4*data_block-by-1 */
+  gsl_matrix *block_J;     /* Jacobian matrix block, 4*data_block-by-p */
+  gsl_vector *block_f;     /* residual vector block, 4*data_block-by-1 */
+  gsl_vector *wts;         /* weights vector, 4*data_block-by-1 */
   size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
+  int accum;               /* flag to turn on/off accumulation in calc_fdf() */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   double lambda_mf;        /* main field damping */
   double lambda_sv;        /* SV damping */
   double lambda_sa;        /* SA damping */
+
+  gsl_matrix *block_dX;    /* dX/dg data_block-by-nnm_mf */
+  gsl_matrix *block_dY;    /* dY/dg data_block-by-nnm_mf */
+  gsl_matrix *block_dZ;    /* dZ/dg data_block-by-nnm_mf */
+  FILE *fp_dX;             /* file containing dX block matrices */
+  FILE *fp_dY;             /* file containing dX block matrices */
+  FILE *fp_dZ;             /* file containing dX block matrices */
 
   gsl_vector *fvec;        /* residual vector for robust weights */
   gsl_vector *wfvec;       /* weighted residual vector */
