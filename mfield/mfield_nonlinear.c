@@ -196,9 +196,9 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
       fprintf(stderr, "mfield_calc_nonlinear: number of iterations: %zu\n",
               gsl_multilarge_nlinear_niter(w->nlinear_workspace_p));
       fprintf(stderr, "mfield_calc_nonlinear: function evaluations: %zu\n",
-              f.nevalf);
+              f2.nevalf);
       fprintf(stderr, "mfield_calc_nonlinear: Jacobian evaluations: %zu\n",
-              f.nevaldf);
+              f2.nevaldf);
       fprintf(stderr, "mfield_calc_nonlinear: reason for stopping: %d\n", info);
       fprintf(stderr, "mfield_calc_nonlinear: initial residual: %.12e\n", res0);
       fprintf(stderr, "mfield_calc_nonlinear: final residual: %.12e\n",
