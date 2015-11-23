@@ -20,7 +20,7 @@
 
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      0
+#define MFIELD_SYNTH_DATA      1
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
@@ -36,7 +36,7 @@
 #define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    1
+#define MFIELD_FIT_EXTFIELD    0
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)

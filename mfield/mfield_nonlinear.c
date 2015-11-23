@@ -206,7 +206,7 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
     }
   else
     {
-      fprintf(stderr, "mfield_calc_nonlinear: fdfridge failed: %s\n",
+      fprintf(stderr, "mfield_calc_nonlinear: failed: %s\n",
               gsl_strerror(s));
     }
 
@@ -843,7 +843,7 @@ Notes:
 */
 
 static int
-mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
+mfield_calc_fdf(const int evaldf, const gsl_vector *x, void *params, void *work)
 {
   int s;
   mfield_workspace *w = (mfield_workspace *) params;
@@ -968,7 +968,7 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
               /* store data weight for this observation */
               gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
-              if (eval_J)
+              if (evaldf)
                 {
                   gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row(t, mptr->flags[j], &vx.vector,
@@ -989,7 +989,7 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
               /* store data weight for this observation */
               gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
-              if (eval_J)
+              if (evaldf)
                 {
                   gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row(t, mptr->flags[j], &vy.vector,
@@ -1010,7 +1010,7 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
               /* store data weight for this observation */
               gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
-              if (eval_J)
+              if (evaldf)
                 {
                   gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row(t, mptr->flags[j], &vz.vector,
@@ -1036,7 +1036,7 @@ mfield_calc_fdf(const int eval_J, const gsl_vector *x, void *params, void *work)
               /* store data weight for this observation */
               gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
 
-              if (eval_J)
+              if (evaldf)
                 {
                   gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
                   mfield_jacobian_row_F(t, &vx.vector, &vy.vector, &vz.vector,
