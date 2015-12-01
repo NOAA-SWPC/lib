@@ -101,7 +101,7 @@ mfield_workspace *
 mfield_alloc(const mfield_parameters *params)
 {
   mfield_workspace *w;
-  const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_lmnormal;
+  const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_lmnielsen;
   const size_t plm_size = gsl_sf_legendre_array_n(params->nmax_mf);
   const size_t ntheta = 100;
   const size_t nphi = 100;
@@ -151,8 +151,8 @@ mfield_alloc(const mfield_parameters *params)
 #endif
 
   /* total (internal) model coefficients */
-  w->p = w->nnm_mf + w->nnm_sv + w->nnm_sa;
-  w->p_int = w->p;
+  w->p_int = w->nnm_mf + w->nnm_sv + w->nnm_sa;
+  w->p = w->p_int;
 
 #if MFIELD_FIT_EULER
   if (w->data_workspace_p)
@@ -243,12 +243,15 @@ mfield_alloc(const mfield_parameters *params)
   w->niter = 0;
 
   /* maximum observations to accumulate at once in LS system */
-  w->data_block = 20000;
+  w->data_block = MFIELD_BLOCK_SIZE;
   
   /* add factor 4 for (X,Y,Z,F) */
   w->block_J = gsl_matrix_alloc(4 * w->data_block, w->p);
   w->block_f = gsl_vector_alloc(4 * w->data_block);
   w->wts = gsl_vector_alloc(4 * w->data_block);
+
+  w->JTJ_vec = gsl_matrix_alloc(w->p_int, w->p_int);
+  w->JTJ_tmp = gsl_vector_alloc(w->p_int);
 
   w->block_dX = gsl_matrix_alloc(w->data_block, w->nnm_mf);
   w->block_dY = gsl_matrix_alloc(w->data_block, w->nnm_mf);
@@ -256,7 +259,6 @@ mfield_alloc(const mfield_parameters *params)
   w->fp_dX = fopen("mat/dX.dat", "w+");
   w->fp_dY = fopen("mat/dY.dat", "w+");
   w->fp_dZ = fopen("mat/dZ.dat", "w+");
-  w->accum = 1;
 
   w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, w->p);
 
@@ -355,6 +357,12 @@ mfield_free(mfield_workspace *w)
 
   if (w->wts)
     gsl_vector_free(w->wts);
+
+  if (w->JTJ_vec)
+    gsl_matrix_free(w->JTJ_vec);
+
+  if (w->JTJ_tmp)
+    gsl_vector_free(w->JTJ_tmp);
 
   if (w->block_dX)
     gsl_matrix_free(w->block_dX);

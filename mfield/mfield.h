@@ -27,7 +27,7 @@
 
 /* define to fit secular acceleration coefficients */
 #if MFIELD_FIT_SECVAR
-#define MFIELD_FIT_SECACC      0
+#define MFIELD_FIT_SECACC      1
 #else
 #define MFIELD_FIT_SECACC      0
 #endif
@@ -42,6 +42,10 @@
 #define MFIELD_EPOCH          (2014.0)
 
 #define MFIELD_RE_KM          (6371.2)
+
+/* number of observations to accumulate at once in LS system;
+ * this includes the (X,Y,Z,F) 4-plet */
+#define MFIELD_BLOCK_SIZE     10000
 
 typedef struct
 {
@@ -134,11 +138,36 @@ typedef struct
   size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
-  int accum;               /* flag to turn on/off accumulation in calc_fdf() */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   double lambda_mf;        /* main field damping */
   double lambda_sv;        /* SV damping */
   double lambda_sa;        /* SA damping */
+
+  /*
+   * The Jacobian is organized as follows:
+   *
+   * J = [ J_mf    | J_sv    | J_sa    | J_euler(x) | J_ext(x) ] vector
+   *     [ J_mf(x) | J_sv(x) | J_sa(x) |     0      | J_ext(x) ] scalar
+   *
+   * J_mf, J_sv, and J_sa are constant for vector
+   * residuals, and depend on the model parameters x
+   * for scalar residuals. J_euler is 0 for scalar
+   * residuals and depends on x for vector.
+   * J_ext depends on x for both vector and scalar residuals.
+   * J_euler and J_ext have significant sparse structure.
+   *
+   * For each iteration, we need to compute J^T J. This is
+   * organized as:
+   *
+   * J^T J = [ JTJ_11 |    x   |    x   ]
+   *         [ JTJ_21 | JTJ_22 |    x   ]
+   *         [ JTJ_31 | JTJ_32 | JTJ_33 ]
+   *
+   * where we only need to compute the lower triangle since
+   * the matrix is symmetric
+   */
+  gsl_matrix *JTJ_vec;     /* J_mf^T J_mf for vector measurements, p_int-by-p_int */
+  gsl_vector *JTJ_tmp;     /* temporary workspace, p_int-by-1 */
 
   gsl_matrix *block_dX;    /* dX/dg data_block-by-nnm_mf */
   gsl_matrix *block_dY;    /* dY/dg data_block-by-nnm_mf */
