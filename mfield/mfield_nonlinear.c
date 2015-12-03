@@ -1,5 +1,4 @@
 #define OLD_FDF     1
-#define NEW_FDF_VEC 1
 
 typedef struct
 {
@@ -18,25 +17,26 @@ static inline int mfield_jacobian_row(const double t, const size_t flags, gsl_ve
                                       const size_t euler_idx, const double B_nec_alpha,
                                       const double B_nec_beta, const double B_nec_gamma,
                                       gsl_vector *J, const mfield_workspace *w);
-static inline int mfield_jacobian_row2(const double t, const size_t flags, gsl_vector * dB_int,
-                                       const double f, const size_t extidx, const double dB_ext,
-                                       const size_t euler_idx, const double B_nec_alpha,
+static inline int mfield_jacobian_row2(const double t, const size_t flags, const double weight,
+                                       gsl_vector * dB_int, const double f, const size_t extidx,
+                                       const double dB_ext, const size_t euler_idx, const double B_nec_alpha,
                                        const double B_nec_beta, const double B_nec_gamma,
-                                       gsl_vector *J, gsl_matrix *JTJ, gsl_vector *JTf,
-                                       const mfield_workspace *w);
+                                       gsl_matrix *JTJ, gsl_vector *JTf, const mfield_workspace *w);
 static inline int mfield_jacobian_row_F(const double t, gsl_vector * dX, gsl_vector * dY,
                                         gsl_vector * dZ, const double B_model[4],
                                         const size_t extidx, const double dB_ext[3],
                                         gsl_vector *J, const mfield_workspace *w);
-static inline int mfield_jacobian_row_F2(const double t, const double f, gsl_vector * dX,
-                                         gsl_vector * dY, gsl_vector * dZ, const double B_model[4],
-                                         const size_t extidx, const double dB_ext[3],
-                                         gsl_vector *J, gsl_matrix *JTJ, gsl_vector *JTf,
+static inline int mfield_jacobian_row_F2(const double t, const double f, const double weight,
+                                         gsl_vector * dX, gsl_vector * dY, gsl_vector * dZ,
+                                         const double B_model[4], const size_t extidx, const double dB_ext[3],
+                                         gsl_vector *J_int, gsl_matrix *JTJ, gsl_vector *JTf,
                                          const mfield_workspace *w);
 static int mfield_nonlinear_matrices(gsl_matrix *dX, gsl_matrix *dY,
                                      gsl_matrix *dZ, mfield_workspace *w);
 static int mfield_nonlinear_matrices2(mfield_workspace *w);
-static int mfield_vector_green(const double t, const double *g, gsl_vector *G, mfield_workspace *w);
+static int mfield_nonlinear_vector_precompute(const gsl_vector *weights, mfield_workspace *w);
+static int mfield_vector_green(const double t, const double weight, const gsl_vector *g,
+                               gsl_vector *G, mfield_workspace *w);
 static int mfield_read_matrix_block(const size_t nblock, mfield_workspace *w);
 static double mfield_nonlinear_model_int(const double t, const gsl_vector *v,
                                          const gsl_vector *g, mfield_workspace *w);
@@ -146,6 +146,8 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
       mfield_calc_f(c, w, w->fvec);
 #else
       double normf;
+
+      /* compute residuals in w->fvec */
       mfield_calc_fdf(c, NULL, NULL, &normf, w);
 #endif
 
@@ -190,6 +192,12 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
 #endif
 
 #if !OLD_FDF
+
+  fprintf(stderr, "mfield_calc_nonlinear: precomputing vector J_int^T W J_int...");
+  gettimeofday(&tv0, NULL);
+  mfield_nonlinear_vector_precompute(w->wts_final, w);
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   fprintf(stderr, "mfield_calc_nonlinear: initializing multilarge...");
   gettimeofday(&tv0, NULL);
@@ -307,9 +315,28 @@ mfield_init_nonlinear(mfield_workspace *w)
   const size_t p = w->p;        /* number of coefficients */
   const size_t nnm = w->nnm_mf; /* number of (n,m) harmonics */
   size_t ndata = 0;             /* number of distinct data points */
-  size_t nres = 0;              /* number of residuals */
+  size_t nres = 0;              /* total number of residuals */
+  size_t nres_scal = 0;         /* number of scalar residuals */
+  size_t nres_vec = 0;          /* number of vector residuals */
   struct timeval tv0, tv1;
   size_t i, j;
+
+#if 0
+  /* XXX only vector residuals */
+  for (i = 0; i < w->nsat; ++i)
+    {
+      magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          /* check if data point is discarded due to time interval */
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          mptr->flags[j] &= ~MAGDATA_FLG_F;
+        }
+    }
+#endif
 
   /* count total number of residuals */
   for (i = 0; i < w->nsat; ++i)
@@ -323,22 +350,26 @@ mfield_init_nonlinear(mfield_workspace *w)
             continue;
 
           if (mptr->flags[j] & MAGDATA_FLG_X)
-            ++nres;
+            ++nres_vec;
           if (mptr->flags[j] & MAGDATA_FLG_Y)
-            ++nres;
+            ++nres_vec;
           if (mptr->flags[j] & MAGDATA_FLG_Z)
-            ++nres;
+            ++nres_vec;
 
           /* don't increase nres if only fitting Euler angles */
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
               MAGDATA_FitMF(mptr->flags[j]))
-            ++nres;
+            ++nres_scal;
 
           ++ndata;
         }
     }
 
-  fprintf(stderr, "mfield_init_nonlinear: %zu total data points\n", ndata);
+  nres = nres_scal + nres_vec;
+
+  fprintf(stderr, "mfield_init_nonlinear: %zu distinct data points\n", ndata);
+  fprintf(stderr, "mfield_init_nonlinear: %zu scalar residuals\n", nres_scal);
+  fprintf(stderr, "mfield_init_nonlinear: %zu vector residuals\n", nres_vec);
   fprintf(stderr, "mfield_init_nonlinear: %zu total residuals\n", nres);
   fprintf(stderr, "mfield_init_nonlinear: %zu total parameters\n", p);
 
@@ -1155,7 +1186,7 @@ mfield_calc_fdf(const gsl_vector *x, gsl_matrix *JTJ,
 #endif
     }
 
-#if 0
+#if 1
   print_octave(JTJ, "JTJ1");
   printv_octave(JTf, "JTf1");
   exit(1);
@@ -1191,8 +1222,11 @@ mfield_calc_fdf2(const gsl_vector *x, gsl_matrix *JTJ,
   size_t ridx = 0;   /* index of residual in [0:nres-1] */
   size_t didx = 0;   /* index of data point in [0:ndata-1] */
   size_t dbidx = 0;  /* index of data point in current block, [0:data_block-1] */
-  size_t rowidx = 0; /* row index in (J,f) in [0:4*data_block-1] */
-  size_t nblock = 0; /* number of row blocks accumulated */
+  size_t nblock = 0; /* number of row blocks processed */
+  size_t rowidx = 0; /* row index for block accumulation of scalar residual J_int */
+
+  /* internal field portion of J^T J */
+  gsl_matrix_view JTJ_int;
 
   /* avoid unused variable warnings */
   (void)extcoeff;
@@ -1202,12 +1236,11 @@ mfield_calc_fdf2(const gsl_vector *x, gsl_matrix *JTJ,
     {
       gsl_matrix_set_zero(JTJ);
       gsl_vector_set_zero(JTf);
-#if NEW_FDF_VEC
-      {
-        gsl_matrix_view m = gsl_matrix_submatrix(JTJ, 0, 0, w->p_int, w->p_int);
-        gsl_matrix_tricpy('L', 1, &m.matrix, w->JTJ_vec);
-      }
-#endif
+
+      /* copy previously computed vector internal field portion of J^T J
+       * (doesn't depend on x) */
+      JTJ_int = gsl_matrix_submatrix(JTJ, 0, 0, w->p_int, w->p_int);
+      gsl_matrix_tricpy('L', 1, &JTJ_int.matrix, w->JTJ_vec);
     }
 
   /*
@@ -1309,70 +1342,58 @@ mfield_calc_fdf2(const gsl_vector *x, gsl_matrix *JTJ,
           if (mptr->flags[j] & MAGDATA_FLG_X)
             {
               double fj = B_total[0] - B_obs[0];
+              double wj = gsl_vector_get(w->wts_final, ridx);
 
               /* set residual vector X component */
-              gsl_vector_set(w->block_f, rowidx, fj);
               gsl_vector_set(w->fvec, ridx, fj);
-
-              /* store data weight for this observation */
-              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
+              gsl_vector_set(w->wfvec, ridx, fj * sqrt(wj));
 
               if (JTJ)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
-                  mfield_jacobian_row2(t, mptr->flags[j], &vx.vector, fj,
+                  mfield_jacobian_row2(t, mptr->flags[j], wj, &vx.vector, fj,
                                       extidx, dB_ext[0], euler_idx, B_nec_alpha[0],
-                                      B_nec_beta[0], B_nec_gamma[0], &Jv.vector, JTJ, JTf, w);
+                                      B_nec_beta[0], B_nec_gamma[0], JTJ, JTf, w);
                 }
 
               ++ridx;
-              ++rowidx;
             }
 
           if (mptr->flags[j] & MAGDATA_FLG_Y)
             {
               double fj = B_total[1] - B_obs[1];
+              double wj = gsl_vector_get(w->wts_final, ridx);
 
               /* set residual vector Y component */
-              gsl_vector_set(w->block_f, rowidx, fj);
               gsl_vector_set(w->fvec, ridx, fj);
-
-              /* store data weight for this observation */
-              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
+              gsl_vector_set(w->wfvec, ridx, fj * sqrt(wj));
 
               if (JTJ)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
-                  mfield_jacobian_row2(t, mptr->flags[j], &vy.vector, fj,
+                  mfield_jacobian_row2(t, mptr->flags[j], wj, &vy.vector, fj,
                                       extidx, dB_ext[1], euler_idx, B_nec_alpha[1],
-                                      B_nec_beta[1], B_nec_gamma[1], &Jv.vector, JTJ, JTf, w);
+                                      B_nec_beta[1], B_nec_gamma[1], JTJ, JTf, w);
                 }
 
               ++ridx;
-              ++rowidx;
             }
 
           if (mptr->flags[j] & MAGDATA_FLG_Z)
             {
               double fj = B_total[2] - B_obs[2];
+              double wj = gsl_vector_get(w->wts_final, ridx);
 
               /* set residual vector Z component */
-              gsl_vector_set(w->block_f, rowidx, fj);
               gsl_vector_set(w->fvec, ridx, fj);
-
-              /* store data weight for this observation */
-              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
+              gsl_vector_set(w->wfvec, ridx, fj * sqrt(wj));
 
               if (JTJ)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
-                  mfield_jacobian_row2(t, mptr->flags[j], &vz.vector, fj,
+                  mfield_jacobian_row2(t, mptr->flags[j], wj, &vz.vector, fj,
                                       extidx, dB_ext[2], euler_idx, B_nec_alpha[2],
-                                      B_nec_beta[2], B_nec_gamma[2], &Jv.vector, JTJ, JTf, w);
+                                      B_nec_beta[2], B_nec_gamma[2], JTJ, JTf, w);
                 }
 
               ++ridx;
-              ++rowidx;
             }
 
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
@@ -1380,50 +1401,28 @@ mfield_calc_fdf2(const gsl_vector *x, gsl_matrix *JTJ,
             {
               double F_obs = mptr->F[j];
               double fj;
+              double wj = gsl_vector_get(w->wts_final, ridx);
 
               B_total[3] = gsl_hypot3(B_total[0], B_total[1], B_total[2]);
               fj = B_total[3] - F_obs;
 
               /* set scalar residual */
-              gsl_vector_set(w->block_f, rowidx, fj);
               gsl_vector_set(w->fvec, ridx, fj);
-
-              /* store data weight for this observation */
-              gsl_vector_set(w->wts, rowidx, gsl_vector_get(w->wts_final, ridx));
+              gsl_vector_set(w->wfvec, ridx, fj * sqrt(wj));
 
               if (JTJ)
                 {
-                  gsl_vector_view Jv = gsl_matrix_row(w->block_J, rowidx);
-                  mfield_jacobian_row_F2(t, fj, &vx.vector, &vy.vector, &vz.vector,
+                  gsl_vector_view Jv = gsl_matrix_subrow(w->block_J, rowidx++, 0, w->p_int);
+                  mfield_jacobian_row_F2(t, fj, wj, &vx.vector, &vy.vector, &vz.vector,
                                         B_total, extidx, dB_ext, &Jv.vector, JTJ, JTf, w);
                 }
 
               ++ridx;
-              ++rowidx;
             }
 
           if (++dbidx == w->data_block)
             {
-#if 0
-              gsl_matrix_view Jm = gsl_matrix_submatrix(w->block_J, 0, 0, rowidx, w->p);
-              gsl_vector_view fv = gsl_vector_subvector(w->block_f, 0, rowidx);
-              gsl_vector_view wv = gsl_vector_subvector(w->wts, 0, rowidx);
-
-              /* accumulate this (J,f) block into LS system */
-              if (JTJ)
-                {
-                  gsl_multilarge_nlinear_applyW(&wv.vector, &Jm.matrix, &fv.vector);
-                  gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &Jm.matrix, 1.0, JTJ);
-                  gsl_blas_dgemv(CblasTrans, 1.0, &Jm.matrix, &fv.vector, 1.0, JTf);
-                }
-              else
-                gsl_multilarge_nlinear_applyW(&wv.vector, NULL, &fv.vector);
-
-              *normf = gsl_hypot(*normf, gsl_blas_dnrm2(&fv.vector));
-#endif
-
               /* reset for new block of observations */
-              rowidx = 0;
               dbidx = 0;
 
               /* read next block of internal Green's functions from disk */
@@ -1431,11 +1430,30 @@ mfield_calc_fdf2(const gsl_vector *x, gsl_matrix *JTJ,
               mfield_read_matrix_block(nblock, w);
             }
 
+          if (rowidx == w->data_block)
+            {
+              /* accumulate scalar J_int^T J_int into J^T J; it is much faster to do this
+               * with blocks and dsyrk() rather than individual rows with dsyr() */
+              gsl_matrix_view Jm = gsl_matrix_submatrix(w->block_J, 0, 0, rowidx, w->p_int);
+
+              gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &Jm.matrix, 1.0, &JTJ_int.matrix);
+
+              /* reset for new block of rows */
+              rowidx = 0;
+            }
+
           ++didx;
         }
     }
 
-  *normf = gsl_blas_dnrm2(w->fvec);
+  /* accumulate any last rows of scalar internal field Green's functions */
+  if (rowidx > 0)
+    {
+      gsl_matrix_view Jm = gsl_matrix_submatrix(w->block_J, 0, 0, rowidx, w->p_int);
+      gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &Jm.matrix, 1.0, &JTJ_int.matrix);
+    }
+
+  *normf = gsl_blas_dnrm2(w->wfvec);
 
 #if 0
   print_octave(JTJ, "JTJ0");
@@ -1545,11 +1563,17 @@ mfield_jacobian_row(const double t, const size_t flags, gsl_vector * dB_int,
 
 /*
 mfield_jacobian_row()
-  Construct a row of the Jacobian matrix corresponding to
-a vector measurement
+  Update the J^T J matrix and J^T f vector with a new row
+of the Jacobian matrix, corresponding to a vector residual.
+The internal field portion of J^T J does not need to be
+computed, since it is independent of the model parameters
+and is pre-computed. Only the Euler and external field
+portion of J^T J must be updated. All portions of the
+vector J^T f are updated.
 
 Inputs: t           - scaled timestamp
         flags       - MAGDATA_FLG_xxx flags for this data point
+        weight      - weight for this data point
         dB_int      - Green's functions for desired vector component of
                       internal SH expansion, nnm_mf-by-1
         f           - residual value for this measurement
@@ -1557,24 +1581,22 @@ Inputs: t           - scaled timestamp
         dB_ext      - external field Green's function corresponding
                       to desired vector component
         euler_idx   - index of Euler angles
-        B_nec_alpha -
-        B_nec_beta  -
-        B_nec_gamma -
-        J           - (output) row of Jacobian, p-by-1
+        B_nec_alpha - Green's function for alpha Euler angle
+        B_nec_beta  - Green's function for beta Euler angle
+        B_nec_gamma - Green's function for gamma Euler angle
         JTJ         - (output) J^T J matrix
         JTf         - (output) J^T f vector
         w           - workspace
 */
 
 static inline int
-mfield_jacobian_row2(const double t, const size_t flags, gsl_vector * dB_int,
-                    const double f, const size_t extidx, const double dB_ext,
-                    const size_t euler_idx, const double B_nec_alpha,
+mfield_jacobian_row2(const double t, const size_t flags, const double weight,
+                    gsl_vector * dB_int, const double f, const size_t extidx,
+                    const double dB_ext, const size_t euler_idx, const double B_nec_alpha,
                     const double B_nec_beta, const double B_nec_gamma,
-                    gsl_vector *J, gsl_matrix *JTJ, gsl_vector *JTf,
-                    const mfield_workspace *w)
+                    gsl_matrix *JTJ, gsl_vector *JTf, const mfield_workspace *w)
 {
-  gsl_vector_view J_mf;
+  const double Wf = weight * f;
   gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
 #if MFIELD_FIT_SECVAR
   gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
@@ -1586,89 +1608,46 @@ mfield_jacobian_row2(const double t, const size_t flags, gsl_vector * dB_int,
   /* check if fitting MF to this data point */
   if (MAGDATA_FitMF(flags))
     {
-      gsl_vector_view Jv, v;
-      gsl_vector_view vJTf = gsl_vector_subvector(JTf, 0, w->p_int);
-
-      /*XXX this should be pre-computed */
-
-      /* main field portion */
-      Jv = gsl_vector_subvector(J, 0, w->nnm_mf);
-      gsl_vector_memcpy(&Jv.vector, dB_int);
-
-#if MFIELD_FIT_SECVAR
-      /* secular variation portion */
-      v = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
-      Jv = gsl_vector_subvector(J, w->sv_offset, w->nnm_sv);
-      gsl_vector_memcpy(&Jv.vector, &v.vector);
-      gsl_vector_scale(&Jv.vector, t);
-#endif
-
-#if MFIELD_FIT_SECACC
-      /* secular acceleration portion */
-      v = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
-      Jv = gsl_vector_subvector(J, w->sa_offset, w->nnm_sa);
-      gsl_vector_memcpy(&Jv.vector, &v.vector);
-      gsl_vector_scale(&Jv.vector, 0.5 * t * t);
-#endif
-
-      J_mf = gsl_vector_subvector(J, 0, w->p_int);
+      gsl_vector_view v;
 
       /* update J^T f */
-      {
-        gsl_vector_view v;
-
-        v = gsl_vector_subvector(JTf, 0, w->nnm_mf);
-        gsl_blas_daxpy(f, &g_mf.vector, &v.vector);
+      v = gsl_vector_subvector(JTf, 0, w->nnm_mf);
+      gsl_blas_daxpy(Wf, &g_mf.vector, &v.vector);
 
 #if MFIELD_FIT_SECVAR
-        v = gsl_vector_subvector(JTf, w->sv_offset, w->nnm_sv);
-        gsl_blas_daxpy(t * f, &g_sv.vector, &v.vector);
+      v = gsl_vector_subvector(JTf, w->sv_offset, w->nnm_sv);
+      gsl_blas_daxpy(t * Wf, &g_sv.vector, &v.vector);
 #endif
 
 #if MFIELD_FIT_SECACC
-        v = gsl_vector_subvector(JTf, w->sa_offset, w->nnm_sa);
-        gsl_blas_daxpy(0.5 * t * t * f, &g_sa.vector, &v.vector);
-#endif
-      }
-
-#if !NEW_FDF_VEC
-      /* update (J^T J)_11 */
-      {
-        gsl_matrix_view m11 = gsl_matrix_submatrix(JTJ, 0, 0, w->p_int, w->p_int);
-        gsl_blas_dsyr(CblasLower, 1.0, &J_mf.vector, &m11.matrix);
-      }
+      v = gsl_vector_subvector(JTf, w->sa_offset, w->nnm_sa);
+      gsl_blas_daxpy(0.5 * t * t * Wf, &g_sa.vector, &v.vector);
 #endif
 
 #if MFIELD_FIT_EXTFIELD
       {
-        size_t idx = extidx + w->ext_offset;
-        gsl_vector_view v31 = gsl_matrix_subrow(JTJ, idx, 0, w->p_int);
-        double *ptr33 = gsl_matrix_ptr(JTJ, idx, idx);
-        double *ptr = gsl_vector_ptr(JTf, idx);
+        double *ptr33 = gsl_matrix_ptr(JTJ, extidx, extidx);
+        double *ptr = gsl_vector_ptr(JTf, extidx);
 
         /* update J^T f */
-        *ptr += dB_ext * f;
+        *ptr += dB_ext * Wf;
 
         /* update (J^T J)_33 */
-        *ptr33 += dB_ext * dB_ext;
+        *ptr33 += dB_ext * dB_ext * weight;
 
-        /* update (J^T J)_31 = J_ext^T J_mf */
-        {
-          gsl_vector_view v;
-
-          v = gsl_vector_subrow(JTJ, idx, 0, w->nnm_mf);
-          gsl_blas_daxpy(dB_ext, &g_mf.vector, &v.vector);
+        /* update (J^T J)_31 = J_ext^T J_int */
+        v = gsl_matrix_subrow(JTJ, extidx, 0, w->nnm_mf);
+        gsl_blas_daxpy(dB_ext * weight, &g_mf.vector, &v.vector);
 
 #if MFIELD_FIT_SECVAR
-          v = gsl_vector_subrow(JTJ, idx, w->sv_offset, w->nnm_sv);
-          gsl_blas_daxpy(t * dB_ext, &g_sv.vector, &v.vector);
+        v = gsl_matrix_subrow(JTJ, extidx, w->sv_offset, w->nnm_sv);
+        gsl_blas_daxpy(t * dB_ext * weight, &g_sv.vector, &v.vector);
 #endif
 
 #if MFIELD_FIT_SECACC
-          v = gsl_vector_subrow(JTJ, idx, w->sa_offset, w->nnm_sa);
-          gsl_blas_daxpy(0.5 * t * t * dB_ext, &g_sa.vector, &v.vector);
+        v = gsl_matrix_subrow(JTJ, extidx, w->sa_offset, w->nnm_sa);
+        gsl_blas_daxpy(0.5 * t * t * dB_ext * weight, &g_sa.vector, &v.vector);
 #endif
-        }
       }
 #endif /* MFIELD_FIT_EXTFIELD */
     }
@@ -1680,29 +1659,41 @@ mfield_jacobian_row2(const double t, const size_t flags, gsl_vector * dB_int,
       double x_data[3];
       gsl_vector_view vJTf = gsl_vector_subvector(JTf, euler_idx, 3);
       gsl_vector_view v = gsl_vector_view_array(x_data, 3);
-      gsl_matrix_view m22 = gsl_matrix_submatrix(JTJ, euler_idx, euler_idx, 3, 3);
+      gsl_matrix_view m;
 
       x_data[0] = -B_nec_alpha;
       x_data[1] = -B_nec_beta;
       x_data[2] = -B_nec_gamma;
 
       /* update J^T f */
-      gsl_blas_daxpy(f, &v.vector, &vJTf.vector);
+      gsl_blas_daxpy(Wf, &v.vector, &vJTf.vector);
 
       /* update (J^T J)_22 */
-      gsl_blas_dsyr(CblasLower, 1.0, &v.vector, &m22.matrix);
+      m = gsl_matrix_submatrix(JTJ, euler_idx, euler_idx, 3, 3);
+      gsl_blas_dsyr(CblasLower, weight, &v.vector, &m.matrix);
 
       if (MAGDATA_FitMF(flags))
         {
           /* update (J^T J)_21 */
-          gsl_matrix_view m21 = gsl_matrix_submatrix(JTJ, euler_idx, 0, 3, w->p_int);
-          gsl_blas_dger(1.0, &v.vector, &J_mf.vector, &m21.matrix);
+
+          m = gsl_matrix_submatrix(JTJ, euler_idx, 0, 3, w->nnm_mf);
+          gsl_blas_dger(weight, &v.vector, &g_mf.vector, &m.matrix);
+
+#if MFIELD_FIT_SECVAR
+          m = gsl_matrix_submatrix(JTJ, euler_idx, w->sv_offset, 3, w->nnm_sv);
+          gsl_blas_dger(t * weight, &v.vector, &g_sv.vector, &m.matrix);
+#endif
+
+#if MFIELD_FIT_SECACC
+          m = gsl_matrix_submatrix(JTJ, euler_idx, w->sa_offset, 3, w->nnm_sa);
+          gsl_blas_dger(0.5 * t * t * weight, &v.vector, &g_sa.vector, &m.matrix);
+#endif
 
 #if MFIELD_FIT_EXTFIELD
           /* update (J^T J)_32 */
           {
-            gsl_vector_view v32 = gsl_matrix_subrow(JTJ, w->ext_offset + extidx, euler_idx, 3);
-            gsl_blas_daxpy(dB_ext, &v.vector, &v32.vector);
+            gsl_vector_view v32 = gsl_matrix_subrow(JTJ, extidx, euler_idx, 3);
+            gsl_blas_daxpy(dB_ext * weight, &v.vector, &v32.vector);
           }
 #endif
         }
@@ -1774,10 +1765,12 @@ mfield_jacobian_row_F(const double t, gsl_vector * dX, gsl_vector * dY,
 /*
 mfield_jacobian_row_F()
   Construct a row of the Jacobian matrix corresponding to
-a scalar measurement
+a scalar measurement and update J^T J matrix and J^T f
+vector
 
 Inputs: t           - scaled timestamp
         flags       - MAGDATA_FLG_xxx flags for this data point
+        weight      - weight for this data point
         f           - residual value for this measurement
         dX          - Green's functions for X component
         dY          - Green's functions for Y component
@@ -1789,22 +1782,24 @@ Inputs: t           - scaled timestamp
                       B_model[3] = F model
         extidx      - index of external field coefficient
         dB_ext      - external field vector Green's functions
-        J           - (output) row of Jacobian, p-by-1
+        J_int       - (output) row of Jacobian (weighted) for internal
+                               Green's functions, p_int-by-1
         JTJ         - (output) updated J^T J matrix
         JTf         - (output) updated J^T f vector
         w           - workspace
 */
 
 static inline int
-mfield_jacobian_row_F2(const double t, const double f, gsl_vector * dX,
-                      gsl_vector * dY, gsl_vector * dZ, const double B_model[4],
-                      const size_t extidx, const double dB_ext[3],
-                      gsl_vector *J, gsl_matrix *JTJ, gsl_vector *JTf,
+mfield_jacobian_row_F2(const double t, const double f, const double weight,
+                      gsl_vector * dX, gsl_vector * dY, gsl_vector * dZ,
+                      const double B_model[4], const size_t extidx, const double dB_ext[3],
+                      gsl_vector *J_int, gsl_matrix *JTJ, gsl_vector *JTf,
                       const mfield_workspace *w)
 {
+  const double sqrt_weight = sqrt(weight);
+  const double sWf = sqrt_weight * f;
   size_t k;
   double b[3];
-  gsl_vector_view J_mf = gsl_vector_subvector(J, 0, w->p_int);
 
   /* compute unit vector in model direction */
   for (k = 0; k < 3; ++k)
@@ -1816,45 +1811,38 @@ mfield_jacobian_row_F2(const double t, const double f, gsl_vector * dX,
       double dXk = gsl_vector_get(dX, k);
       double dYk = gsl_vector_get(dY, k);
       double dZk = gsl_vector_get(dZ, k);
-      double val = b[0] * dXk +
-                   b[1] * dYk +
-                   b[2] * dZk;
+      double val = sqrt_weight * (b[0] * dXk +
+                                  b[1] * dYk +
+                                  b[2] * dZk);
 
-      mfield_set_mf(J, k, val, w);
-      mfield_set_sv(J, k, t * val, w);
-      mfield_set_sa(J, k, 0.5 * t * t * val, w);
+      mfield_set_mf(J_int, k, val, w);
+      mfield_set_sv(J_int, k, t * val, w);
+      mfield_set_sa(J_int, k, 0.5 * t * t * val, w);
     }
 
   /* update J^T f */
   {
     gsl_vector_view vJTf = gsl_vector_subvector(JTf, 0, w->p_int);
-    gsl_blas_daxpy(f, &J_mf.vector, &vJTf.vector);
-  }
-
-  /* update (J^T J)_11 */
-  {
-    gsl_matrix_view m11 = gsl_matrix_submatrix(JTJ, 0, 0, w->p_int, w->p_int);
-    gsl_blas_dsyr(CblasLower, 1.0, &J_mf.vector, &m11.matrix);
+    gsl_blas_daxpy(sWf, J_int, &vJTf.vector);
   }
 
 #if MFIELD_FIT_EXTFIELD
   {
-    size_t idx = w->ext_offset + extidx;
-    double *ptr = gsl_vector_ptr(JTf, idx);
-    gsl_vector_view v31 = gsl_matrix_subrow(JTJ, idx, 0, w->p_int);
-    double *ptr33 = gsl_matrix_ptr(JTJ, idx, idx);
-    double val = b[0] * dB_ext[0] +
-                 b[1] * dB_ext[1] +
-                 b[2] * dB_ext[2];
+    double *ptr = gsl_vector_ptr(JTf, extidx);
+    gsl_vector_view v31 = gsl_matrix_subrow(JTJ, extidx, 0, w->p_int);
+    double *ptr33 = gsl_matrix_ptr(JTJ, extidx, extidx);
+    double val = sqrt_weight * (b[0] * dB_ext[0] +
+                                b[1] * dB_ext[1] +
+                                b[2] * dB_ext[2]);
 
     /* update J^T f */
-    *ptr += val * f;
+    *ptr += val * sWf;
 
     /* update (J^T J)_33 */
     *ptr33 += val * val;
 
     /* update (J^T J)_31 */
-    gsl_blas_daxpy(val, &J_mf.vector, &v31.vector);
+    gsl_blas_daxpy(val, J_int, &v31.vector);
   }
 #endif
 
@@ -1942,10 +1930,6 @@ Inputs: w - workspace
 Notes:
 1) w->block_{dX,dY,dZ} are used to construct row blocks
 of matrices, which are then written to disk
-
-2) w->JTJ_vec is updated with J_mf^T J_mf for vector
-residuals, which don't depend on the model parameters
-and can be precomputed once
 */
 
 static int
@@ -1954,9 +1938,6 @@ mfield_nonlinear_matrices2(mfield_workspace *w)
   int s = GSL_SUCCESS;
   size_t i, j;
   size_t idx = 0;
-  size_t idx2 = 0;
-
-  gsl_matrix_set_zero(w->JTJ_vec);
 
   for (i = 0; i < w->nsat; ++i)
     {
@@ -1966,7 +1947,6 @@ mfield_nonlinear_matrices2(mfield_workspace *w)
 
       for (j = 0; j < mptr->n; ++j)
         {
-          double t = mptr->ts[j];
           double r = mptr->r[j];
           double theta = mptr->theta[j];
           double phi = mptr->phi[j];
@@ -1976,29 +1956,6 @@ mfield_nonlinear_matrices2(mfield_workspace *w)
 
           /* compute basis functions for spherical harmonic expansions */
           mfield_green(r, theta, phi, w);
-
-#if NEW_FDF_VEC
-          if (MAGDATA_FitMF(mptr->flags[j]))
-            {
-              if (mptr->flags[j] & MAGDATA_FLG_X)
-                {
-                  gsl_vector_view v = gsl_matrix_subrow(w->block_J, idx2++, 0, w->p_int);
-                  mfield_vector_green(t, w->dX, &v.vector, w);
-                }
-
-              if (mptr->flags[j] & MAGDATA_FLG_Y)
-                {
-                  gsl_vector_view v = gsl_matrix_subrow(w->block_J, idx2++, 0, w->p_int);
-                  mfield_vector_green(t, w->dY, &v.vector, w);
-                }
-
-              if (mptr->flags[j] & MAGDATA_FLG_Z)
-                {
-                  gsl_vector_view v = gsl_matrix_subrow(w->block_J, idx2++, 0, w->p_int);
-                  mfield_vector_green(t, w->dZ, &v.vector, w);
-                }
-            }
-#endif
 
           for (n = 1; n <= w->nmax_mf; ++n)
             {
@@ -2022,14 +1979,6 @@ mfield_nonlinear_matrices2(mfield_workspace *w)
               gsl_matrix_fwrite(w->fp_dZ, w->block_dZ);
               idx = 0;
             }
-
-          if (idx2 >= w->data_block - 3)
-            {
-              /* accumulate vector Green's functions into JTJ_vec */
-              gsl_matrix_view m = gsl_matrix_submatrix(w->block_J, 0, 0, idx2, w->p_int);
-              gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &m.matrix, 1.0, w->JTJ_vec);
-              idx2 = 0;
-            }
         } /* for (j = 0; j < mptr->n; ++j) */
     } /* for (i = 0; i < w->nsat; ++i) */
 
@@ -2048,42 +1997,149 @@ mfield_nonlinear_matrices2(mfield_workspace *w)
       gsl_matrix_fwrite(w->fp_dZ, &m.matrix);
     }
 
-  if (idx2 > 0)
-    {
-      /* accumulate final Green's functions into JTJ_vec */
-      gsl_matrix_view m = gsl_matrix_submatrix(w->block_J, 0, 0, idx2, w->p_int);
-      gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &m.matrix, 1.0, w->JTJ_vec);
-    }
-
-#if 0
-  print_octave(w->JTJ_vec, "JTJ_vec");
-  exit(1);
-#endif
-
   return s;
 } /* mfield_nonlinear_matrices() */
 
 /*
-mfield_vector_green()
-  Function to compute [ J_mf J_sv J_sa ] for a given set of
-vector Green's functions
+mfield_nonlinear_vector_precompute()
+  Precompute J_int^T W J_int for vector measurements, since
+this submatrix is independent of the model parameters and
+only needs to be computed once per iteration.
 
-Inputs: t - scaled timestamp
-        g - vector Green's functions J_mf, size nnm_mf
-        G - (output) combined vector G = [ g ; t*g ; 0.5*t*t*g ],
-            size w->p_int
-        w - workspace
+Inputs: w - workspace
+
+Notes:
+1) w->JTJ_vec is updated with J_int^T W J_int for vector
+residuals
 */
 
 static int
-mfield_vector_green(const double t, const double *g, gsl_vector *G, mfield_workspace *w)
+mfield_nonlinear_vector_precompute(const gsl_vector *weights, mfield_workspace *w)
 {
+  int s = GSL_SUCCESS;
+  size_t i, j;
+  size_t idx = 0;
+  size_t ridx = 0;   /* index of residual in [0:nres-1] */
+  size_t dbidx = 0;  /* index of data point in current block, [0:data_block-1] */
+  size_t nblock = 0; /* number of row blocks processed */
+
+  gsl_matrix_set_zero(w->JTJ_vec);
+
+  /*
+   * read first block of internal Green's functions from disk,
+   * stored in w->block_{dX,dY,dZ}
+   */
+  mfield_read_matrix_block(nblock, w);
+
+  for (i = 0; i < w->nsat; ++i)
+    {
+      magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          double t = mptr->ts[j];
+          gsl_vector_view vx, vy, vz;
+
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          vx = gsl_matrix_row(w->block_dX, dbidx);
+          vy = gsl_matrix_row(w->block_dY, dbidx);
+          vz = gsl_matrix_row(w->block_dZ, dbidx);
+
+          if (mptr->flags[j] & MAGDATA_FLG_X)
+            {
+              double wj = gsl_vector_get(weights, ridx++);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  gsl_vector_view v = gsl_matrix_subrow(w->block_J, idx++, 0, w->p_int);
+                  mfield_vector_green(t, wj, &vx.vector, &v.vector, w);
+                }
+            }
+
+          if (mptr->flags[j] & MAGDATA_FLG_Y)
+            {
+              double wj = gsl_vector_get(weights, ridx++);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  gsl_vector_view v = gsl_matrix_subrow(w->block_J, idx++, 0, w->p_int);
+                  mfield_vector_green(t, wj, &vy.vector, &v.vector, w);
+                }
+            }
+
+          if (mptr->flags[j] & MAGDATA_FLG_Z)
+            {
+              double wj = gsl_vector_get(weights, ridx++);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  gsl_vector_view v = gsl_matrix_subrow(w->block_J, idx++, 0, w->p_int);
+                  mfield_vector_green(t, wj, &vz.vector, &v.vector, w);
+                }
+            }
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) &&
+              MAGDATA_FitMF(mptr->flags[j]))
+            {
+              /* update ridx */
+              ++ridx;
+            }
+
+          if (idx >= w->data_block - 3)
+            {
+              /* accumulate vector Green's functions into JTJ_vec */
+              gsl_matrix_view m = gsl_matrix_submatrix(w->block_J, 0, 0, idx, w->p_int);
+              gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &m.matrix, 1.0, w->JTJ_vec);
+              idx = 0;
+            }
+
+          if (++dbidx == w->data_block)
+            {
+              /* reset for new block of observations */
+              dbidx = 0;
+
+              /* read next block of internal Green's functions from disk */
+              ++nblock;
+              mfield_read_matrix_block(nblock, w);
+            }
+        } /* for (j = 0; j < mptr->n; ++j) */
+    } /* for (i = 0; i < w->nsat; ++i) */
+
+  if (idx > 0)
+    {
+      /* accumulate final Green's functions into JTJ_vec */
+      gsl_matrix_view m = gsl_matrix_submatrix(w->block_J, 0, 0, idx, w->p_int);
+      gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &m.matrix, 1.0, w->JTJ_vec);
+    }
+
+  assert(ridx == w->nres);
+
+  return s;
+} /* mfield_nonlinear_vector_precompute() */
+
+/*
+mfield_vector_green()
+  Function to compute sqrt(w) [ J_mf J_sv J_sa ] for a given set of
+vector Green's functions
+
+Inputs: t      - scaled timestamp
+        weight - weight for this measurement
+        g      - vector Green's functions J_mf, size nnm_mf
+        G      - (output) combined vector G = sqrt(w) [ g ; t*g ; 0.5*t*t*g ],
+                 size w->p_int
+        w      - workspace
+*/
+
+static int
+mfield_vector_green(const double t, const double weight, const gsl_vector *g,
+                    gsl_vector *G, mfield_workspace *w)
+{
+  const double sqrt_weight = sqrt(weight);
   size_t i;
 
   /* form G */
   for (i = 0; i < w->nnm_mf; ++i)
     {
-      double gi = g[i];
+      double gi = sqrt_weight * gsl_vector_get(g, i);
 
       mfield_set_mf(G, i, gi, w);
       mfield_set_sv(G, i, t * gi, w);
