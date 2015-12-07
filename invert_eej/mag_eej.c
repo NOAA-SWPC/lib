@@ -112,7 +112,10 @@ mag_eej_alloc(const int year, const size_t ncurr,
   {
     const size_t k = 2;
     w->L = gsl_matrix_alloc(w->p - k, w->p);
+    w->Ltau = gsl_vector_alloc(w->p - k);
+
     gsl_multifit_linear_Lk(w->p, k, w->L);
+    gsl_multifit_linear_L_decomp(w->L, w->Ltau);
   }
 #else
   w->L = gsl_matrix_alloc(w->p, w->p);
@@ -269,6 +272,9 @@ mag_eej_free(mag_eej_workspace *w)
 
   if (w->L)
     gsl_matrix_free(w->L);
+
+  if (w->Ltau)
+    gsl_vector_free(w->Ltau);
 
   if (w->Xs)
     gsl_matrix_free(w->Xs);
@@ -507,7 +513,7 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
   double lambda, smax;
 
   /* convert (X, y) to standard form (X~,y~) */
-  s = gsl_multifit_linear_stdform2(w->L, X, y, &Xs.matrix, &ys.vector, &M.matrix, w->multifit_p);
+  s = gsl_multifit_linear_stdform2(w->L, w->Ltau, X, y, &Xs.matrix, &ys.vector, &M.matrix, w->multifit_p);
   if (s)
     return s;
 
@@ -538,7 +544,7 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
   gsl_multifit_linear_solve(lambda, &Xs.matrix, &ys.vector, &cs.vector, &(w->rnorm), &(w->snorm), w->multifit_p);
 
   /* backtransform c~ to recover c */
-  gsl_multifit_linear_genform2(w->L, X, y, &cs.vector, &M.matrix, c, w->multifit_p);
+  gsl_multifit_linear_genform2(w->L, w->Ltau, X, y, &cs.vector, &M.matrix, c, w->multifit_p);
 
   return s;
 } /* eej_ls() */

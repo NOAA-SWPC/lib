@@ -111,6 +111,7 @@ typedef struct
   gsl_vector *S;     /* current strength coefficients (S_j) */
   gsl_vector *rhs;   /* right hand side vector (F^(2)) */
   gsl_matrix *L;     /* regularization matrix */
+  gsl_vector *Ltau;  /* Householder vector for L decomposition */
   gsl_matrix *Xs;    /* least squares matrix in standard form */
   gsl_vector *ys;    /* right hand side vector in standard form */
   gsl_vector *cs;    /* solution vector in standard form */

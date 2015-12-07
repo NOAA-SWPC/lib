@@ -101,7 +101,7 @@ mfield_workspace *
 mfield_alloc(const mfield_parameters *params)
 {
   mfield_workspace *w;
-  const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_lmnielsen;
+  const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_lms;
   const size_t plm_size = gsl_sf_legendre_array_n(params->nmax_mf);
   const size_t ntheta = 100;
   const size_t nphi = 100;

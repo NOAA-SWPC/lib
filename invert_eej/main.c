@@ -223,7 +223,7 @@ main(int argc, char *argv[])
             break;
 
           case 'w':
-            params.sq_mmax_int = (size_t) atoi(optarg);
+            params.sq_mmax_ext = (size_t) atoi(optarg);
             break;
 
           default:

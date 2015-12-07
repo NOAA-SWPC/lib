@@ -27,7 +27,7 @@
 
 /* define to fit secular acceleration coefficients */
 #if MFIELD_FIT_SECVAR
-#define MFIELD_FIT_SECACC      1
+#define MFIELD_FIT_SECACC      0
 #else
 #define MFIELD_FIT_SECACC      0
 #endif
@@ -45,7 +45,7 @@
 
 /* number of observations to accumulate at once in LS system;
  * this includes the (X,Y,Z,F) 4-plet */
-#define MFIELD_BLOCK_SIZE     10000
+#define MFIELD_BLOCK_SIZE     50000
 
 typedef struct
 {

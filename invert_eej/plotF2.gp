@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'grav_A'
-outdir = 'grav_A/plots'
+logdir = 'log_storm_B'
+outdir = 'log_storm_B/plots'
 #logdir = 'WAMNET/data_C'
 #outdir = 'WAMNET/data_C/plots'
 

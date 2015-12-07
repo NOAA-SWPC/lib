@@ -49,8 +49,8 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              5
-#define NMAX_SV              5
+#define NMAX_MF              30
+#define NMAX_SV              15
 #define NMAX_SA              5
 
 #define MAX_BUFFER           2048
@@ -600,6 +600,7 @@ main(int argc, char *argv[])
   double tmax = -1.0;         /* maximum time for data in years */
   int nsat = 0;               /* number of satellites */
   struct timeval tv0, tv1;
+  char buf[MAX_BUFFER];
 
   while (1)
     {
@@ -792,6 +793,10 @@ main(int argc, char *argv[])
       fprintf(stderr, "main: ROBUST ITERATION %zu/%zu\n", iter, maxit);
 
       mfield_calc_nonlinear(coeffs, mfield_workspace_p);
+
+      /* output spectrum for this iteration */
+      sprintf(buf, "mfield.s.iter%zu", iter);
+      print_spectrum(buf, mfield_workspace_p);
 
       /* reset workspace for a new iteration */
       mfield_reset(mfield_workspace_p);
