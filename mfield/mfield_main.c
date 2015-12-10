@@ -49,7 +49,7 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              30
+#define NMAX_MF              60
 #define NMAX_SV              15
 #define NMAX_SA              5
 
@@ -304,38 +304,44 @@ are set to 0.
 int
 initial_guess(gsl_vector *c, mfield_workspace *w)
 {
-  msynth_workspace *msynth_p = msynth_igrf_read(MSYNTH_IGRF_FILE);
-  const size_t nmax = GSL_MIN(w->nmax_mf, msynth_p->nmax);
-  const double t = w->epoch;                       /* desired epoch */
-  const double t0 = msynth_get_epoch(t, msynth_p); /* IGRF epoch */
-  const double dt = t - t0;
-  size_t n;
-  int m;
-
   gsl_vector_set_zero(c);
 
-  for (n = 1; n <= nmax; ++n)
-    {
-      int ni = (int) n;
+#if !MFIELD_EMAG2
 
-      for (m = -ni; m <= ni; ++m)
-        {
-          size_t midx = msynth_nmidx(n, m, msynth_p);
-          size_t cidx = mfield_coeff_nmidx(n, m);
-          double gnm = msynth_get_mf(t, midx, msynth_p);
-          double dgnm = msynth_get_sv(t, midx, msynth_p);
+  {
+    msynth_workspace *msynth_p = msynth_igrf_read(MSYNTH_IGRF_FILE);
+    const size_t nmax = GSL_MIN(w->nmax_mf, msynth_p->nmax);
+    const double t = w->epoch;                       /* desired epoch */
+    const double t0 = msynth_get_epoch(t, msynth_p); /* IGRF epoch */
+    const double dt = t - t0;
+    size_t n;
+    int m;
 
-          /*
-           * use SV prediction to update main field coefficients for new
-           * epoch
-           */
-          mfield_set_mf(c, cidx, gnm + dt * dgnm, w);
-          mfield_set_sv(c, cidx, dgnm, w);
-          mfield_set_sa(c, cidx, 0.0, w);
-        }
-    }
+    for (n = 1; n <= nmax; ++n)
+      {
+        int ni = (int) n;
 
-  msynth_free(msynth_p);
+        for (m = -ni; m <= ni; ++m)
+          {
+            size_t midx = msynth_nmidx(n, m, msynth_p);
+            size_t cidx = mfield_coeff_nmidx(n, m);
+            double gnm = msynth_get_mf(t, midx, msynth_p);
+            double dgnm = msynth_get_sv(t, midx, msynth_p);
+
+            /*
+             * use SV prediction to update main field coefficients for new
+             * epoch
+             */
+            mfield_set_mf(c, cidx, gnm + dt * dgnm, w);
+            mfield_set_sv(c, cidx, dgnm, w);
+            mfield_set_sa(c, cidx, 0.0, w);
+          }
+      }
+
+    msynth_free(msynth_p);
+  }
+
+#endif
 
   return 0;
 } /* initial_guess() */
@@ -371,6 +377,12 @@ int
 print_residuals(const char *filename, mfield_workspace *w)
 {
   size_t i, j, k;
+  gsl_rstat_workspace *rstat_x = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_y = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_z = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_f = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_lowf = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_highf = gsl_rstat_alloc();
 
   for (i = 0; i < w->nsat; ++i)
     {
@@ -382,15 +394,21 @@ print_residuals(const char *filename, mfield_workspace *w)
       char fileres[2048];
       char filehist[2048];
       gsl_histogram *hf, *hz;
-      gsl_rstat_workspace *rm_f = gsl_rstat_alloc();
+
+      if (mptr->n == 0)
+        continue;
 
       hf = gsl_histogram_alloc(nbins);
       hz = gsl_histogram_alloc(nbins);
       gsl_histogram_set_ranges_uniform(hf, a, b);
       gsl_histogram_set_ranges_uniform(hz, a, b);
 
-      if (mptr->n == 0)
-        continue;
+      gsl_rstat_reset(rstat_x);
+      gsl_rstat_reset(rstat_y);
+      gsl_rstat_reset(rstat_z);
+      gsl_rstat_reset(rstat_f);
+      gsl_rstat_reset(rstat_lowf);
+      gsl_rstat_reset(rstat_highf);
 
       sprintf(fileres, "%s.sat%zu", filename, i);
       fp_res = fopen(fileres, "w");
@@ -413,6 +431,7 @@ print_residuals(const char *filename, mfield_workspace *w)
       k = 1;
       fprintf(fp_res, "# Field %zu: time (years)\n", k++);
       fprintf(fp_res, "# Field %zu: local time (hours)\n", k++);
+      fprintf(fp_res, "# Field %zu: season (day of year)\n", k++);
       fprintf(fp_res, "# Field %zu: altitude (km)\n", k++);
       fprintf(fp_res, "# Field %zu: longitude (deg)\n", k++);
       fprintf(fp_res, "# Field %zu: latitude (deg)\n", k++);
@@ -442,6 +461,8 @@ print_residuals(const char *filename, mfield_workspace *w)
           double lt = get_localtime(unix_time, phi);
           double B_nec[3], B_int[4], B_ext[4], B_model[4];
           double res[4];
+          int fit_scal = (mptr->flags[j] & MAGDATA_FLG_FIT_MF) && (mptr->flags[j] & MAGDATA_FLG_F);
+          int fit_vec =  (mptr->flags[j] & MAGDATA_FLG_FIT_MF) && (mptr->flags[j] & MAGDATA_FLG_Z);
 
           mfield_eval(mptr->t[j], r, theta, phi, B_int, w);
           mfield_eval_ext(mptr->t[j], r, theta, phi, B_ext, w);
@@ -488,15 +509,29 @@ print_residuals(const char *filename, mfield_workspace *w)
           /* compute scalar residual */
           res[3] = mptr->F[j] - B_model[3];
 
-          gsl_histogram_increment(hf, res[3]);
-          gsl_histogram_increment(hz, res[2]);
+          if (fit_vec)
+            {
+              gsl_rstat_add(res[0], rstat_x);
+              gsl_rstat_add(res[1], rstat_y);
+              gsl_rstat_add(res[2], rstat_z);
+              gsl_histogram_increment(hz, res[2]);
+            }
 
-          if (fabs(res[3]) < b)
-            gsl_rstat_add(res[3], rm_f);
+          if (fit_scal)
+            {
+              gsl_rstat_add(res[3], rstat_f);
+              gsl_histogram_increment(hf, res[3]);
 
-          fprintf(fp_res, "%.12f %f %f %f %f %f %.5e %.5e %.5e %.5e %.4e %.4e %.4e %d %d %d %d %d\n",
+              if (fabs(mptr->qdlat[j]) <= 55.0)
+                gsl_rstat_add(res[3], rstat_lowf);
+              else
+                gsl_rstat_add(res[3], rstat_highf);
+            }
+
+          fprintf(fp_res, "%12.6f %6.3f %6.2f %7.3f %8.4f %8.4f %9.4f %8.2f %8.2f %8.2f %8.2f %9.2f %9.2f %9.2f %d %d %d %d %d\n",
                   t,
                   lt,
+                  get_season(unix_time),
                   mptr->r[j] - 6371.2,
                   wrap180(phi * 180.0 / M_PI),
                   90.0 - theta * 180.0 / M_PI,
@@ -509,36 +544,65 @@ print_residuals(const char *filename, mfield_workspace *w)
                   B_nec[1],
                   B_nec[2],
                   mptr->satdir[j],
-                  ((mptr->flags[j] & MAGDATA_FLG_FIT_MF) && (mptr->flags[j] & MAGDATA_FLG_F)) ? 1 : 0,
-                  ((mptr->flags[j] & MAGDATA_FLG_FIT_MF) && (mptr->flags[j] & MAGDATA_FLG_Z)) ? 1 : 0,
+                  fit_scal,
+                  fit_vec,
                   mptr->flags[j] & MAGDATA_FLG_FIT_EULER ? 1 : 0,
                   mptr->flags[j] & MAGDATA_FLG_DZ_NS ? 1 : 0);
         }
 
       fprintf(stderr, "done\n");
 
-      fprintf(stderr, "\n=== Scalar Residual Histogram statistics ===\n");
-      fprintf(stderr, "\t mean of residuals = %.2f (%.2f) [nT]\n",
-              gsl_histogram_mean(hf),
-              gsl_rstat_mean(rm_f));
-      fprintf(stderr, "\t stddev of residuals = %.2f (%.2f) [nT]\n",
-              gsl_histogram_sigma(hf),
-              gsl_rstat_sd(rm_f));
-      fprintf(stderr, "\t scaling by sum of all bins = %.0f\n",
-              gsl_histogram_sum(hf));
-      gsl_histogram_scale(hf, 1.0 / gsl_histogram_sum(hf));
+      fprintf(stderr, "=== FIT STATISTICS SATELLITE %zu ===\n", i);
 
-      fprintf(stderr, "\n=== B_z Residual Histogram statistics ===\n");
-      fprintf(stderr, "\t mean of residuals = %.2f [nT]\n",
-              gsl_histogram_mean(hz));
-      fprintf(stderr, "\t stddev of residuals = %.2f [nT]\n",
-              gsl_histogram_sigma(hz));
-      fprintf(stderr, "\t scaling by sum of all bins = %.0f\n",
-              gsl_histogram_sum(hz));
+      fprintf(stderr, "%8s %10s %12s %12s %12s\n",
+              "", "N", "mean (nT)", "sigma (nT)", "rms (nT)");
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "X",
+              gsl_rstat_n(rstat_x),
+              gsl_rstat_mean(rstat_x),
+              gsl_rstat_sd(rstat_x),
+              gsl_rstat_rms(rstat_x));
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "Y",
+              gsl_rstat_n(rstat_y),
+              gsl_rstat_mean(rstat_y),
+              gsl_rstat_sd(rstat_y),
+              gsl_rstat_rms(rstat_y));
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "Z",
+              gsl_rstat_n(rstat_z),
+              gsl_rstat_mean(rstat_z),
+              gsl_rstat_sd(rstat_z),
+              gsl_rstat_rms(rstat_z));
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "F",
+              gsl_rstat_n(rstat_f),
+              gsl_rstat_mean(rstat_f),
+              gsl_rstat_sd(rstat_f),
+              gsl_rstat_rms(rstat_f));
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "low F",
+              gsl_rstat_n(rstat_lowf),
+              gsl_rstat_mean(rstat_lowf),
+              gsl_rstat_sd(rstat_lowf),
+              gsl_rstat_rms(rstat_lowf));
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "high F",
+              gsl_rstat_n(rstat_highf),
+              gsl_rstat_mean(rstat_highf),
+              gsl_rstat_sd(rstat_highf),
+              gsl_rstat_rms(rstat_highf));
+
+      gsl_histogram_scale(hf, 1.0 / gsl_histogram_sum(hf));
       gsl_histogram_scale(hz, 1.0 / gsl_histogram_sum(hz));
 
-      fprintf(stderr, "Writing histogram to %s...",
-              filehist);
+      fprintf(stderr, "Writing histogram to %s...", filehist);
       for (k = 0; k < nbins; ++k)
         {
           double lower, upper;
@@ -552,11 +616,17 @@ print_residuals(const char *filename, mfield_workspace *w)
 
       gsl_histogram_free(hf);
       gsl_histogram_free(hz);
-      gsl_rstat_free(rm_f);
 
       fclose(fp_res);
       fclose(fp_hist);
     }
+
+  gsl_rstat_free(rstat_x);
+  gsl_rstat_free(rstat_y);
+  gsl_rstat_free(rstat_z);
+  gsl_rstat_free(rstat_f);
+  gsl_rstat_free(rstat_lowf);
+  gsl_rstat_free(rstat_highf);
 
   return GSL_SUCCESS;
 } /* print_residuals() */
@@ -747,12 +817,28 @@ main(int argc, char *argv[])
     nflag = mfield_data_filter_euler(mfield_data_p);
     fprintf(stderr, "done (%zu data flagged)\n", nflag);
 #endif
+
+#if 0
+    /* XXX: discard most of EMAG grid for testing */
+    {
+      size_t i, j;
+      magdata *mptr = mfield_data_ptr(0, mfield_data_p);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          if (j % 5 != 0)
+            mptr->flags[j] |= MAGDATA_FLG_DISCARD;
+        }
+    }
+#endif
   }
 
   fprintf(stderr, "main: data epoch = %.2f\n", mfield_data_epoch(mfield_data_p));
 
+#if 0
   /* print spatial coverage maps for each satellite */
   mfield_data_map(datamap_file, mfield_data_p);
+#endif
 
   mfield_params.epoch = epoch;
   mfield_params.R = R;

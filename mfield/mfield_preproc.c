@@ -229,7 +229,7 @@ read_champ(const char *filename)
 } /* read_champ() */
 
 /*
-check_data_point()
+model_flags()
   Check an individual data point to determine if it will be used to
 fit various model parameters.
 
@@ -375,6 +375,7 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
       {
         double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
         double phi = data->longitude[i] * M_PI / 180.0;
+        double qdlat = data->qdlat[i];
         size_t fitting_flags = model_flags(magdata_flags,
                                            data->t[i], theta,
                                            phi, data->qdlat[i]);
@@ -384,6 +385,11 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
           {
             data->flags[i] |= SATDATA_FLG_OUTLIER;
             ++nflag;
+          }
+        else if ((fitting_flags & MAGDATA_FLG_FIT_MF) && (fabs(qdlat) > MFIELD_VECTOR_QDLAT))
+          {
+            /* use only scalar data at high latitudes for MF modeling */
+            data->flags[i] |= SATDATA_FLG_NOVEC_NEC | SATDATA_FLG_NOVEC_VFM;
           }
       }
     fprintf(stderr, "done (%zu/%zu (%.1f%%) points flagged)\n",

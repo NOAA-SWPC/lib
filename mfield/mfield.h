@@ -47,6 +47,9 @@
  * this includes the (X,Y,Z,F) 4-plet */
 #define MFIELD_BLOCK_SIZE     50000
 
+/* define if fitting to the EMAG2 grid */
+#define MFIELD_EMAG2          0
+
 typedef struct
 {
   double epoch;                         /* model epoch (decimal year) */
@@ -137,6 +140,8 @@ typedef struct
   gsl_vector *wts;         /* weights vector, 4*data_block-by-1 */
   size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
+  size_t nres_vec;         /* number of vector residuals to minimize */
+  size_t nres_scal;        /* number of scalar residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   double lambda_mf;        /* main field damping */

@@ -26,6 +26,7 @@
 
 /* global flags */
 #define MAGDATA_GLOBFLG_EULER         (1 << 0)  /* fit Euler angles to this dataset */
+#define MAGDATA_GLOBFLG_SCALAR_GRID   (1 << 1)  /* dataset is a scalar-only grid like EMAG2 */
 
 /* k_b * mu_0 in units of: nT^2 cm^3 / K */
 #define MAGDATA_KB_MU0                (1.73497445090703e-05)

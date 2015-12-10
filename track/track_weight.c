@@ -48,7 +48,7 @@ track_weight_alloc(const size_t ntheta, const size_t nphi)
   /* adding eps to the upper bound of longitude will allow phi = pi values */
   gsl_histogram2d_set_ranges_uniform(w->hist_p,
                                      -M_PI, M_PI + eps,
-                                     0.0, M_PI);
+                                     0.0, M_PI + eps);
 
   return w;
 } /* track_weight_alloc() */

@@ -228,6 +228,13 @@ mfield_data_init(mfield_data_workspace *w)
   w->t_mu = gsl_rstat_mean(w->rstat_workspace_p);
   w->t_sigma = gsl_rstat_sd(w->rstat_workspace_p);
 
+  if (w->t_sigma == 0.0)
+    {
+      /* this can happen for a fixed time grid like EMAG2 */
+      w->t_mu = 0.0;
+      w->t_sigma = 1.0;
+    }
+
   return s;
 } /* mfield_data_init() */
 

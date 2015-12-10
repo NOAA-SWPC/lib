@@ -59,9 +59,6 @@
 
 #define MFIELD_REGULARIZE            1
 
-/* define to turn off weighted fit */
-#define MFIELD_NOWEIGHTS             0
-
 /* weighting factors for data (multiplies spatial weights) */
 #define MFIELD_WEIGHT_F              (1.0)
 #define MFIELD_WEIGHT_X              (1.0)

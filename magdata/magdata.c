@@ -260,6 +260,7 @@ magdata_datum_init(magdata_datum *datum)
   datum->qdlat = 0.0;
   datum->F = 0.0;
   datum->ne = 0.0;
+  datum->satdir = 0;
 
   datum->r_ns = 0.0;
   datum->theta_ns = 0.0;
@@ -858,29 +859,34 @@ magdata_write(const char *filename, magdata *data)
   fwrite(data->theta, sizeof(double), data->n, fp);
   fwrite(data->phi, sizeof(double), data->n, fp);
   fwrite(data->qdlat, sizeof(double), data->n, fp);
-  fwrite(data->Bx_nec, sizeof(double), data->n, fp);
-  fwrite(data->By_nec, sizeof(double), data->n, fp);
-  fwrite(data->Bz_nec, sizeof(double), data->n, fp);
-  fwrite(data->Bx_vfm, sizeof(double), data->n, fp);
-  fwrite(data->By_vfm, sizeof(double), data->n, fp);
-  fwrite(data->Bz_vfm, sizeof(double), data->n, fp);
-  fwrite(data->Bx_model, sizeof(double), data->n, fp);
-  fwrite(data->By_model, sizeof(double), data->n, fp);
-  fwrite(data->Bz_model, sizeof(double), data->n, fp);
   fwrite(data->F, sizeof(double), data->n, fp);
-  fwrite(data->q, sizeof(double), 4 * data->n, fp);
-  fwrite(data->satdir, sizeof(int), data->n, fp);
 
-  fwrite(data->r_ns, sizeof(double), data->n, fp);
-  fwrite(data->theta_ns, sizeof(double), data->n, fp);
-  fwrite(data->phi_ns, sizeof(double), data->n, fp);
-  fwrite(data->qdlat_ns, sizeof(double), data->n, fp);
-  fwrite(data->Bx_nec_ns, sizeof(double), data->n, fp);
-  fwrite(data->By_nec_ns, sizeof(double), data->n, fp);
-  fwrite(data->Bz_nec_ns, sizeof(double), data->n, fp);
-  fwrite(data->Bx_model_ns, sizeof(double), data->n, fp);
-  fwrite(data->By_model_ns, sizeof(double), data->n, fp);
-  fwrite(data->Bz_model_ns, sizeof(double), data->n, fp);
+  /* don't write vector arrays for EMAG dataset */
+  if (!(data->global_flags & MAGDATA_GLOBFLG_SCALAR_GRID))
+    {
+      fwrite(data->Bx_nec, sizeof(double), data->n, fp);
+      fwrite(data->By_nec, sizeof(double), data->n, fp);
+      fwrite(data->Bz_nec, sizeof(double), data->n, fp);
+      fwrite(data->Bx_vfm, sizeof(double), data->n, fp);
+      fwrite(data->By_vfm, sizeof(double), data->n, fp);
+      fwrite(data->Bz_vfm, sizeof(double), data->n, fp);
+      fwrite(data->Bx_model, sizeof(double), data->n, fp);
+      fwrite(data->By_model, sizeof(double), data->n, fp);
+      fwrite(data->Bz_model, sizeof(double), data->n, fp);
+      fwrite(data->q, sizeof(double), 4 * data->n, fp);
+      fwrite(data->satdir, sizeof(int), data->n, fp);
+
+      fwrite(data->r_ns, sizeof(double), data->n, fp);
+      fwrite(data->theta_ns, sizeof(double), data->n, fp);
+      fwrite(data->phi_ns, sizeof(double), data->n, fp);
+      fwrite(data->qdlat_ns, sizeof(double), data->n, fp);
+      fwrite(data->Bx_nec_ns, sizeof(double), data->n, fp);
+      fwrite(data->By_nec_ns, sizeof(double), data->n, fp);
+      fwrite(data->Bz_nec_ns, sizeof(double), data->n, fp);
+      fwrite(data->Bx_model_ns, sizeof(double), data->n, fp);
+      fwrite(data->By_model_ns, sizeof(double), data->n, fp);
+      fwrite(data->Bz_model_ns, sizeof(double), data->n, fp);
+    }
 
   fwrite(data->flags, sizeof(size_t), data->n, fp);
   fwrite(data->weights, sizeof(double), data->n, fp);
@@ -941,29 +947,33 @@ magdata_read(const char *filename, magdata *data)
   fread(&(data->theta[data->n]), sizeof(double), n, fp);
   fread(&(data->phi[data->n]), sizeof(double), n, fp);
   fread(&(data->qdlat[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bx_nec[data->n]), sizeof(double), n, fp);
-  fread(&(data->By_nec[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bz_nec[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bx_vfm[data->n]), sizeof(double), n, fp);
-  fread(&(data->By_vfm[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bz_vfm[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bx_model[data->n]), sizeof(double), n, fp);
-  fread(&(data->By_model[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bz_model[data->n]), sizeof(double), n, fp);
   fread(&(data->F[data->n]), sizeof(double), n, fp);
-  fread(&(data->q[4 * data->n]), sizeof(double), 4 * n, fp);
-  fread(&(data->satdir[data->n]), sizeof(int), n, fp);
 
-  fread(&(data->r_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->theta_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->phi_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->qdlat_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bx_nec_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->By_nec_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bz_nec_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bx_model_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->By_model_ns[data->n]), sizeof(double), n, fp);
-  fread(&(data->Bz_model_ns[data->n]), sizeof(double), n, fp);
+  if (!(data->global_flags & MAGDATA_GLOBFLG_SCALAR_GRID))
+    {
+      fread(&(data->Bx_nec[data->n]), sizeof(double), n, fp);
+      fread(&(data->By_nec[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bz_nec[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bx_vfm[data->n]), sizeof(double), n, fp);
+      fread(&(data->By_vfm[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bz_vfm[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bx_model[data->n]), sizeof(double), n, fp);
+      fread(&(data->By_model[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bz_model[data->n]), sizeof(double), n, fp);
+      fread(&(data->q[4 * data->n]), sizeof(double), 4 * n, fp);
+      fread(&(data->satdir[data->n]), sizeof(int), n, fp);
+
+      fread(&(data->r_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->theta_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->phi_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->qdlat_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bx_nec_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->By_nec_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bz_nec_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bx_model_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->By_model_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bz_model_ns[data->n]), sizeof(double), n, fp);
+    }
 
   fread(&(data->flags[data->n]), sizeof(size_t), n, fp);
   fread(&(data->weights[data->n]), sizeof(double), n, fp);

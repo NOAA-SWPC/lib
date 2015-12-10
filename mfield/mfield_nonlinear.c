@@ -168,7 +168,7 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
           resfile);
   fclose(fp_res);
 
-#if MFIELD_SYNTH_DATA || MFIELD_NOWEIGHTS
+#if MFIELD_SYNTH_DATA || MFIELD_EMAG2
   gsl_vector_set_all(w->wts_final, 1.0);
 #endif
 
@@ -339,10 +339,15 @@ mfield_init_nonlinear(mfield_workspace *w)
 
   nres = nres_scal + nres_vec;
 
+  w->nres_vec = nres_vec;
+  w->nres_scal = nres_scal;
+  w->nres = nres;
+  w->ndata = ndata;
+
   fprintf(stderr, "mfield_init_nonlinear: %zu distinct data points\n", ndata);
-  fprintf(stderr, "mfield_init_nonlinear: %zu scalar residuals\n", nres_scal);
-  fprintf(stderr, "mfield_init_nonlinear: %zu vector residuals\n", nres_vec);
-  fprintf(stderr, "mfield_init_nonlinear: %zu total residuals\n", nres);
+  fprintf(stderr, "mfield_init_nonlinear: %zu scalar residuals\n", w->nres_scal);
+  fprintf(stderr, "mfield_init_nonlinear: %zu vector residuals\n", w->nres_vec);
+  fprintf(stderr, "mfield_init_nonlinear: %zu total residuals\n", w->nres);
   fprintf(stderr, "mfield_init_nonlinear: %zu total parameters\n", p);
 
   /* precomputing these matrices make computing the residuals faster */
@@ -370,9 +375,6 @@ mfield_init_nonlinear(mfield_workspace *w)
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 #endif
-
-  w->nres = nres;
-  w->ndata = ndata;
 
   w->lambda_diag = gsl_vector_calloc(p);
 
@@ -1457,6 +1459,8 @@ mfield_nonlinear_matrices2(mfield_workspace *w)
   int s = GSL_SUCCESS;
   size_t i, j;
   size_t idx = 0;
+  size_t didx = 0;
+  double percent_done = 0.2;
 
   for (i = 0; i < w->nsat; ++i)
     {
@@ -1472,6 +1476,12 @@ mfield_nonlinear_matrices2(mfield_workspace *w)
 
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
+
+          if ((double) didx++ / (double) w->ndata > percent_done)
+            {
+              fprintf(stderr, "%g%%...", percent_done * 100.0);
+              percent_done += 0.2;
+            }
 
           /* compute basis functions for spherical harmonic expansions */
           mfield_green(r, theta, phi, w);
@@ -1543,6 +1553,10 @@ mfield_nonlinear_vector_precompute(const gsl_vector *weights, mfield_workspace *
   size_t nblock = 0; /* number of row blocks processed */
 
   gsl_matrix_set_zero(w->JTJ_vec);
+
+  /* check for quick return */
+  if (w->nres_vec == 0)
+    return GSL_SUCCESS;
 
   /*
    * read first block of internal Green's functions from disk,
@@ -1694,6 +1708,10 @@ mfield_read_matrix_block(const size_t nblock, mfield_workspace *w)
 
   /* number of rows in current block */
   const size_t nrows = GSL_MIN(nleft, w->data_block);
+
+  /* check for quick return */
+  if (nrows == 0)
+    return GSL_SUCCESS;
 
   gsl_matrix_view mx = gsl_matrix_submatrix(w->block_dX, 0, 0, nrows, w->nnm_mf);
   gsl_matrix_view my = gsl_matrix_submatrix(w->block_dY, 0, 0, nrows, w->nnm_mf);
