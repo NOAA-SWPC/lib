@@ -11,5 +11,6 @@ Makefile.in
 *.la
 *.idx
 *.dat
+*.mod
 .deps
 .libs
