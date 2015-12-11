@@ -316,6 +316,7 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       double lon_eq, t_eq, lt_eq, kp;
       time_t unix_time;
       int dir;
+      char buf[2048];
 
       /* discard flagged tracks */
       if (tptr->flags)
@@ -351,8 +352,11 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       ++ntrack;
       dir = tptr->satdir;
 
-      fprintf(stderr, "mag_proc: found track %zu, t = %.2f, lon = %g, lt = %g, kp = %g, dir = %d\n",
-              ntrack, satdata_epoch2year(t_eq), lon_eq, lt_eq, kp, dir);
+      sprintf(buf, "%s", ctime(&unix_time));
+      buf[strlen(buf) - 1] = '\0';
+
+      fprintf(stderr, "mag_proc: found track %zu, %s, lon = %g, lt = %g, kp = %g, dir = %d\n",
+              ntrack, buf, lon_eq, lt_eq, kp, dir);
       if (ntrack == 44)
         printf("here\n");
 
