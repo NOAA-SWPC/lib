@@ -9,7 +9,6 @@
 #include <gsl/gsl_test.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
-#include <gsl/gsl_multifit.h>
 
 #include "gaussfit.h"
 
@@ -72,8 +71,8 @@ test_gaussfit(void)
   if (p > 5)
     fprintf(stderr, "test_gaussfit: quadratic = %f [%f]\n", gsl_vector_get(gauss_p->c, 5), a5);
 
-  fprintf(stderr, "test_gaussfit: initial chi^2 = %.12e\n", gauss_p->chisq0);
-  fprintf(stderr, "test_gaussfit: final chi^2   = %.12e\n", gauss_p->chisq);
+  fprintf(stderr, "test_gaussfit: initial cost = %.12e\n", gauss_p->chisq0);
+  fprintf(stderr, "test_gaussfit: final cost   = %.12e\n", gauss_p->chisq);
 
   gsl_rng_free(r);
   free(x);

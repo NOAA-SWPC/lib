@@ -17,8 +17,8 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_matrix.h>
-#include <gsl/gsl_multifit.h>
 #include <gsl/gsl_blas.h>
+#include <gsl/gsl_multifit_nlinear.h>
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_errno.h>
 
@@ -26,6 +26,8 @@
 
 static int gaussfit_f(const gsl_vector *x, void *datap, gsl_vector *f);
 static int gaussfit_df(const gsl_vector *x, void *datap, gsl_matrix *J);
+static int gaussfit_fvv(const gsl_vector *x, const gsl_vector *v,
+                        void *datap, gsl_vector *fvv);
 
 /*
 gaussfit_alloc()
@@ -39,7 +41,9 @@ gaussfit_workspace *
 gaussfit_alloc(const size_t n, const size_t p)
 {
   gaussfit_workspace *w;
-  const gsl_multifit_fdfsolver_type *T = gsl_multifit_fdfsolver_lmsder;
+  const gsl_multifit_nlinear_type *T = gsl_multifit_nlinear_lm;
+  gsl_multifit_nlinear_parameters fdf_params =
+    gsl_multifit_nlinear_default_parameters();
 
   w = calloc(1, sizeof(gaussfit_workspace));
   if (!w)
@@ -48,7 +52,8 @@ gaussfit_alloc(const size_t n, const size_t p)
   w->n = n;
   w->p = p;
 
-  w->fdfsolver_p = gsl_multifit_fdfsolver_alloc(T, n, p);
+  fdf_params.accel = 1;
+  w->nlinear_workspace_p = gsl_multifit_nlinear_alloc(T, &fdf_params, n, p);
 
   w->c = gsl_vector_calloc(p);
 
@@ -65,8 +70,8 @@ gaussfit_free(gaussfit_workspace *w)
   if (w->c)
     gsl_vector_free(w->c);
 
-  if (w->fdfsolver_p)
-    gsl_multifit_fdfsolver_free(w->fdfsolver_p);
+  if (w->nlinear_workspace_p)
+    gsl_multifit_nlinear_free(w->nlinear_workspace_p);
 
   free(w);
 } /* gaussfit_free() */
@@ -105,37 +110,41 @@ gaussfit(const double *t, const double *y,
          gaussfit_workspace *w)
 {
   int s = 0;
-  gsl_multifit_function_fdf f;
+  gsl_multifit_nlinear_fdf fdf;
   gaussfit_data data;
   const double xtol = 1.0e-8;
   const double gtol = 1.0e-8;
   const double ftol = 0.0;
   int info;
-  gsl_vector *r = gsl_multifit_fdfsolver_residual(w->fdfsolver_p);
+  gsl_vector *f = gsl_multifit_nlinear_residual(w->nlinear_workspace_p);
+  gsl_vector *c = gsl_multifit_nlinear_position(w->nlinear_workspace_p);
 
   data.t = (double *) t;
   data.y = (double *) y;
   data.w = w;
 
-  f.f = &gaussfit_f;
-  f.df = &gaussfit_df;
-  f.n = w->n;
-  f.p = w->p;
-  f.params = &data;
+  fdf.f = gaussfit_f;
+  fdf.df = gaussfit_df;
+  fdf.fvv = gaussfit_fvv;
+  fdf.n = w->n;
+  fdf.p = w->p;
+  fdf.params = &data;
 
-  s = gsl_multifit_fdfsolver_set(w->fdfsolver_p, &f, w->c);
+  s = gsl_multifit_nlinear_init(&fdf, w->c, w->nlinear_workspace_p);
   if (s)
     return s;
 
-  w->chisq0 = gsl_blas_dnrm2(r);
-  w->chisq0 *= w->chisq0;
+  /* initial cost */
+  gsl_blas_ddot(f, f, &(w->chisq0));
 
-  s = gsl_multifit_fdfsolver_driver(w->fdfsolver_p, 100, xtol, gtol, ftol, &info);
+  s = gsl_multifit_nlinear_driver(100, xtol, gtol, ftol, NULL, &info,
+                                  w->nlinear_workspace_p);
 
-  gsl_vector_memcpy(w->c, w->fdfsolver_p->x);
+  /* save model parameters */
+  gsl_vector_memcpy(w->c, c);
 
-  w->chisq = gsl_blas_dnrm2(r);
-  w->chisq *= w->chisq;
+  /* final cost */
+  gsl_blas_ddot(f, f, &(w->chisq));
 
   return s;
 } /* gaussfit() */
@@ -221,3 +230,39 @@ gaussfit_df(const gsl_vector *x, void *datap, gsl_matrix *J)
 
   return GSL_SUCCESS;
 } /* gaussfit_df() */
+
+static int
+gaussfit_fvv(const gsl_vector *x, const gsl_vector *v,
+             void *datap, gsl_vector *fvv)
+{
+  gaussfit_data *data = (gaussfit_data *) datap;
+  gaussfit_workspace *w = data->w;
+  size_t i;
+  double A0 = gsl_vector_get(x, 0);
+  double A1 = gsl_vector_get(x, 1);
+  double A2 = gsl_vector_get(x, 2);
+  double v0 = gsl_vector_get(v, 0);
+  double v1 = gsl_vector_get(v, 1);
+  double v2 = gsl_vector_get(v, 2);
+
+  for (i = 0; i < w->n; ++i)
+    {
+      double ti = data->t[i];
+      double zi = (ti - A1) / A2;
+      double e = exp(-0.5 * zi * zi);
+      double f01 = (zi / A2) * e;
+      double f02 = zi * f01;
+      double f11 = (A0 / A2) * (zi*zi - 1.0) / A2 * e;
+      double f12 = (A0 / A2) * (zi / A2) * (zi*zi - 2.0) * e;
+      double f22 = A0 * (zi / A2) * (zi / A2) * (zi*zi - 3.0) * e;
+      double fvvi = 2.0 * f01 * v0 * v1 +
+                    2.0 * f02 * v0 * v2 +
+                    2.0 * f12 * v1 * v2 +
+                          f11 * v1 * v1 +
+                          f22 * v2 * v2;
+
+      gsl_vector_set(fvv, i, fvvi);
+    }
+
+  return GSL_SUCCESS;
+}

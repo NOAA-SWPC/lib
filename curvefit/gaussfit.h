@@ -6,7 +6,7 @@
 #define INCLUDED_gaussfit_h
 
 #include <gsl/gsl_math.h>
-#include <gsl/gsl_multifit_nlin.h>
+#include <gsl/gsl_multifit_nlinear.h>
 
 typedef struct
 {
@@ -22,7 +22,7 @@ typedef struct
    */
   gsl_vector *c;  /* model coefficients */
 
-  gsl_multifit_fdfsolver *fdfsolver_p;
+  gsl_multifit_nlinear_workspace *nlinear_workspace_p;
 } gaussfit_workspace;
 
 typedef struct
