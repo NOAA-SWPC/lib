@@ -87,7 +87,7 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   const size_t p = w->p;          /* number of coefficients */
   const size_t n = w->nres;       /* number of residuals */
   gsl_multifit_function_fdf f;
-  gsl_multilarge_function_fdf f2;
+  gsl_multilarge_nlinear_fdf f2;
   gsl_vector *res_f;
   struct timeval tv0, tv1;
   double res0;                    /* initial residual */

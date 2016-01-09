@@ -12,7 +12,7 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_multifit_nlin.h>
-#include <gsl/gsl_multilarge_nlin.h>
+#include <gsl/gsl_multilarge_nlinear.h>
 #include <gsl/gsl_histogram.h>
 
 #include "mfield_data.h"
@@ -20,14 +20,14 @@
 
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      0
+#define MFIELD_SYNTH_DATA      1
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
 
 /* define to fit secular acceleration coefficients */
 #if MFIELD_FIT_SECVAR
-#define MFIELD_FIT_SECACC      0
+#define MFIELD_FIT_SECACC      1
 #else
 #define MFIELD_FIT_SECACC      0
 #endif
@@ -36,7 +36,7 @@
 #define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    1
+#define MFIELD_FIT_EXTFIELD    0
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)

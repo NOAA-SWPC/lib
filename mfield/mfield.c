@@ -39,7 +39,7 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_multifit_nlin.h>
-#include <gsl/gsl_multilarge_nlin.h>
+#include <gsl/gsl_multilarge_nlinear.h>
 #include <gsl/gsl_sf_legendre.h>
 
 #include "mfield_green.h"
