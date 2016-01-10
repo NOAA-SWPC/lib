@@ -904,9 +904,9 @@ main(int argc, char *argv[])
   /* L-curve data */
   if (Lfile)
     {
-      gsl_vector *res_f = gsl_multifit_fdfridge_residual(mfield_workspace_p->fdf_s);
+      gsl_vector *f = gsl_multifit_nlinear_residual(mfield_workspace_p->multifit_nlinear_p);
       double xnorm = gsl_blas_dnrm2(mfield_workspace_p->c);
-      double fnorm = gsl_blas_dnrm2(res_f);
+      double fnorm = gsl_blas_dnrm2(f);
       FILE *fp = fopen(Lfile, "a");
 
       if (!fp)

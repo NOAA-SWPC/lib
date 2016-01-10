@@ -1,4 +1,4 @@
-#define OLD_FDF     1
+#define OLD_FDF     0
 
 typedef struct
 {
@@ -36,20 +36,13 @@ static int mfield_nonlinear_histogram(const gsl_vector *c,
                                       mfield_workspace *w);
 static int mfield_nonlinear_regularize(gsl_vector *diag,
                                        mfield_workspace *w);
-static int mfield_nonlinear_driver (gsl_multifit_fdfridge * s,
-                                    const size_t maxiter,
-                                    const double xtol,
-                                    const double gtol,
-                                    const double ftol,
-                                    int *info,
-                                    mfield_workspace *w);
 static int mfield_nonlinear_driver2 (const size_t maxiter,
                                      const double xtol, const double gtol,
                                      const double ftol, int *info,
                                      mfield_workspace *w);
-void mfield_nonlinear_print_state(const size_t iter, gsl_multifit_fdfsolver *s,
-                                  mfield_workspace *w);
 static void mfield_nonlinear_print_state2(const size_t iter, mfield_workspace *w);
+static void mfield_nonlinear_callback(const size_t iter, void *params,
+                                      const gsl_multifit_nlinear_workspace *multifit_p);
 
 /*
 mfield_calc_nonlinear()
@@ -86,19 +79,20 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   int info;
   const size_t p = w->p;          /* number of coefficients */
   const size_t n = w->nres;       /* number of residuals */
-  gsl_multifit_function_fdf f;
+  gsl_multifit_nlinear_fdf fdf;
   gsl_multilarge_nlinear_fdf f2;
-  gsl_vector *res_f;
+  gsl_vector *f;
   struct timeval tv0, tv1;
   double res0;                    /* initial residual */
   FILE *fp_res;
   char resfile[2048];
 
-  f.f = &mfield_calc_f;
-  f.df = &mfield_calc_df;
-  f.n = n;
-  f.p = p;
-  f.params = w;
+  fdf.f = &mfield_calc_f;
+  fdf.df = &mfield_calc_df;
+  fdf.fvv = NULL;
+  fdf.n = n;
+  fdf.p = p;
+  fdf.params = w;
 
   f2.fdf = mfield_calc_fdf;
   f2.p = p;
@@ -234,44 +228,45 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
 
 #else
 
-  fprintf(stderr, "mfield_calc_nonlinear: initializing fdfridge...");
+  fprintf(stderr, "mfield_calc_nonlinear: initializing multifit...");
   gettimeofday(&tv0, NULL);
-  gsl_multifit_fdfridge_wset2(w->fdf_s, &f, c, w->lambda_diag, w->wts_final);
+  gsl_multifit_nlinear_winit(&fdf, c, w->wts_final, w->multifit_nlinear_p);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   /* compute initial residual */
-  res_f = gsl_multifit_fdfridge_residual(w->fdf_s);
-  res0 = gsl_blas_dnrm2(res_f);
+  f = gsl_multifit_nlinear_residual(w->multifit_nlinear_p);
+  res0 = gsl_blas_dnrm2(f);
 
   fprintf(stderr, "mfield_calc_nonlinear: computing nonlinear least squares solution...");
   gettimeofday(&tv0, NULL);
-  s = mfield_nonlinear_driver(w->fdf_s, max_iter, xtol, gtol, ftol, &info, w);
+  s = gsl_multifit_nlinear_driver(max_iter, xtol, gtol, ftol,
+                                  mfield_nonlinear_callback, (void *) w,
+                                  &info, w->multifit_nlinear_p);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   if (s == GSL_SUCCESS)
     {
-      fprintf(stderr, "mfield_calc_nonlinear: number of iterations: %zu\n",
-              gsl_multifit_fdfridge_niter(w->fdf_s));
-      fprintf(stderr, "mfield_calc_nonlinear: function evaluations: %zu\n",
-              f.nevalf);
-      fprintf(stderr, "mfield_calc_nonlinear: Jacobian evaluations: %zu\n",
-              f.nevaldf);
+      fprintf(stderr, "mfield_calc_nonlinear: NITER = %zu\n",
+              gsl_multifit_nlinear_niter(w->multifit_nlinear_p));
+      fprintf(stderr, "mfield_calc_nonlinear: NFEV  = %zu\n", fdf.nevalf);
+      fprintf(stderr, "mfield_calc_nonlinear: NJEV  = %zu\n", fdf.nevaldf);
+      fprintf(stderr, "mfield_calc_nonlinear: NAEV  = %zu\n", fdf.nevalfvv);
       fprintf(stderr, "mfield_calc_nonlinear: reason for stopping: %d\n", info);
-      fprintf(stderr, "mfield_calc_nonlinear: initial residual: %.12e\n", res0);
-      fprintf(stderr, "mfield_calc_nonlinear: final residual: %.12e\n",
-              gsl_blas_dnrm2(res_f));
+      fprintf(stderr, "mfield_calc_nonlinear: initial |f(x)|: %.12e\n", res0);
+      fprintf(stderr, "mfield_calc_nonlinear: final   |f(x)|: %.12e\n",
+              gsl_blas_dnrm2(f));
     }
   else
     {
-      fprintf(stderr, "mfield_calc_nonlinear: fdfridge failed: %s\n",
+      fprintf(stderr, "mfield_calc_nonlinear: multifit failed: %s\n",
               gsl_strerror(s));
     }
 
   /* store final coefficients in physical units */
   {
-    gsl_vector *x_final = gsl_multifit_fdfridge_position(w->fdf_s);
+    gsl_vector *x_final = gsl_multifit_nlinear_position(w->multifit_nlinear_p);
 
     gsl_vector_memcpy(w->c, x_final);
     mfield_coeffs(1, w->c, c, w);
@@ -300,9 +295,11 @@ static int
 mfield_init_nonlinear(mfield_workspace *w)
 {
   int s = 0;
-  const gsl_multifit_fdfsolver_type *T = gsl_multifit_fdfsolver_lmniel;
   const size_t p = w->p;        /* number of coefficients */
   const size_t nnm = w->nnm_mf; /* number of (n,m) harmonics */
+  const gsl_multifit_nlinear_type *T = gsl_multifit_nlinear_lm;
+  gsl_multifit_nlinear_parameters fdf_params =
+    gsl_multifit_nlinear_default_parameters();
   size_t ndata = 0;             /* number of distinct data points */
   size_t nres = 0;              /* total number of residuals */
   size_t nres_scal = 0;         /* number of scalar residuals */
@@ -366,7 +363,10 @@ mfield_init_nonlinear(mfield_workspace *w)
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-  w->fdf_s = gsl_multifit_fdfridge_alloc(T, nres, p);
+  fdf_params.solver = gsl_multifit_nlinear_solver_normal;
+  fdf_params.accel = 1;
+  fdf_params.h_fvv = 0.5;
+  w->multifit_nlinear_p = gsl_multifit_nlinear_alloc(T, &fdf_params, nres, p);
 #else
 
   fprintf(stderr, "mfield_init_nonlinear: writing matrices for nonlinear fit...");
@@ -902,8 +902,6 @@ mfield_calc_fdf(const gsl_vector *x, gsl_matrix *JTJ,
 
   /* avoid unused variable warnings */
   (void)extcoeff;
-
-  struct timeval tv0, tv1;
 
   *normf = 0.0;
   if (JTJ)
@@ -1940,78 +1938,6 @@ mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
 } /* mfield_nonlinear_regularize() */
 
 /*
-mfield_nonlinear_driver()
-  Iterate the nonlinear least squares solver until completion
-
-Inputs: s       - fdfridge workspace
-        maxiter - maximum iterations to allow
-        xtol    - tolerance in step x
-        gtol    - tolerance in gradient
-        ftol    - tolerance in ||f||
-        info    - (output) info flag on why iteration terminated
-                  1 = stopped due to small step size ||dx|
-                  2 = stopped due to small gradient
-                  3 = stopped due to small change in f
-                  GSL_ETOLX = ||dx|| has converged to within machine
-                              precision (and xtol is too small)
-                  GSL_ETOLG = ||g||_inf is smaller than machine
-                              precision (gtol is too small)
-                  GSL_ETOLF = change in ||f|| is smaller than machine
-                              precision (ftol is too small)
-
-Return: GSL_SUCCESS if converged, GSL_MAXITER if maxiter exceeded without
-converging
-*/
-
-static int
-mfield_nonlinear_driver (gsl_multifit_fdfridge * s,
-                         const size_t maxiter,
-                         const double xtol, const double gtol,
-                         const double ftol, int *info,
-                         mfield_workspace *w)
-{
-  int status;
-  gsl_multifit_fdfsolver *fdf_s = s->s;
-  size_t iter = 0;
-
-  do
-    {
-      if (iter % 5 == 0 || iter == 1)
-        mfield_nonlinear_print_state(iter, fdf_s, w);
-
-      status = gsl_multifit_fdfsolver_iterate (fdf_s);
-
-      /*
-       * if status is GSL_ENOPROG or GSL_SUCCESS, continue iterating,
-       * otherwise the method has converged with a GSL_ETOLx flag
-       */
-      if (status != GSL_SUCCESS && status != GSL_ENOPROG)
-        break;
-
-      /* test for convergence */
-      status = gsl_multifit_fdfsolver_test(fdf_s, xtol, gtol, ftol, info);
-    }
-  while (status == GSL_CONTINUE && ++iter < maxiter);
-
-  /*
-   * the following error codes mean that the solution has converged
-   * to within machine precision, so record the error code in info
-   * and return success
-   */
-  if (status == GSL_ETOLF || status == GSL_ETOLX || status == GSL_ETOLG)
-    {
-      *info = status;
-      status = GSL_SUCCESS;
-    }
-
-  /* check if max iterations reached */
-  if (iter >= maxiter && status != GSL_SUCCESS)
-    status = GSL_EMAXITER;
-
-  return status;
-} /* mfield_nonlinear_driver() */
-
-/*
 mfield_nonlinear_driver2()
   Iterate the nonlinear least squares solver until completion
 
@@ -2088,45 +2014,6 @@ mfield_nonlinear_driver2 (const size_t maxiter,
   return status;
 } /* mfield_nonlinear_driver() */
 
-void
-mfield_nonlinear_print_state(const size_t iter, gsl_multifit_fdfsolver *s,
-                             mfield_workspace *w)
-{
-  fprintf(stderr, "iteration %zu:\n", iter);
-
-  fprintf(stderr, "\t dipole: %12.4f %12.4f %12.4f [nT]\n",
-          gsl_vector_get(s->x, mfield_coeff_nmidx(1, 0)),
-          gsl_vector_get(s->x, mfield_coeff_nmidx(1, 1)),
-          gsl_vector_get(s->x, mfield_coeff_nmidx(1, -1)));
-
-#if MFIELD_FIT_EULER
-  {
-    size_t i;
-
-    for (i = 0; i < w->nsat; ++i)
-      {
-        magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
-
-        if (mptr->n == 0)
-          continue;
-
-        if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
-          {
-            double t0 = w->data_workspace_p->t0[i];
-            size_t euler_idx = mfield_euler_idx(i, t0, w);
-
-            fprintf(stderr, "\t euler : %12.4f %12.4f %12.4f [deg]\n",
-                    gsl_vector_get(s->x, euler_idx) * 180.0 / M_PI,
-                    gsl_vector_get(s->x, euler_idx + 1) * 180.0 / M_PI,
-                    gsl_vector_get(s->x, euler_idx + 2) * 180.0 / M_PI);
-          }
-      }
-  }
-#endif
-
-  fprintf(stderr, "\t |f(x)|: %12g\n", gsl_blas_dnrm2(s->f));
-}
-
 static void
 mfield_nonlinear_print_state2(const size_t iter, mfield_workspace *w)
 {
@@ -2169,5 +2056,58 @@ mfield_nonlinear_print_state2(const size_t iter, mfield_workspace *w)
   gsl_multilarge_nlinear_rcond(&rcond, w->nlinear_workspace_p);
 
   fprintf(stderr, "\t ||f(x)||:   %12g\n", normf);
+  fprintf(stderr, "\t cond(J(x)): %12g\n", 1.0 / rcond);
+}
+
+static void
+mfield_nonlinear_callback(const size_t iter, void *params,
+                          const gsl_multifit_nlinear_workspace *multifit_p)
+{
+  mfield_workspace *w = (mfield_workspace *) params;
+  gsl_vector *x = gsl_multifit_nlinear_position(multifit_p);
+  gsl_vector *f = gsl_multifit_nlinear_residual(multifit_p);
+  double avratio = gsl_multifit_nlinear_avratio(multifit_p);
+  double rcond;
+
+  /* print out state every 5 iterations */
+  if (iter % 5 != 0 && iter != 1)
+    return;
+
+  fprintf(stderr, "iteration %zu:\n", iter);
+
+  fprintf(stderr, "\t dipole: %12.4f %12.4f %12.4f [nT]\n",
+          gsl_vector_get(x, mfield_coeff_nmidx(1, 0)),
+          gsl_vector_get(x, mfield_coeff_nmidx(1, 1)),
+          gsl_vector_get(x, mfield_coeff_nmidx(1, -1)));
+
+#if MFIELD_FIT_EULER
+  {
+    size_t i;
+
+    for (i = 0; i < w->nsat; ++i)
+      {
+        magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+
+        if (mptr->n == 0)
+          continue;
+
+        if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+          {
+            double t0 = w->data_workspace_p->t0[i];
+            size_t euler_idx = mfield_euler_idx(i, t0, w);
+
+            fprintf(stderr, "\t euler : %12.4f %12.4f %12.4f [deg]\n",
+                    gsl_vector_get(x, euler_idx) * 180.0 / M_PI,
+                    gsl_vector_get(x, euler_idx + 1) * 180.0 / M_PI,
+                    gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI);
+          }
+      }
+  }
+#endif
+
+  fprintf(stderr, "\t |a|/|v|:    %12g\n", avratio);
+  fprintf(stderr, "\t ||f(x)||:   %12g\n", gsl_blas_dnrm2(f));
+
+  gsl_multifit_nlinear_rcond(&rcond, multifit_p);
   fprintf(stderr, "\t cond(J(x)): %12g\n", 1.0 / rcond);
 }

@@ -38,7 +38,7 @@
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_errno.h>
-#include <gsl/gsl_multifit_nlin.h>
+#include <gsl/gsl_multifit_nlinear.h>
 #include <gsl/gsl_multilarge_nlinear.h>
 #include <gsl/gsl_sf_legendre.h>
 
@@ -322,8 +322,8 @@ mfield_free(mfield_workspace *w)
   if (w->wts_final)
     gsl_vector_free(w->wts_final);
 
-  if (w->fdf_s)
-    gsl_multifit_fdfridge_free(w->fdf_s);
+  if (w->multifit_nlinear_p)
+    gsl_multifit_nlinear_free(w->multifit_nlinear_p);
 
   if (w->nbins_euler)
     free(w->nbins_euler);
@@ -560,6 +560,7 @@ mfield_calc_uncertainties(mfield_workspace *w)
    * external field coefficients could be zero for many days (if no
    * data) leading to a singular Jacobian
    */
+#if 0 /* XXX */
   const size_t p = w->p_int;
   gsl_vector *r = gsl_vector_alloc(w->nres);
   gsl_matrix *J = gsl_matrix_alloc(w->fdf_s->s->f->size, w->p);
@@ -608,6 +609,7 @@ mfield_calc_uncertainties(mfield_workspace *w)
 
   gsl_vector_free(r);
   gsl_matrix_free(J);
+#endif
 
   return s;
 } /* mfield_calc_uncertainties() */

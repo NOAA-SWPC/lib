@@ -11,7 +11,7 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_multifit.h>
-#include <gsl/gsl_multifit_nlin.h>
+#include <gsl/gsl_multifit_nlinear.h>
 #include <gsl/gsl_multilarge_nlinear.h>
 #include <gsl/gsl_histogram.h>
 
@@ -20,7 +20,7 @@
 
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      1
+#define MFIELD_SYNTH_DATA      0
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
@@ -133,7 +133,7 @@ typedef struct
   gsl_matrix *mat_dX;      /* dX/dg ndata-by-nnm */
   gsl_matrix *mat_dY;      /* dY/dg ndata-by-nnm */
   gsl_matrix *mat_dZ;      /* dZ/dg ndata-by-nnm */
-  gsl_multifit_fdfridge *fdf_s;
+  gsl_multifit_nlinear_workspace *multifit_nlinear_p;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
   gsl_matrix *block_J;     /* Jacobian matrix block, 4*data_block-by-p */
   gsl_vector *block_f;     /* residual vector block, 4*data_block-by-1 */
