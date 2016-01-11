@@ -98,7 +98,6 @@ mfield_workspace *
 mfield_alloc(const mfield_parameters *params)
 {
   mfield_workspace *w;
-  const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_lms;
   const size_t plm_size = gsl_sf_legendre_array_n(params->nmax_mf);
   const size_t ntheta = 100;
   const size_t nphi = 100;
@@ -256,8 +255,6 @@ mfield_alloc(const mfield_parameters *params)
   w->fp_dX = fopen("mat/dX.dat", "w+");
   w->fp_dY = fopen("mat/dY.dat", "w+");
   w->fp_dZ = fopen("mat/dZ.dat", "w+");
-
-  w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, w->p);
 
   return w;
 } /* mfield_alloc() */

@@ -29,14 +29,14 @@
 #if MFIELD_FIT_SECVAR
 #define MFIELD_FIT_SECACC      1
 #else
-#define MFIELD_FIT_SECACC      0
+#define MFIELD_FIT_SECACC      1
 #endif
 
 /* fit Euler angles to data */
 #define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    0
+#define MFIELD_FIT_EXTFIELD    1
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)
@@ -49,6 +49,9 @@
 
 /* define if fitting to the EMAG2 grid */
 #define MFIELD_EMAG2          0
+
+/* define for no weighting in fit */
+#define MFIELD_NOWEIGHTS      0
 
 typedef struct
 {
