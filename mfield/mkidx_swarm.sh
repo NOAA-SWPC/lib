@@ -3,7 +3,7 @@
 # Make index files for Swarm, using the latest baseline
 # version available for each day
 
-datadir="/data/SWARM/MAG/Stage1_CHAOS"
+datadir="$DATAHOME/SWARM/MAG/Stage1_CHAOS"
 
 function dosat
 {

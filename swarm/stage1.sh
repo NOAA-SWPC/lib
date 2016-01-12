@@ -12,15 +12,15 @@
 # Keep every nth sample
 down_sample="1"
 
-cdfdir="/data/SWARM/MAG/Unzipped_Data"
-outdir="/data/SWARM/MAG/Stage1"
-lpdir="/data/SWARM/EFI/LP_Unzipped"
+cdfdir="$DATAHOME/SWARM/MAG/Unzipped_Data"
+outdir="$DATAHOME/SWARM/MAG/Stage1"
+lpdir="$DATAHOME/SWARM/EFI/LP_Unzipped"
 
 # Use CHAOS external field model
 #extra_flags="-c"
 extra_flags=""
 
-prog="/data/palken/lib/swarm/stage1"
+prog="$MYLIBHOME/swarm/stage1"
 
 sat=""
 if test -n "$1"; then

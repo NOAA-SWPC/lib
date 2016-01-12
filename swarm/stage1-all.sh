@@ -10,6 +10,6 @@ if test -n "$1"; then
   sat="$1"
 fi
 
-for year in $(seq 2013 2015); do
+for year in $(seq 2013 2016); do
   screen -d -m -S pSwarm${sat}_${year} sh stage1_chaos.sh ${sat} ${year}
 done
