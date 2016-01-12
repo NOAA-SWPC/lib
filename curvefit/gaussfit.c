@@ -137,8 +137,8 @@ gaussfit(const double *t, const double *y,
   /* initial cost */
   gsl_blas_ddot(f, f, &(w->chisq0));
 
-  s = gsl_multifit_nlinear_driver(100, xtol, gtol, ftol, NULL, &info,
-                                  w->nlinear_workspace_p);
+  s = gsl_multifit_nlinear_driver(100, xtol, gtol, ftol, NULL, NULL,
+                                  &info, w->nlinear_workspace_p);
 
   /* save model parameters */
   gsl_vector_memcpy(w->c, c);
