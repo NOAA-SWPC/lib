@@ -662,9 +662,9 @@ magdata_map(const char *filename, const magdata *data)
               90.0 - data->theta[i] * 180.0 / M_PI,
               data->qdlat[i],
               data->r[i] - data->R,
-              ((data->flags[i] & MAGDATA_FLG_FIT_MF) && (data->flags[i] & MAGDATA_FLG_F)) ? 1 : 0,
-              ((data->flags[i] & MAGDATA_FLG_FIT_MF) && (data->flags[i] & MAGDATA_FLG_Z)) ? 1 : 0,
-              data->flags[i] & MAGDATA_FLG_FIT_EULER ? 1 : 0,
+              (MAGDATA_ExistScalar(data->flags[i]) && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
+              (MAGDATA_ExistVector(data->flags[i]) && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
+              MAGDATA_FitEuler(data->flags[i]) ? 1 : 0,
               data->flags[i] & MAGDATA_FLG_DZ_NS ? 1 : 0);
     }
 
