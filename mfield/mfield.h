@@ -14,6 +14,7 @@
 #include <gsl/gsl_multifit_nlinear.h>
 #include <gsl/gsl_multilarge_nlinear.h>
 #include <gsl/gsl_histogram.h>
+#include <gsl/gsl_eigen.h>
 
 #include "mfield_data.h"
 #include "mfield_green.h"
@@ -29,7 +30,7 @@
 #if MFIELD_FIT_SECVAR
 #define MFIELD_FIT_SECACC      1
 #else
-#define MFIELD_FIT_SECACC      1
+#define MFIELD_FIT_SECACC      0
 #endif
 
 /* fit Euler angles to data */
@@ -175,7 +176,6 @@ typedef struct
    * the matrix is symmetric
    */
   gsl_matrix *JTJ_vec;     /* J_mf^T J_mf for vector measurements, p_int-by-p_int */
-  gsl_vector *JTJ_tmp;     /* temporary workspace, p_int-by-1 */
 
   gsl_matrix *block_dX;    /* dX/dg data_block-by-nnm_mf */
   gsl_matrix *block_dY;    /* dY/dg data_block-by-nnm_mf */
@@ -191,6 +191,7 @@ typedef struct
   mfield_green_workspace *green_workspace_p;
   mfield_data_workspace *data_workspace_p;
   track_weight_workspace *weight_workspace_p;
+  gsl_eigen_symm_workspace *eigen_workspace_p;
 } mfield_workspace;
 
 #define MFIELD_EULER_DERIV_ALPHA       (1 << 0)
@@ -231,6 +232,7 @@ int mfield_eval_g_ext(const double t, const double r, const double theta, const 
 int mfield_eval_static(const double r, const double theta, const double phi,
                        const gsl_vector *g, double B[4], mfield_workspace *w);
 int mfield_calc_uncertainties(mfield_workspace *w);
+int mfield_calc_evals(gsl_vector *evals, mfield_workspace *w);
 double mfield_spectrum(const size_t n, const mfield_workspace *w);
 double mfield_spectrum_sv(const size_t n, const mfield_workspace *w);
 double mfield_spectrum_sa(const size_t n, const mfield_workspace *w);

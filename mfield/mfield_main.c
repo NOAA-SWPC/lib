@@ -49,13 +49,11 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              60
+#define NMAX_MF              30
 #define NMAX_SV              15
 #define NMAX_SA              5
 
 #define MAX_BUFFER           2048
-
-#define MFIELD_CALC_UNCERTAINTIES   0
 
 /* n m gnm dgnm ddgnm */
 static mfield_test_coeff test_gnm[] = {
@@ -349,8 +347,19 @@ initial_guess(gsl_vector *c, mfield_workspace *w)
 int
 print_spectrum(const char *filename, mfield_workspace *w)
 {
+  const double c = 3485.0;               /* Earth core radius */
+  const double ratio = MFIELD_RE_KM / c; /* a / c */
   size_t n;
   FILE *fp = fopen(filename, "w");
+
+  n = 1;
+  fprintf(fp, "# Field %zu: spherical harmonic degree n\n", n++);
+  fprintf(fp, "# Field %zu: MF power R_n at Earth surface\n", n++);
+  fprintf(fp, "# Field %zu: SV power R_n at Earth surface\n", n++);
+  fprintf(fp, "# Field %zu: SA power R_n at Earth surface\n", n++);
+  fprintf(fp, "# Field %zu: MF power R_n at CMB\n", n++);
+  fprintf(fp, "# Field %zu: SV power R_n at CMB\n", n++);
+  fprintf(fp, "# Field %zu: SA power R_n at CMB\n", n++);
 
   fprintf(stderr, "print_spectrum: writing spectrum to %s...", filename);
   for (n = 1; n <= w->nmax_mf; ++n)
@@ -358,7 +367,16 @@ print_spectrum(const char *filename, mfield_workspace *w)
       double gn = mfield_spectrum(n, w);
       double dgn = mfield_spectrum_sv(n, w);
       double ddgn = mfield_spectrum_sa(n, w);
-      fprintf(fp, "%zu %.12e %.12e %.12e\n", n, gn, dgn, ddgn);
+      double rterm = pow(ratio, 2.0*n + 4.0);
+
+      fprintf(fp, "%zu %.12e %.12e %.12e %.12e %.12e %.12e\n",
+              n,
+              gn,
+              dgn,
+              ddgn,
+              rterm * gn,
+              rterm * dgn,
+              rterm * ddgn);
     }
   fprintf(stderr, "done\n");
 
@@ -888,18 +906,37 @@ main(int argc, char *argv[])
       mfield_reset(mfield_workspace_p);
     }
 
-#if MFIELD_CALC_UNCERTAINTIES
   /* calculate errors in coefficients */
-  {
-    struct timeval tv0, tv1;
+  fprintf(stderr, "main: calculating coefficient uncertainties...");
+  gettimeofday(&tv0, NULL);
+  mfield_calc_uncertainties(mfield_workspace_p);
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-    fprintf(stderr, "main: calculating coefficient uncertainties...");
+  sprintf(buf, "mfield_coeffs.txt");
+  fprintf(stderr, "main: writing coefficients to %s...", buf);
+  mfield_write_ascii(buf, mfield_workspace_p->epoch, 1, mfield_workspace_p);
+  fprintf(stderr, "done\n");
+
+  {
+    gsl_vector *evals = gsl_vector_alloc(mfield_workspace_p->p);
+    FILE *fp;
+
+    fprintf(stderr, "main: calculating eigenvalues of J^T J...");
     gettimeofday(&tv0, NULL);
-    mfield_calc_uncertainties(mfield_workspace_p);
+    mfield_calc_evals(evals, mfield_workspace_p);
     gettimeofday(&tv1, NULL);
     fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+    sprintf(buf, "mfield_evals.txt");
+    fprintf(stderr, "main: writing eigenvalues to %s...", buf);
+    fp = fopen(buf, "w");
+    gsl_vector_fprintf(fp, evals, "%.12e");
+    fclose(fp);
+    fprintf(stderr, "done\n");
+
+    gsl_vector_free(evals);
   }
-#endif
 
   /* L-curve data */
   if (Lfile)

@@ -90,6 +90,7 @@ mag_alloc(mag_params *params)
     inverteef_params.ntheta = pde_params.ntheta;
     inverteef_params.theta_min = pde_params.theta_min;
     inverteef_params.theta_max = pde_params.theta_max;
+    inverteef_params.ncurr = params->ncurr;
 
     w->inverteef_workspace_p = inverteef_alloc(&inverteef_params);
   }

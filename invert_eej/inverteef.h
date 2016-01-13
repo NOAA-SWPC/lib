@@ -38,6 +38,7 @@ typedef struct
   size_t ntheta;
   double theta_min;
   double theta_max;
+  size_t ncurr;     /* number of line currents in satellite profile */
 } inverteef_parameters;
 
 typedef struct
@@ -46,6 +47,7 @@ typedef struct
   double theta_min;
   double theta_max;
   double dtheta;
+  size_t ncurr;     /* number of line currents in satellite profile */
 
   gsl_vector *J_pde_E; /* corresponding pde profile for E_0 */
   gsl_vector *J_pde_u; /* corresponding pde profile for winds */

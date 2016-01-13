@@ -85,6 +85,8 @@ inverteef_alloc(inverteef_parameters *params)
 
   w->dtheta = (w->theta_max - w->theta_min) / w->ntheta;
 
+  w->ncurr = params->ncurr;
+
   return w;
 } /* inverteef_alloc() */
 

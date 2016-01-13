@@ -38,9 +38,12 @@
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_errno.h>
+#include <gsl/gsl_eigen.h>
+#include <gsl/gsl_linalg.h>
 #include <gsl/gsl_multifit_nlinear.h>
 #include <gsl/gsl_multilarge_nlinear.h>
 #include <gsl/gsl_sf_legendre.h>
+#include <gsl/gsl_sort_vector.h>
 
 #include "mfield_green.h"
 
@@ -247,7 +250,8 @@ mfield_alloc(const mfield_parameters *params)
   w->wts = gsl_vector_alloc(4 * w->data_block);
 
   w->JTJ_vec = gsl_matrix_alloc(w->p_int, w->p_int);
-  w->JTJ_tmp = gsl_vector_alloc(w->p_int);
+
+  w->eigen_workspace_p = gsl_eigen_symm_alloc(w->p);
 
   w->block_dX = gsl_matrix_alloc(w->data_block, w->nnm_mf);
   w->block_dY = gsl_matrix_alloc(w->data_block, w->nnm_mf);
@@ -355,9 +359,6 @@ mfield_free(mfield_workspace *w)
   if (w->JTJ_vec)
     gsl_matrix_free(w->JTJ_vec);
 
-  if (w->JTJ_tmp)
-    gsl_vector_free(w->JTJ_tmp);
-
   if (w->block_dX)
     gsl_matrix_free(w->block_dX);
 
@@ -378,6 +379,9 @@ mfield_free(mfield_workspace *w)
 
   if (w->nlinear_workspace_p)
     gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
+
+  if (w->eigen_workspace_p)
+    gsl_eigen_symm_free(w->eigen_workspace_p);
 
   free(w);
 } /* mfield_free() */
@@ -557,59 +561,57 @@ mfield_calc_uncertainties(mfield_workspace *w)
    * external field coefficients could be zero for many days (if no
    * data) leading to a singular Jacobian
    */
-#if 0 /* XXX */
   const size_t p = w->p_int;
-  gsl_vector *r = gsl_vector_alloc(w->nres);
-  gsl_matrix *J = gsl_matrix_alloc(w->fdf_s->s->f->size, w->p);
-  gsl_matrix_view Jv = gsl_matrix_submatrix(J, 0, 0, w->nres, p);
-  gsl_matrix *covar = w->covar;
+  gsl_vector * f = gsl_multilarge_nlinear_residual(w->nlinear_workspace_p);
+  gsl_matrix * JTJ = gsl_multilarge_nlinear_JTJ(w->nlinear_workspace_p);
+  gsl_matrix_view m = gsl_matrix_submatrix(JTJ, 0, 0, p, p);
+  double dof = (double)f->size - (double)w->p;
   double chisq, sigmasq;
 
   fprintf(stderr, "\n");
 
-  /* compute residuals with final coefficients */
-  fprintf(stderr, "\t computing final residuals...");
-  mfield_calc_f(w->c, w, r);
-  fprintf(stderr, "done\n");
-
-  /* compute chi^2 = r^T r */
+  /* compute chi^2 = f^T f */
   fprintf(stderr, "\t computing final chisq...");
-  gsl_blas_ddot(r, r, &chisq);
+  gsl_blas_ddot(f, f, &chisq);
   fprintf(stderr, "done (chisq = %f)\n", chisq);
 
   /* use total number of coefficients for this calculation of dof */
   fprintf(stderr, "\t computing final sigmasq...");
-  sigmasq = chisq / (w->nres - w->p + 1.0);
+  sigmasq = chisq / dof;
   fprintf(stderr, "done (sigmasq = %f)\n", sigmasq);
 
-  /* compute Jacobian matrix */
-  fprintf(stderr, "\t computing Jacobian...");
-  gsl_multifit_fdfsolver_jac(w->fdf_s->s, J);
+  /* copy lower triangle of JTJ to covar */
+  gsl_matrix_tricpy('L', 1, w->covar, &m.matrix);
+
+  /* compute (J^T J)^{-1} using Cholesky decomposition */
+  fprintf(stderr, "\t inverting J^T J matrix...");
+  gsl_linalg_cholesky_decomp(w->covar);
+  gsl_linalg_cholesky_invert(w->covar);
   fprintf(stderr, "done\n");
 
-  /* compute J^T J */
-  fprintf(stderr, "\t computing J^T J...");
-  gsl_blas_dgemm(CblasTrans, CblasNoTrans, 1.0, &Jv.matrix, &Jv.matrix, 0.0, covar);
-  fprintf(stderr, "done\n");
-
-  print_octave(covar, "JTJ");
-
-  /* compute (J^T J)^{-1} */
-  fprintf(stderr, "\t inverting J^T J...");
-  s += lapack_inverse(covar);
-  fprintf(stderr, "done (s = %d)\n", s);
-
-  /* compute final covariance matrix = sigma^2 (J^T J)^{-1} */
-  gsl_matrix_scale(covar, sigmasq);
-
-  print_octave(covar, "covar");
-
-  gsl_vector_free(r);
-  gsl_matrix_free(J);
-#endif
+  /* scale by sigma^2 */
+  gsl_matrix_scale(w->covar, sigmasq);
 
   return s;
 } /* mfield_calc_uncertainties() */
+
+int
+mfield_calc_evals(gsl_vector *evals, mfield_workspace *w)
+{
+  int s;
+  gsl_matrix * JTJ = gsl_multilarge_nlinear_JTJ(w->nlinear_workspace_p);
+  gsl_matrix * A = gsl_matrix_alloc(w->p, w->p);
+
+  /* copy lower triangle of JTJ to A */
+  gsl_matrix_tricpy('L', 1, A, JTJ);
+
+  s = gsl_eigen_symm(A, evals, w->eigen_workspace_p);
+  gsl_sort_vector(evals);
+
+  gsl_matrix_free(A);
+
+  return s;
+}
 
 /*
 mfield_coeffs()
@@ -1261,12 +1263,28 @@ mfield_write_ascii(const char *filename, const double epoch,
   fprintf(fp, "%% nmax:  %zu\n", w->nmax_mf);
   fprintf(fp, "%% epoch: %.4f\n", epoch);
   fprintf(fp, "%% radius: %.1f\n", w->R);
-  fprintf(fp, "%% %3s %5s %20s %20s %20s\n",
-          "n",
-          "m",
-          "MF gnm (nT)",
-          "SV gnm (nT/year)",
-          "SA gnm (nT/year^2)");
+
+  if (write_delta)
+    {
+      fprintf(fp, "%% %3s %5s %20s %20s %20s %20s %20s %20s\n",
+              "n",
+              "m",
+              "MF gnm (nT)",
+              "MF dgnm (nT)",
+              "SV gnm (nT/year)",
+              "SV dgnm (nT/year)",
+              "SA gnm (nT/year^2)",
+              "SA dgnm (nT/year^2)");
+    }
+  else
+    {
+      fprintf(fp, "%% %3s %5s %20s %20s %20s\n",
+              "n",
+              "m",
+              "MF gnm (nT)",
+              "SV gnm (nT/year)",
+              "SA gnm (nT/year^2)");
+    }
 
   for (n = 1; n <= w->nmax_mf; ++n)
     {
