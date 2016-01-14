@@ -253,6 +253,9 @@ mfield_alloc(const mfield_parameters *params)
 
   w->eigen_workspace_p = gsl_eigen_symm_alloc(w->p);
 
+  w->lambda_diag = gsl_vector_calloc(w->p);
+  w->LTL = gsl_vector_calloc(w->p);
+
   w->block_dX = gsl_matrix_alloc(w->data_block, w->nnm_mf);
   w->block_dY = gsl_matrix_alloc(w->data_block, w->nnm_mf);
   w->block_dZ = gsl_matrix_alloc(w->data_block, w->nnm_mf);
@@ -316,6 +319,9 @@ mfield_free(mfield_workspace *w)
 
   if (w->lambda_diag)
     gsl_vector_free(w->lambda_diag);
+
+  if (w->LTL)
+    gsl_vector_free(w->LTL);
 
   if (w->wts_spatial)
     gsl_vector_free(w->wts_spatial);

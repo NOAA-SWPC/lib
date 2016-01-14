@@ -34,10 +34,10 @@
 #endif
 
 /* fit Euler angles to data */
-#define MFIELD_FIT_EULER       1
+#define MFIELD_FIT_EULER       0
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    1
+#define MFIELD_FIT_EXTFIELD    0
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)
@@ -148,6 +148,7 @@ typedef struct
   size_t nres_scal;        /* number of scalar residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
+  gsl_vector *LTL;         /* L^T L regularization matrix */
   double lambda_mf;        /* main field damping */
   double lambda_sv;        /* SV damping */
   double lambda_sa;        /* SA damping */

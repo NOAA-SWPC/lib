@@ -167,10 +167,18 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
 
 #if MFIELD_REGULARIZE && !MFIELD_SYNTH_DATA
   fprintf(stderr, "mfield_calc_nonlinear: regularizing least squares system...");
+
+  /* compute diag(L) */
   mfield_nonlinear_regularize(w->lambda_diag, w);
+
+  /* compute L^T L */
+  gsl_vector_memcpy(w->LTL, w->lambda_diag);
+  gsl_vector_mul(w->LTL, w->lambda_diag);
+
   fprintf(stderr, "done\n");
 #else
   gsl_vector_set_all(w->lambda_diag, 0.0);
+  gsl_vector_set_all(w->LTL, 0.0);
 #endif
 
 #if !OLD_FDF
@@ -390,8 +398,6 @@ mfield_init_nonlinear(mfield_workspace *w)
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 #endif
-
-  w->lambda_diag = gsl_vector_calloc(p);
 
   w->wts_spatial = gsl_vector_alloc(nres);
   w->wts_final = gsl_vector_alloc(nres);
@@ -1324,6 +1330,13 @@ mfield_calc_df2(const gsl_vector *x, const gsl_vector *y, void *params,
     {
       gsl_matrix_view Jm = gsl_matrix_submatrix(w->block_J, 0, 0, rowidx, w->p_int);
       gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &Jm.matrix, 1.0, &JTJ_int.matrix);
+    }
+
+  /* regularize by adding L^T L to diag(J^T J) */
+  if (JTJ)
+    {
+      gsl_vector_view v = gsl_matrix_diagonal(JTJ);
+      gsl_vector_add(&v.vector, w->LTL);
     }
 
 #if 0
