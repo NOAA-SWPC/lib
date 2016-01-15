@@ -4,7 +4,7 @@ bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust p
 commonlibs = -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas
 
 stage1_SOURCES = stage1.c
-stage1_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lmwmclmcrrt $(top_builddir)/chaos/libchaosext.so
+stage1_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lmwmclmcrrt $(abs_top_builddir)/chaos/libchaosext.so
 
 plotsep_SOURCES = plotsep.c
 plotsep_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs}
