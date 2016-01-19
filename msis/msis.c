@@ -1,6 +1,5 @@
 /*
  * msis.c
- * Patrick Alken
  */
 
 #include <stdio.h>

@@ -1,6 +1,5 @@
 /*
  * print_crust.c
- * Patrick Alken
  *
  * Print contents of Swarm data files, with crustal field residuals
  *

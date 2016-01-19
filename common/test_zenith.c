@@ -1,6 +1,5 @@
 /*
  * test_zenith.c
- * Patrick Alken
  */
 
 #include <stdio.h>

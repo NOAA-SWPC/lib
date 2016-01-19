@@ -1,6 +1,5 @@
 /*
  * dst.c
- * Patrick Alken
  *
  * This module reads data from the automatically updated Dst/Est/Ist
  * data file in /nfs/satmag/data/Indices/Dst/Est_Ist_index.pli

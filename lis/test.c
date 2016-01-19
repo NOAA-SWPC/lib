@@ -1,6 +1,5 @@
 /*
  * test.c
- * Patrick Alken
  *
  * Test lis module by creating random sparse matrices and rhs
  * vectors, solving the systems and comparing with GSL output

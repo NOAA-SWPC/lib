@@ -1,6 +1,5 @@
 /*
  * efi.c
- * Patrick Alken
  *
  * This module reads Swarm EFI ascii data files
  */

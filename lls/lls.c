@@ -1,6 +1,5 @@
 /*
  * lls.c
- * Patrick Alken
  *
  * This module is designed to solve linear least squares problems with
  * huge numbers of observations (for example a satellite data set spanning

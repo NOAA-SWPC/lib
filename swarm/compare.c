@@ -1,6 +1,5 @@
 /*
  * compare.c
- * Patrick Alken
  *
  * Compare Swarm ASMV with VFM data
  */

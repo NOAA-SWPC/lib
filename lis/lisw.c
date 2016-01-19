@@ -1,6 +1,5 @@
 /*
  * lisw.c
- * Patrick Alken
  *
  * Wrapper functions for lis library
  */

@@ -1,6 +1,5 @@
 /*
  * julia.c
- * Patrick Alken
  *
  * This module reads Jicamarca magnetometer data files
  */

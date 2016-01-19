@@ -1,6 +1,5 @@
 /*
  * pomme_wrap.c
- * Copyright (C) 2007-2012 Patrick Alken
  *
  * This module provides a C interface to the POMME model
  */

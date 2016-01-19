@@ -1,6 +1,5 @@
 /*
  * log.c
- * Patrick Alken
  */
 
 #include <stdio.h>

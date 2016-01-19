@@ -1,6 +1,5 @@
 /*
  * print_lt.c
- * Patrick Alken
  *
  * Print time series of Swarm ascending node local time
  *

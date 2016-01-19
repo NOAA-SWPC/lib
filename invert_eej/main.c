@@ -1,6 +1,5 @@
 /*
  * main.c
- * Patrick Alken
  */
 
 #include <stdio.h>

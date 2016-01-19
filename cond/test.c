@@ -1,6 +1,5 @@
 /*
  * test.c
- * Patrick Alken
  *
  * Test cond module
  */

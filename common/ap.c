@@ -1,6 +1,5 @@
 /*
  * ap.c
- * Patrick Alken
  *
  * This module reads data from a SPIDR data file containing
  * AP index values and then returns the correct value for

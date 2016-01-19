@@ -1,9 +1,9 @@
 /*
- * print_lt.c
+ * print.c
  *
- * Print time series of CHAMP ascending node local time
+ * Print contents of tiegcm data files
  *
- * ./print_lt <-i champ_index_file>
+ * ./print <-i tiegcm_nc_file>
  */
 
 #include <stdio.h>
@@ -19,31 +19,58 @@
 #include <errno.h>
 
 #include <gsl/gsl_math.h>
-#include <gsl/gsl_statistics.h>
-
-#include <satdata/satdata.h>
 
 #include "common.h"
+#include "tiegcm.h"
+
+/*
+print_data()
+
+Inputs: data - tiegcm data
+*/
+
+int
+print_data(const tiegcm_data *data)
+{
+  int s = 0;
+  size_t i;
+
+  i = 1;
+  printf("# Field %zu: time (decimal year)\n", i++);
+
+  for (i = 0; i < data->n; ++i)
+    {
+      printf("%ld\n",
+             data->t[i]);
+    }
+
+  return s;
+}
 
 int
 main(int argc, char *argv[])
 {
-  char *outfile = "lt.dat";
-  satdata_mag *data;
+  tiegcm_data *data;
   struct timeval tv0, tv1;
-  int c;
   char *infile = NULL;
 
-  while ((c = getopt(argc, argv, "i:o:")) != (-1))
+  while (1)
     {
+      int c;
+      int option_index = 0;
+      static struct option long_options[] =
+        {
+          { 0, 0, 0, 0 }
+        };
+
+      c = getopt_long(argc, argv, "i:", long_options, &option_index);
+      if (c == -1)
+        break;
+
       switch (c)
         {
           case 'i':
             infile = optarg;
-            break;
-
-          case 'o':
-            outfile = optarg;
             break;
 
           default:
@@ -53,17 +80,16 @@ main(int argc, char *argv[])
 
   if (!infile)
     {
-      fprintf(stderr, "Usage: %s <-i champ_index_file> [-o output_file]\n",
-              argv[0]);
+      fprintf(stderr, "Usage: %s <-i tiegcm_nc_file>\n", argv[0]);
       exit(1);
     }
 
   fprintf(stderr, "input file = %s\n", infile);
 
-  fprintf(stderr, "Reading %s...", infile);
+  fprintf(stderr, "main: reading %s...", infile);
   gettimeofday(&tv0, NULL);
 
-  data = satdata_champ_read_idx(infile, 1);
+  data = tiegcm_read(infile, NULL);
   if (!data)
     {
       fprintf(stderr, "main: error reading %s\n", infile);
@@ -74,11 +100,9 @@ main(int argc, char *argv[])
   fprintf(stderr, "done (%zu records read, %g seconds)\n", data->n,
           time_diff(tv0, tv1));
 
-  fprintf(stderr, "main: printing local time data to %s...", outfile);
-  satdata_print_lt(outfile, data);
-  fprintf(stderr, "done\n");
+  print_data(data);
 
-  satdata_mag_free(data);
+  tiegcm_free(data);
 
   return 0;
-} /* main() */
+}

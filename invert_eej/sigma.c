@@ -1,6 +1,5 @@
 /*
  * sigma.c
- * Patrick Alken
  *
  * This file contains routines related to computing the conductivity
  * tensor for each grid point

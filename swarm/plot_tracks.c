@@ -1,6 +1,5 @@
 /*
  * plot_tracks.c
- * Patrick Alken
  *
  * Plot information about individual Swarm tracks, including local
  * time of equator crossing

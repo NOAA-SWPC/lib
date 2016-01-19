@@ -1,6 +1,5 @@
 /*
  * print_plp.c
- * Patrick Alken
  *
  * Print contents of CHAMP PLP data files
  *

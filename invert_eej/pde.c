@@ -1,6 +1,5 @@
 /*
  * pde.c
- * Patrick Alken
  *
  * Solve the electrodynamic PDE governing the EEJ current system
  * using finite differencing

@@ -28,4 +28,5 @@ SUBDIRS =     \
   poltor      \
   invert_eej  \
   mfield      \
-  swarm
+  swarm       \
+	tiegcm

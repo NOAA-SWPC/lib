@@ -1,6 +1,5 @@
 /*
  * corr.c
- * Patrick Alken
  *
  * Correlate Swarm A/B data as a function of longitude
  *

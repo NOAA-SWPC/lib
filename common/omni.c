@@ -1,6 +1,5 @@
 /*
  * omni.c
- * Patrick Alken
  *
  * This module reads data from a OMNI2 data file containing solar wind
  * parameters

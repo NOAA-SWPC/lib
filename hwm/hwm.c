@@ -1,6 +1,5 @@
 /*
  * hwm.c
- * Copyright (C) 2007 Patrick Alken
  *
  * This module provides a C interface to the HWM model (fortran)
  */

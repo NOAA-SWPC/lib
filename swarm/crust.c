@@ -1,6 +1,5 @@
 /*
  * crust.c
- * Patrick Alken
  *
  * Compare Swarm data with MF7 model
  *

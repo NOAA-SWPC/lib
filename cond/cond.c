@@ -1,6 +1,5 @@
 /*
  * cond.c
- * Copyright (C) 2006 Patrick Alken
  *
  * This file provides a C interface to the IRI-2007 and MSIS
  * models (written in fortran).

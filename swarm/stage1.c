@@ -1,6 +1,5 @@
 /*
  * stage1.c
- * Patrick Alken
  *
  * 1. Read Swarm CDF data file
  * 2. Compute main and external fields

@@ -1,6 +1,5 @@
 /*
  * mfield_eval.c
- * Patrick Alken
  */
 
 #include <stdio.h>

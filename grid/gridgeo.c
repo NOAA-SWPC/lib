@@ -1,6 +1,5 @@
 /*
  * gridgeo.c
- * Patrick Alken
  *
  * Bins (x, y) data into x bins, computes the mean and stddev of
  * the y values in each bin and outputs the results

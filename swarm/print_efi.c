@@ -1,6 +1,5 @@
 /*
  * print_efi.c
- * Patrick Alken
  *
  * Print contents of Swarm LP data files
  *

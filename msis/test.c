@@ -1,6 +1,5 @@
 /*
  * test.c
- * Patrick Alken
  *
  * Test MSIS module
  */

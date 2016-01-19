@@ -1,6 +1,5 @@
 /*
  * compare.c
- * Patrick Alken
  *
  * Compare Swarm EEF data with other observations (ie: JULIA)
  *

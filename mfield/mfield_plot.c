@@ -83,9 +83,8 @@ main(int argc, char *argv[])
   else if (wmm)
     {
       fprintf(stderr, "main: loading WMM coefficients...");
-      /*msynth_p = msynth_wmm_read(MSYNTH_WMM_FILE);*/
+      msynth_p = msynth_wmm_read(MSYNTH_WMM_FILE);
       /*msynth_p = msynth_wmm_read(MSYNTH_WMM_BGS_FILE);*/
-      msynth_p = msynth_arnaud_read("/nfs/satmag_work/palken/corr/msynth/cof/CHAOS-4plus_V4_2015.cof");
       fprintf(stderr, "done\n");
     }
   else

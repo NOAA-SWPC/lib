@@ -1,6 +1,5 @@
 /*
  * print.c
- * Patrick Alken
  *
  * Print contents of CHAMP data files
  *

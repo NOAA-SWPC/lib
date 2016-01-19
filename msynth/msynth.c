@@ -1,6 +1,5 @@
 /*
  * msynth.c
- * Patrick Alken
  */
 
 #include <stdio.h>

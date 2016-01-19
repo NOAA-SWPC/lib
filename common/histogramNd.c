@@ -1,6 +1,5 @@
 /*
  * histogramNd.c
- * Copyright (C) 2006 Patrick Alken
  */
 
 #include <stdio.h>

@@ -1,6 +1,5 @@
 /*
  * mageq.c
- * Patrick Alken
  *
  * Calculate latitude of magnetic equator at a given geocentric radius
  * and longitude

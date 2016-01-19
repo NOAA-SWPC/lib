@@ -1,6 +1,5 @@
 /*
  * stage1.c
- * Patrick Alken
  *
  * 1. Read CHAMP CDF data file
  * 2. Compute main, crustal and external fields

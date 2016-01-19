@@ -1,6 +1,5 @@
 /*
  * print_alt.c
- * Patrick Alken
  *
  * Print time series of CHAMP mean altitude
  *

@@ -1,6 +1,5 @@
 /*
  * swarmcdf2fday.c
- * Patrick Alken
  *
  * 1. Read Swarm CDF data file
  * 2. Compute fday of first data value and output

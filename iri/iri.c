@@ -1,6 +1,5 @@
 /*
  * iri.c
- * Patrick Alken
  *
  * Wrapper routines for IRI model
  */

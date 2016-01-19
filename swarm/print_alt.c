@@ -1,6 +1,5 @@
 /*
  * print.c
- * Patrick Alken
  *
  * Print contents of Swarm data files with daily mean altitude
  *

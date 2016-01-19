@@ -1,6 +1,5 @@
 /*
  * apex.c
- * Patrick Alken
  */
 
 #include <stdio.h>
