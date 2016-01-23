@@ -70,14 +70,17 @@ static size_t model_flags(const size_t magdata_flags, const double t,
  */
 #define MFIELD_INC_CRUSTAL         0
 
-/* maximum QD latitude for fitting vector data */
-#define MFIELD_VECTOR_QDLAT        (55.0)
+/* QD latitude above which we do not fit X/Y data for MF modeling */
+#define MFIELD_QDLAT_HIGH          (55.0)
 
 /* maximum QD latitude for fitting Euler angles */
-#define MFIELD_EULER_QDLAT         MFIELD_VECTOR_QDLAT
+#define MFIELD_EULER_QDLAT         MFIELD_QDLAT_HIGH
 
 /* geocentric latitude cutoff for using local time vs zenith selection */
 #define MFIELD_HIGH_LATITUDE      (60.0)
+
+/* define to fit Z component at high latitudes instead of F */
+#define MFIELD_FIT_Z_HIGHLAT      1
 
 /* Global */
 solarpos_workspace *solarpos_workspace_p = NULL;
@@ -97,7 +100,7 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
   magdata_params params;
   size_t i;
   size_t npts[4] = { 0, 0, 0, 0 };
-  size_t nmodel[4] = { 0, 0, 0, 0 };
+  size_t nmodel[5] = { 0, 0, 0, 0, 0 };
 
   params.grad_dt_ns = MFIELD_GRAD_DT;
   params.model_main = 0;
@@ -143,15 +146,48 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
                                          mdata->t[i], mdata->theta[i],
                                          mdata->phi[i], mdata->qdlat[i]);
 
-      if ((fitting_flags & MAGDATA_FLG_FIT_MF) &&
-          MAGDATA_ExistScalar(mdata->flags[i]))
-        ++(nmodel[0]);
-      if ((fitting_flags & MAGDATA_FLG_FIT_MF) &&
-          MAGDATA_ExistVector(mdata->flags[i]))
-        ++(nmodel[1]);
+      if (fitting_flags & MAGDATA_FLG_FIT_MF)
+        {
+          if (fabs(mdata->qdlat[i]) <= MFIELD_QDLAT_HIGH)
+            {
+              /* don't fit scalar data at low latitudes if vector is available */
+              if (MAGDATA_ExistVector(mdata->flags[i]))
+                mdata->flags[i] &= ~MAGDATA_FLG_F;
+            }
+          else
+            {
+#if MFIELD_FIT_Z_HIGHLAT
+              /* only fit Z data at high latitudes */
+              mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_F);
+#else
+              /* only fit F data at high latitudes */
+              mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z);
+#endif
+            }
+
+#if MFIELD_FIT_Z_HIGHLAT
+          /*XXX: sometimes there is a scalar measurement but no vector -
+           * forcably discard all scalar measurements */
+          mdata->flags[i] &= ~MAGDATA_FLG_F;
+#endif
+
+          if (MAGDATA_ExistX(mdata->flags[i]))
+            ++(nmodel[0]);
+
+          if (MAGDATA_ExistY(mdata->flags[i]))
+            ++(nmodel[1]);
+
+          if (MAGDATA_ExistZ(mdata->flags[i]))
+            ++(nmodel[2]);
+
+          if (MAGDATA_ExistScalar(mdata->flags[i]))
+            ++(nmodel[3]);
+
+        }
+
       if ((fitting_flags & MAGDATA_FLG_FIT_EULER) &&
           MAGDATA_ExistVector(mdata->flags[i]))
-        ++(nmodel[2]);
+        ++(nmodel[4]);
 
       mdata->flags[i] |= fitting_flags;
     }
@@ -166,12 +202,16 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) along-track vector measurements available\n",
           npts[3], mdata->n, (double) npts[3] / (double) mdata->n * 100.0);
 
-  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) scalar measurements selected for MF modeling\n",
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) X vector measurements selected for MF modeling\n",
           nmodel[0], mdata->n, (double) nmodel[0] / (double) mdata->n * 100.0);
-  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements selected for MF modeling\n",
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) Y vector measurements selected for MF modeling\n",
           nmodel[1], mdata->n, (double) nmodel[1] / (double) mdata->n * 100.0);
-  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements selected for Euler angle modeling\n",
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) Z vector measurements selected for MF modeling\n",
           nmodel[2], mdata->n, (double) nmodel[2] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) scalar measurements selected for MF modeling\n",
+          nmodel[3], mdata->n, (double) nmodel[3] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements selected for Euler angle modeling\n",
+          nmodel[4], mdata->n, (double) nmodel[4] / (double) mdata->n * 100.0);
 
   return mdata;
 }
@@ -183,13 +223,13 @@ read_swarm(const char *filename, const int asmv)
   satdata_mag *data;
   struct timeval tv0, tv1;
 
-  fprintf(stderr, "read_swarm: reading %s...", optarg);
+  fprintf(stderr, "read_swarm: reading %s...", filename);
   gettimeofday(&tv0, NULL);
 
   if (asmv)
-    data = satdata_swarm_asmv_read_idx(optarg, 0);
+    data = satdata_swarm_asmv_read_idx(filename, 0);
   else
-    data = satdata_swarm_read_idx(optarg, 0);
+    data = satdata_swarm_read_idx(filename, 0);
 
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%zu data read, %g seconds)\n",
@@ -212,9 +252,9 @@ read_champ(const char *filename)
   struct timeval tv0, tv1;
   size_t nflag;
 
-  fprintf(stderr, "read_champ: reading %s...", optarg);
+  fprintf(stderr, "read_champ: reading %s...", filename);
   gettimeofday(&tv0, NULL);
-  data = satdata_champ_read_idx(optarg, 0);
+  data = satdata_champ_read_idx(filename, 0);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%zu data read, %g seconds)\n",
           data->n, time_diff(tv0, tv1));
@@ -375,7 +415,6 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
       {
         double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
         double phi = data->longitude[i] * M_PI / 180.0;
-        double qdlat = data->qdlat[i];
         size_t fitting_flags = model_flags(magdata_flags,
                                            data->t[i], theta,
                                            phi, data->qdlat[i]);
@@ -385,11 +424,6 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
           {
             data->flags[i] |= SATDATA_FLG_OUTLIER;
             ++nflag;
-          }
-        else if ((fitting_flags & MAGDATA_FLG_FIT_MF) && (fabs(qdlat) > MFIELD_VECTOR_QDLAT))
-          {
-            /* use only scalar data at high latitudes for MF modeling */
-            data->flags[i] |= SATDATA_FLG_NOVEC_NEC | SATDATA_FLG_NOVEC_VFM;
           }
       }
     fprintf(stderr, "done (%zu/%zu (%.1f%%) points flagged)\n",

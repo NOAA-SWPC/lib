@@ -49,9 +49,9 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              20
+#define NMAX_MF              30
 #define NMAX_SV              15
-#define NMAX_SA              10
+#define NMAX_SA              8
 
 #define MAX_BUFFER           2048
 
@@ -394,11 +394,14 @@ in w->data_workspace_p and coefficients stored in w->c
 int
 print_residuals(const char *filename, mfield_workspace *w)
 {
+  const double qdlat_cutoff = 55.0; /* cutoff latitude for high/low statistics */
   size_t i, j, k;
   gsl_rstat_workspace *rstat_x = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_y = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_z = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_f = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_lowz = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_highz = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_lowf = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_highf = gsl_rstat_alloc();
 
@@ -425,6 +428,8 @@ print_residuals(const char *filename, mfield_workspace *w)
       gsl_rstat_reset(rstat_y);
       gsl_rstat_reset(rstat_z);
       gsl_rstat_reset(rstat_f);
+      gsl_rstat_reset(rstat_lowz);
+      gsl_rstat_reset(rstat_highz);
       gsl_rstat_reset(rstat_lowf);
       gsl_rstat_reset(rstat_highf);
 
@@ -463,7 +468,9 @@ print_residuals(const char *filename, mfield_workspace *w)
       fprintf(fp_res, "# Field %zu: NEC Z component (nT)\n", k++);
       fprintf(fp_res, "# Field %zu: satellite direction (+1 north -1 south)\n", k++);
       fprintf(fp_res, "# Field %zu: scalar data used in MF fitting (1 or 0)\n", k++);
-      fprintf(fp_res, "# Field %zu: vector data used in MF fitting (1 or 0)\n", k++);
+      fprintf(fp_res, "# Field %zu: X data used in MF fitting (1 or 0)\n", k++);
+      fprintf(fp_res, "# Field %zu: Y data used in MF fitting (1 or 0)\n", k++);
+      fprintf(fp_res, "# Field %zu: Z data used in MF fitting (1 or 0)\n", k++);
       fprintf(fp_res, "# Field %zu: vector data used in Euler angle fitting (1 or 0)\n", k++);
       fprintf(fp_res, "# Field %zu: along-track gradient available (1 or 0)\n", k++);
 
@@ -479,8 +486,10 @@ print_residuals(const char *filename, mfield_workspace *w)
           double lt = get_localtime(unix_time, phi);
           double B_nec[3], B_int[4], B_ext[4], B_model[4];
           double res[4];
-          int fit_scal = (mptr->flags[j] & MAGDATA_FLG_FIT_MF) && (mptr->flags[j] & MAGDATA_FLG_F);
-          int fit_vec =  (mptr->flags[j] & MAGDATA_FLG_FIT_MF) && (mptr->flags[j] & MAGDATA_FLG_Z);
+          int fit_scal = MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
+          int fit_X = MAGDATA_ExistX(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
+          int fit_Y = MAGDATA_ExistY(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
+          int fit_Z = MAGDATA_ExistZ(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
 
           mfield_eval(mptr->t[j], r, theta, phi, B_int, w);
           mfield_eval_ext(mptr->t[j], r, theta, phi, B_ext, w);
@@ -527,12 +536,21 @@ print_residuals(const char *filename, mfield_workspace *w)
           /* compute scalar residual */
           res[3] = mptr->F[j] - B_model[3];
 
-          if (fit_vec)
+          if (fit_X)
+            gsl_rstat_add(res[0], rstat_x);
+
+          if (fit_Y)
+            gsl_rstat_add(res[1], rstat_y);
+
+          if (fit_Z)
             {
-              gsl_rstat_add(res[0], rstat_x);
-              gsl_rstat_add(res[1], rstat_y);
               gsl_rstat_add(res[2], rstat_z);
               gsl_histogram_increment(hz, res[2]);
+
+              if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                gsl_rstat_add(res[2], rstat_lowz);
+              else
+                gsl_rstat_add(res[2], rstat_highz);
             }
 
           if (fit_scal)
@@ -540,13 +558,13 @@ print_residuals(const char *filename, mfield_workspace *w)
               gsl_rstat_add(res[3], rstat_f);
               gsl_histogram_increment(hf, res[3]);
 
-              if (fabs(mptr->qdlat[j]) <= 55.0)
+              if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
                 gsl_rstat_add(res[3], rstat_lowf);
               else
                 gsl_rstat_add(res[3], rstat_highf);
             }
 
-          fprintf(fp_res, "%12.6f %6.3f %6.2f %7.3f %8.4f %8.4f %9.4f %8.2f %8.2f %8.2f %8.2f %9.2f %9.2f %9.2f %d %d %d %d %d\n",
+          fprintf(fp_res, "%12.6f %6.3f %6.2f %7.3f %8.4f %8.4f %9.4f %8.2f %8.2f %8.2f %8.2f %9.2f %9.2f %9.2f %d %d %d %d %d %d %d\n",
                   t,
                   lt,
                   get_season(unix_time),
@@ -563,7 +581,9 @@ print_residuals(const char *filename, mfield_workspace *w)
                   B_nec[2],
                   mptr->satdir[j],
                   fit_scal,
-                  fit_vec,
+                  fit_X,
+                  fit_Y,
+                  fit_Z,
                   mptr->flags[j] & MAGDATA_FLG_FIT_EULER ? 1 : 0,
                   mptr->flags[j] & MAGDATA_FLG_DZ_NS ? 1 : 0);
         }
@@ -602,6 +622,20 @@ print_residuals(const char *filename, mfield_workspace *w)
               gsl_rstat_mean(rstat_f),
               gsl_rstat_sd(rstat_f),
               gsl_rstat_rms(rstat_f));
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "low Z",
+              gsl_rstat_n(rstat_lowz),
+              gsl_rstat_mean(rstat_lowz),
+              gsl_rstat_sd(rstat_lowz),
+              gsl_rstat_rms(rstat_lowz));
+
+      fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+              "high Z",
+              gsl_rstat_n(rstat_highz),
+              gsl_rstat_mean(rstat_highz),
+              gsl_rstat_sd(rstat_highz),
+              gsl_rstat_rms(rstat_highz));
 
       fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
               "low F",
@@ -853,7 +887,7 @@ main(int argc, char *argv[])
 
   fprintf(stderr, "main: data epoch = %.2f\n", mfield_data_epoch(mfield_data_p));
 
-#if 0
+#if 1
   /* print spatial coverage maps for each satellite */
   mfield_data_map(datamap_file, mfield_data_p);
 #endif

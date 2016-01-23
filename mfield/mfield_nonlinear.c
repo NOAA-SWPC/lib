@@ -310,7 +310,9 @@ mfield_init_nonlinear(mfield_workspace *w)
   size_t ndata = 0;             /* number of distinct data points */
   size_t nres = 0;              /* total number of residuals */
   size_t nres_scal = 0;         /* number of scalar residuals */
-  size_t nres_vec = 0;          /* number of vector residuals */
+  size_t nres_X = 0;            /* number of X residuals */
+  size_t nres_Y = 0;            /* number of Y residuals */
+  size_t nres_Z = 0;            /* number of Z residuals */
   struct timeval tv0, tv1;
   size_t i, j;
 
@@ -325,12 +327,12 @@ mfield_init_nonlinear(mfield_workspace *w)
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
-          if (mptr->flags[j] & MAGDATA_FLG_X)
-            ++nres_vec;
-          if (mptr->flags[j] & MAGDATA_FLG_Y)
-            ++nres_vec;
-          if (mptr->flags[j] & MAGDATA_FLG_Z)
-            ++nres_vec;
+          if (MAGDATA_ExistX(mptr->flags[j]))
+            ++nres_X;
+          if (MAGDATA_ExistY(mptr->flags[j]))
+            ++nres_Y;
+          if (MAGDATA_ExistZ(mptr->flags[j]))
+            ++nres_Z;
 
           /* don't increase nres if only fitting Euler angles */
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
@@ -341,16 +343,18 @@ mfield_init_nonlinear(mfield_workspace *w)
         }
     }
 
-  nres = nres_scal + nres_vec;
+  nres = nres_scal + nres_X + nres_Y + nres_Z;
 
-  w->nres_vec = nres_vec;
+  w->nres_vec = nres_X + nres_Y + nres_Z;
   w->nres_scal = nres_scal;
   w->nres = nres;
   w->ndata = ndata;
 
   fprintf(stderr, "mfield_init_nonlinear: %zu distinct data points\n", ndata);
   fprintf(stderr, "mfield_init_nonlinear: %zu scalar residuals\n", w->nres_scal);
-  fprintf(stderr, "mfield_init_nonlinear: %zu vector residuals\n", w->nres_vec);
+  fprintf(stderr, "mfield_init_nonlinear: %zu X residuals\n", nres_X);
+  fprintf(stderr, "mfield_init_nonlinear: %zu Y residuals\n", nres_Y);
+  fprintf(stderr, "mfield_init_nonlinear: %zu Z residuals\n", nres_Z);
   fprintf(stderr, "mfield_init_nonlinear: %zu total residuals\n", w->nres);
   fprintf(stderr, "mfield_init_nonlinear: %zu total parameters\n", p);
 
@@ -377,7 +381,7 @@ mfield_init_nonlinear(mfield_workspace *w)
       gsl_multifit_nlinear_default_parameters();
 
     fdf_params.solver = gsl_multifit_nlinear_solver_normal;
-    fdf_params.accel = 1;
+    fdf_params.accel = 0;
     fdf_params.h_fvv = 0.5;
     w->multifit_nlinear_p = gsl_multifit_nlinear_alloc(T, &fdf_params, nres, p);
   }
@@ -430,13 +434,13 @@ mfield_init_nonlinear(mfield_workspace *w)
 
             track_weight_get(mptr->phi[j], mptr->theta[j], &wt, w->weight_workspace_p);
 
-            if (mptr->flags[j] & MAGDATA_FLG_X)
+            if (MAGDATA_ExistX(mptr->flags[j]))
               gsl_vector_set(w->wts_spatial, idx++, MFIELD_WEIGHT_X * wt);
 
-            if (mptr->flags[j] & MAGDATA_FLG_Y)
+            if (MAGDATA_ExistY(mptr->flags[j]))
               gsl_vector_set(w->wts_spatial, idx++, MFIELD_WEIGHT_Y * wt);
 
-            if (mptr->flags[j] & MAGDATA_FLG_Z)
+            if (MAGDATA_ExistZ(mptr->flags[j]))
               gsl_vector_set(w->wts_spatial, idx++, MFIELD_WEIGHT_Z * wt);
 
             if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
@@ -2121,7 +2125,8 @@ static int
 mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
 {
   int s = 0;
-  const size_t nmin = 9;
+  const size_t nmin_sv = 13;
+  const size_t nmin_sa = 8;
   const size_t nmax = w->nmax_mf;
   const double c = 3485.0;       /* Earth core radius */
   const double a = MFIELD_RE_KM; /* Earth surface radius */
@@ -2131,6 +2136,8 @@ mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
   double lambda_mf = w->lambda_mf;
   double lambda_sv = w->lambda_sv;
   double lambda_sa = w->lambda_sa;
+
+  gsl_vector_set_zero(diag);
 
   for (n = 1; n <= nmax; ++n)
     {
@@ -2143,16 +2150,18 @@ mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
 
           mfield_set_mf(diag, cidx, lambda_mf, w);
 
-          if (n >= nmin)
-            {
-              mfield_set_sv(diag, cidx, lambda_sv, w);
-              mfield_set_sa(diag, cidx, lambda_sa * term, w);
-            }
+#if 0
+          if (n >= nmin_sv)
+            mfield_set_sv(diag, cidx, lambda_sv, w);
+#else
+          if (n >= nmin_sv)
+            mfield_set_sv(diag, cidx, lambda_sv * n * n, w);
+#endif
+
+          if (n >= nmin_sa)
+            mfield_set_sa(diag, cidx, lambda_sa * term, w);
           else
-            {
-              mfield_set_sv(diag, cidx, lambda_mf, w);
-              mfield_set_sa(diag, cidx, lambda_mf, w);
-            }
+            mfield_set_sa(diag, cidx, lambda_mf, w);
         }
     }
 
@@ -2218,9 +2227,11 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
 {
   mfield_workspace *w = (mfield_workspace *) params;
   gsl_vector *x = gsl_multilarge_nlinear_position(multilarge_p);
+  gsl_vector *dx = gsl_multilarge_nlinear_step(multilarge_p);
   gsl_vector *f = gsl_multilarge_nlinear_residual(multilarge_p);
   double avratio = gsl_multilarge_nlinear_avratio(multilarge_p);
-  double rcond;
+  double rcond, max_dx = 0.0;
+  size_t i;
 
   /* print out state every 5 iterations */
   if (iter % 5 != 0 && iter != 1)
@@ -2258,6 +2269,19 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
   }
 #endif
 
+  /* compute max | dx_i / x_i | */
+  for (i = 0; i < w->p; ++i)
+    {
+      double dxi = gsl_vector_get(dx, i);
+      double xi = gsl_vector_get(x, i);
+
+      if (fabs(xi) < GSL_DBL_EPSILON)
+        continue;
+
+      max_dx = GSL_MAX(max_dx, fabs(dxi / xi));
+    }
+
+  fprintf(stderr, "\t max |dx/x|:  %12g\n", max_dx);
   fprintf(stderr, "\t |a|/|v|:     %12g\n", avratio);
   fprintf(stderr, "\t |f(x)|:      %12g\n", gsl_blas_dnrm2(f));
 

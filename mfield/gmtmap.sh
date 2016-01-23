@@ -2,13 +2,26 @@
 #
 # Plot X,Y,Z,F maps of Swarm residuals
 
-prefix="res_emm.dat"
+prefix="resFall"
 
 # Converted to EPS later
 outfile="${prefix}.ps"
 
-cptfile="norm10.cpt"
+cptfile="$GMTHOME/norm10.cpt"
 cbstep="5"
+
+# Columns of residual data file
+loncol="5"
+latcol="6"
+qdcol="7"
+Fcol="8"
+Xcol="9"
+Ycol="10"
+Zcol="11"
+FMF="16"
+XMF="17"
+YMF="18"
+ZMF="19"
 
 # Args:
 # projection
@@ -16,6 +29,9 @@ cbstep="5"
 # flags to pass to grdimage/pscoast
 # plot title if any
 # xyzfile
+# zcol: component to plot
+# title2
+# mfcol: flag to check if data used for MF modeling
 function dogmt
 {
   proj="$1"
@@ -25,7 +41,7 @@ function dogmt
   infile="$5"
   zcol="$6"
   title2="$7"
-  vec="$8"
+  mfcol="$8"
 
   if [ -n "${title}" ]; then
     pscoast_flags="-B:.${title}:"
@@ -34,26 +50,20 @@ function dogmt
   fi
 
   xyzfile=$(mktemp)
-  if [ ${vec} -gt "0" ]; then
-    cat ${infile} | datasel -c 6 --min -55 --max 55 | awk '{print $4,$5,$x}' x="${zcol}" > ${xyzfile}
-  else
-    # For some reason, there are large residuals of > 500 nT leaking
-    # into dataset
-    cat ${infile} | datasel -c ${zcol} --min -100 --max 100 | awk '{print $4,$5,$x}' x="${zcol}" > ${xyzfile}
-  fi
+  cat ${infile} | datasel -c $mfcol --eq 1 | awk '{print $x,$y,$z}' x="${loncol}" y="${latcol}" z="${zcol}" > ${xyzfile}
 
   # Convert xyz to grid file
   grdfile="${xyzfile}.grd"
-  blockmean ${xyzfile} -R-180/180/-90/90 -I150m > ${xyzfile}.bm
-  xyz2grd ${xyzfile}.bm -G${grdfile} -R-180/180/-90/90 -I150m
+  gmt blockmean ${xyzfile} -R-180/180/-90/90 -I150m > ${xyzfile}.bm
+  gmt xyz2grd ${xyzfile}.bm -G${grdfile} -R-180/180/-90/90 -I150m
 
   # Make image
-  grdimage -E300 ${gflags} -K -P -B0g0/0g0 ${grdfile} -C${cptfile} -J${proj} -R${region} >> $outfile
+  gmt grdimage -E300 ${gflags} -K -P -B0g0/0g0 ${grdfile} -C${cptfile} -J${proj} -R${region} >> $outfile
   #pscoast ${gflags} -O -P -A10/1 -Di -W2 -R${region} -J${proj} -K ${pscoast_flags} >> $outfile
-  pscoast ${gflags} -O -P -A5000 -Di -W2 -R${region} -J${proj} -K ${pscoast_flags} >> $outfile
+  gmt pscoast ${gflags} -O -P -A5000 -Di -W2 -R${region} -J${proj} -K ${pscoast_flags} >> $outfile
 
   if [ -n "${title2}" ]; then
-    pstext ${gflags} -Xa-0.5 -Ya3.5 -N -R${region} -J${proj} -P -O -K << EOF >> $outfile
+    gmt pstext ${gflags} -Xa-0.5 -Ya3.5 -N -R${region} -J${proj} -P -O -K << EOF >> $outfile
 -180  100   14  0  1  RB  ${title2}
 EOF
   fi
@@ -64,66 +74,66 @@ EOF
 }
 
 # select EPS file output
-gmtset PAPER_MEDIA Custom_7ix8i
+gmt set PS_MEDIA Custom_10ix8i
 
 # Size of plot titles
-gmtset HEADER_FONT_SIZE 20
+gmt set FONT_TITLE 20
 
 # Size of colorbar labels
-gmtset ANNOT_FONT_SIZE_PRIMARY 10
+gmt set FONT_ANNOT_PRIMARY 10
 
 rm -f $outfile
 
 # Equatorial view
-p="W0/1.8"
+p="W0/7"
 r="-180/180/-90/90"
 
 file="${prefix}.sat0"
 echo "Rendering ${file}..."
-dogmt $p $r "-Xa0.8i -Ya4.6i" "Swarm-A" ${file} 8 "" 1
-dogmt $p $r "-Xa0.8i -Ya3.4i -O" "" ${file} 9 "" 1
-dogmt $p $r "-Xa0.8i -Ya2.2i -O" "" ${file} 10 "" 1
-dogmt $p $r "-Xa0.8i -Ya1.0i -O" "" ${file} 7 "" 0
+dogmt $p $r "-Xa0.8i -Ya5.8i" "Swarm-A" ${file} ${Xcol} "" ${XMF}
+dogmt $p $r "-Xa0.8i -Ya4.2i -O" "" ${file} ${Ycol} "" ${YMF}
+dogmt $p $r "-Xa0.8i -Ya2.6i -O" "" ${file} ${Zcol} "" ${ZMF}
+dogmt $p $r "-Xa0.8i -Ya1.0i -O" "" ${file} ${Fcol} "" ${FMF}
 
 file="${prefix}.sat1"
 echo "Rendering ${file}..."
-dogmt $p $r "-Xa2.8i -Ya4.6i -O" "Swarm-B" ${file} 8 "" 1
-dogmt $p $r "-Xa2.8i -Ya3.4i -O" "" ${file} 9 "" 1
-dogmt $p $r "-Xa2.8i -Ya2.2i -O" "" ${file} 10 "" 1
-dogmt $p $r "-Xa2.8i -Ya1.0i -O" "" ${file} 7 "" 0
+dogmt $p $r "-Xa3.8i -Ya5.8i -O" "Swarm-B" ${file} ${Xcol} "" ${XMF}
+dogmt $p $r "-Xa3.8i -Ya4.2i -O" "" ${file} ${Ycol} "" ${YMF}
+dogmt $p $r "-Xa3.8i -Ya2.6i -O" "" ${file} ${Zcol} "" ${ZMF}
+dogmt $p $r "-Xa3.8i -Ya1.0i -O" "" ${file} ${Fcol} "" ${FMF}
 
 file="${prefix}.sat2"
 echo "Rendering ${file}..."
-dogmt $p $r "-Xa4.8i -Ya4.6i -O" "Swarm-C" ${file} 8 "" 1
-dogmt $p $r "-Xa4.8i -Ya3.4i -O" "" ${file} 9 "" 1
-dogmt $p $r "-Xa4.8i -Ya2.2i -O" "" ${file} 10 "" 1
-dogmt $p $r "-Xa4.8i -Ya1.0i -O" "" ${file} 7 "" 0
+dogmt $p $r "-Xa6.8i -Ya5.8i -O" "Swarm-C" ${file} ${Xcol} "" ${XMF}
+dogmt $p $r "-Xa6.8i -Ya4.2i -O" "" ${file} ${Ycol} "" ${YMF}
+dogmt $p $r "-Xa6.8i -Ya2.6i -O" "" ${file} ${Zcol} "" ${ZMF}
+dogmt $p $r "-Xa6.8i -Ya1.0i -O" "" ${file} ${Fcol} "" ${FMF}
 
 # Add row labels - the -R and -J options correspond to the PAPER_MEDIA
 # size command above
-pstext -N -Ri0/7/0/8 -JX7i/8i -P -O -K << EOF >> $outfile
-0.5  5.0   14  0  1  RB  X
-0.5  3.8   14  0  1  RB  Y
-0.5  2.6   14  0  1  RB  Z
-0.5  1.4   14  0  1  RB  F
+gmt pstext -N -Ri0/7/0/8 -JX7i/8i -P -O -K << EOF >> $outfile
+0.5  6.4   14  0  1  RB  X
+0.5  4.8   14  0  1  RB  Y
+0.5  3.2   14  0  1  RB  Z
+0.5  1.6   14  0  1  RB  F
 EOF
 
 # Color scale bar
-psscale -O -D3.5i/0.8i/6i/0.20ih -B${cbstep}/:nT: -C${cptfile} >> $outfile
+gmt psscale -O -D3.5i/0.8i/6i/0.20ih -B${cbstep}/:nT: -C${cptfile} >> $outfile
 
 outfile_png=$(echo ${outfile} | sed -e 's/ps/png/')
 outfile_eps=$(echo ${outfile} | sed -e 's/ps/eps/')
 
 # Convert to EPS to get rid of whitespace around edges
-echo "Converting to EPS..."
-ps2eps -f ${outfile}
+#echo "Converting to EPS..."
+#ps2eps -f ${outfile}
 
 # Convert to PNG
-echo "Converting to PNG..."
-convert -density 130 -flatten ${outfile_eps} ${outfile_png}
+#echo "Converting to PNG..."
+#convert -density 130 -flatten ${outfile_eps} ${outfile_png}
 
 # Delete PS/EPS files
-rm -f ${outfile}
-rm -f ${outfile_eps}
+#rm -f ${outfile}
+#rm -f ${outfile_eps}
 
 echo "Output is ${outfile_png}"

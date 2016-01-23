@@ -1,6 +1,8 @@
 \documentclass{article}
 
 \usepackage{amsmath}
+\usepackage{amstext}
+\usepackage{array}
 
 \begin{document}
 
@@ -108,7 +110,54 @@ in $\mathbf{B}^{int}$.
 \subsection{Jacobian}
 
 When minimizing $\chi^2$ with a nonlinear least squares algorithm, the Jacobian
-is required. Since the cost function $\chi^2$ depends on both vector and scalar
+is required.
+
+\subsubsection{Required derivatives}
+
+For easy reference, we list the derivatives of the residuals with respect
+to various model parameters, needed for the Jacobian calculation. Here, we
+assume that the internal field model can be expressed as
+\begin{equation}
+\mathbf{B}^{int}(\mathbf{r}; \mathbf{g}) = \sum_{nm} g_{nm} d\mathbf{B}^{int}_{nm}(\mathbf{r})
+\end{equation}
+where
+\begin{equation}
+d\mathbf{B}^{int}_{nm}(\mathbf{r}) =
+\left\{
+\begin{array}{cc}
+\left( \frac{a}{r} \right)^{n+2}
+\left(
+\begin{array}{c}
+\cos{(m\phi)} \partial_{\theta} P_{nm} \\
+\frac{m}{\sin{\theta}} \sin{(m\phi)} P_{nm} \\
+-(n+1) \cos{(m\phi)} P_{nm} \\
+\end{array}
+\right) & m \ge 0 \\
+\left( \frac{a}{r} \right)^{n+2}
+\left(
+\begin{array}{c}
+\sin{(m\phi)} \partial_{\theta} P_{nm} \\
+-\frac{m}{\sin{\theta}} \cos{(m\phi)} P_{nm} \\
+-(n+1) \sin{(m\phi)} P_{nm}
+\end{array}
+\right) & m < 0
+\end{array}
+\right.
+\end{equation}
+
+\begin{tabular}{>{$}c<{$} | >{$}c<{$} | >{$}c<{$}}
+& \text{Vector residual } \boldsymbol{\epsilon}_i & \text{Scalar residual } f_i \\
+\hline
+\frac{\partial}{\partial g_{nm}} & -d\mathbf{B}_{nm}(\mathbf{r}_i) & \frac{1}{|| \mathbf{B}^{model}(\mathbf{r}_i; \mathbf{g},\mathbf{k})||} \mathbf{B}^{model}(\mathbf{r}_i; \mathbf{g},\mathbf{k}) \cdot d\mathbf{B}^{int}_{nm}(\mathbf{r}_i) \\
+\hline
+\frac{\partial}{\partial (\alpha,\beta,\gamma)} & R_q \left[ \frac{\partial}{\partial (\alpha,\beta,\gamma)} R_3(\alpha,\beta,\gamma) \right] \mathbf{B}^{VFM}_i & 0 \\
+\hline
+\frac{\partial}{\partial k(t)} & -d\mathbf{B}^{ext}(\mathbf{r}_i) & \frac{1}{|| \mathbf{B}^{model}(\mathbf{r}_i; \mathbf{g},\mathbf{k})||} \mathbf{B}^{model}(\mathbf{r}_i; \mathbf{g},\mathbf{k}) \cdot d\mathbf{B}^{ext}(\mathbf{r}_i)
+\end{tabular}
+
+\subsubsection{Optimization}
+
+Since the cost function $\chi^2$ depends on both vector and scalar
 residuals, we can write the Jacobian as
 \begin{equation}
 \mathbf{J} =
