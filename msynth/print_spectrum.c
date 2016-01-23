@@ -41,11 +41,11 @@ main(int argc, char *argv[])
   msynth_workspace *msynth1 = NULL;
   msynth_workspace *msynth2 = NULL;
   char *outfile = "spectrum.s";
+  char *corrfile = "corr.dat";
   int print_azim = 0;
   int c;
   size_t nmax = 0;
   double epoch = -1.0;
-  int diff = 0;
 
   while ((c = getopt(argc, argv, "a:b:c:e:f:m:w:o:h:p:zn:i:d")) != (-1))
     {
@@ -137,7 +137,6 @@ main(int argc, char *argv[])
             break;
 
           case 'd':
-            diff = 1;
             msynth2 = msynth_chaos_read(MSYNTH_CHAOS_FILE);
             break;
         }
@@ -174,6 +173,13 @@ main(int argc, char *argv[])
   else
     msynth_print_spectrum(outfile, epoch, w);
   fprintf(stderr, "done\n");
+
+  if (msynth2)
+    {
+      fprintf(stderr, "main: printing degree correlation to %s...", corrfile);
+      msynth_print_correlation(corrfile, msynth1, msynth2);
+      fprintf(stderr, "done\n");
+    }
 
   msynth_free(w);
   msynth_free(msynth1);

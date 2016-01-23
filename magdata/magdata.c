@@ -647,7 +647,9 @@ magdata_map(const char *filename, const magdata *data)
   fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: altitude (km)\n", i++);
   fprintf(fp, "# Field %zu: scalar data used in MF fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: vector data used in MF fitting (1 or 0)\n", i++);
+  fprintf(fp, "# Field %zu: X vector data used in MF fitting (1 or 0)\n", i++);
+  fprintf(fp, "# Field %zu: Y vector data used in MF fitting (1 or 0)\n", i++);
+  fprintf(fp, "# Field %zu: Z vector data used in MF fitting (1 or 0)\n", i++);
   fprintf(fp, "# Field %zu: vector data used in Euler angle fitting (1 or 0)\n", i++);
   fprintf(fp, "# Field %zu: vector along-track gradient available (1 or 0)\n", i++);
 
@@ -656,14 +658,16 @@ magdata_map(const char *filename, const magdata *data)
       if (data->flags[i] & MAGDATA_FLG_DISCARD)
         continue;
 
-      fprintf(fp, "%f %f %f %f %.2f %d %d %d %d\n",
+      fprintf(fp, "%f %f %f %f %.2f %d %d %d %d %d %d\n",
               satdata_epoch2year(data->t[i]),
               wrap180(data->phi[i] * 180.0 / M_PI),
               90.0 - data->theta[i] * 180.0 / M_PI,
               data->qdlat[i],
               data->r[i] - data->R,
               (MAGDATA_ExistScalar(data->flags[i]) && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
-              (MAGDATA_ExistVector(data->flags[i]) && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
+              (data->flags[i] & MAGDATA_FLG_X && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
+              (data->flags[i] & MAGDATA_FLG_Y && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
+              (data->flags[i] & MAGDATA_FLG_Z && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
               MAGDATA_FitEuler(data->flags[i]) ? 1 : 0,
               data->flags[i] & MAGDATA_FLG_DZ_NS ? 1 : 0);
     }

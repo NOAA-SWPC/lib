@@ -34,7 +34,12 @@
 /* check if data point is discarded */
 #define MAGDATA_Discarded(x)          ( (x) & MAGDATA_FLG_DISCARD )
 
-/* vector measurement available */
+/* vector X/Y/Z measurements available */
+#define MAGDATA_ExistX(x)             (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_X))
+#define MAGDATA_ExistY(x)             (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_Y))
+#define MAGDATA_ExistZ(x)             (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_Z))
+
+/* total vector measurement available */
 #define MAGDATA_ExistVector(x)        (!MAGDATA_Discarded(x) && \
                                        ((x) & MAGDATA_FLG_X) && \
                                        ((x) & MAGDATA_FLG_Y) && \

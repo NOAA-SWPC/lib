@@ -627,6 +627,7 @@ track_print_stats_flag(const char *filename, const size_t flag,
   fprintf(fp, "# Field %zu: track scalar rms (nT)\n", i++);
   fprintf(fp, "# Field %zu: number of along-track data used for scalar rms\n", i++);
   fprintf(fp, "# Field %zu: number of along-track data used for vector rms\n", i++);
+  fprintf(fp, "# Field %zu: track flagged due to rms\n", i++);
 
   for (i = 0; i < w->n; ++i)
     {
@@ -642,7 +643,7 @@ track_print_stats_flag(const char *filename, const size_t flag,
             continue;
         }
 
-      fprintf(fp, "%ld %10.4f %6.2f %6.2f %6zu %6zu %2d %10.4f %10.4f %10.4f %10.4f %6zu %6zu\n",
+      fprintf(fp, "%ld %10.4f %6.2f %6.2f %6zu %6zu %2d %10.4f %10.4f %10.4f %10.4f %6zu %6zu %d\n",
               satdata_epoch2timet(tptr->t_eq),
               wrap180(tptr->lon_eq),
               tptr->lt_eq,
@@ -655,7 +656,8 @@ track_print_stats_flag(const char *filename, const size_t flag,
               tptr->rms[2],
               tptr->rms[3],
               tptr->nrms_scal,
-              tptr->nrms_vec);
+              tptr->nrms_vec,
+              (tptr->flags & TRACK_FLG_RMS) ? 1 : 0);
     }
 
   fclose(fp);

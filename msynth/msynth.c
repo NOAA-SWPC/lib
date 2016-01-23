@@ -10,6 +10,8 @@
 #include <assert.h>
 
 #include <gsl/gsl_math.h>
+#include <gsl/gsl_vector.h>
+#include <gsl/gsl_blas.h>
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_sf_legendre.h>
 
@@ -24,6 +26,7 @@ static int msynth_eval_dgdt(const double t, const double r, const double theta,
                             const double *dg, const double *ddg,
                             double dBdt[4], msynth_workspace *w);
 static int msynth_compare(const void *a, const void *b);
+static int msynth_vector_unit(gsl_vector * v);
 
 /*
 msynth_alloc()
@@ -506,6 +509,79 @@ msynth_print_spectrum_m(const char *filename, const msynth_workspace *w)
 
   return 0;
 } /* msynth_print_spectrum_m() */
+
+/* print degree correlation between two sets of coefficients */
+int
+msynth_print_correlation(const char *filename, const msynth_workspace *w1,
+                         const msynth_workspace *w2)
+{
+  size_t n;
+  FILE *fp;
+  size_t nmax = GSL_MIN(w1->eval_nmax, w2->eval_nmax);
+  gsl_vector *c1 = gsl_vector_alloc(w1->p);
+  gsl_vector *c2 = gsl_vector_alloc(w2->p);
+  gsl_vector_view v;
+  
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "msynth_print_correlation: cannot open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  /* make copies of coefficients */
+  v = gsl_vector_view_array(w1->c, w1->p);
+  gsl_vector_memcpy(c1, &v.vector);
+
+  v = gsl_vector_view_array(w2->c, w2->p);
+  gsl_vector_memcpy(c2, &v.vector);
+
+  n = 1;
+  fprintf(fp, "# Field %zu: n\n", n++);
+  fprintf(fp, "# Field %zu: MF R_n\n", n++);
+  fprintf(fp, "# Field %zu: SV R_n\n", n++);
+  fprintf(fp, "# Field %zu: SA R_n\n", n++);
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      size_t base = n * n - 1;
+      size_t len = 2 * n + 1;
+      gsl_vector_view v1 = gsl_vector_subvector(c1, base, len);
+      gsl_vector_view dv1 = gsl_vector_subvector(c1, base + w1->sv_offset, len);
+      gsl_vector_view ddv1 = gsl_vector_subvector(c1, base + w1->sa_offset, len);
+      gsl_vector_view v2 = gsl_vector_subvector(c2, base, len);
+      gsl_vector_view dv2 = gsl_vector_subvector(c2, base + w2->sv_offset, len);
+      gsl_vector_view ddv2 = gsl_vector_subvector(c2, base + w2->sa_offset, len);
+      double R_n[3];
+
+      /* convert <gnm> to unit vector */
+      msynth_vector_unit(&v1.vector);
+      msynth_vector_unit(&dv1.vector);
+      msynth_vector_unit(&ddv1.vector);
+
+      msynth_vector_unit(&v2.vector);
+      msynth_vector_unit(&dv2.vector);
+      msynth_vector_unit(&ddv2.vector);
+
+      gsl_blas_ddot(&v1.vector, &v2.vector, &R_n[0]);
+      gsl_blas_ddot(&dv1.vector, &dv2.vector, &R_n[1]);
+      gsl_blas_ddot(&ddv1.vector, &ddv2.vector, &R_n[2]);
+
+      fprintf(fp, "%4zu %15.6e %15.6e %15.6e\n",
+              n,
+              R_n[0],
+              R_n[1],
+              R_n[2]);
+    }
+
+  fclose(fp);
+
+  gsl_vector_free(c1);
+  gsl_vector_free(c2);
+
+  return 0;
+}
 
 /*
 msynth_calc_sv()
@@ -1234,4 +1310,22 @@ msynth_compare(const void *a, const void *b)
     return 1;
   else
     return 0;
+}
+
+static int
+msynth_vector_unit(gsl_vector * v)
+{
+  double norm = gsl_blas_dnrm2(v);
+  size_t i;
+
+  if (norm != 0)
+    {
+      for (i = 0; i < v->size; ++i)
+        {
+          double *vi = gsl_vector_ptr(v, i);
+          *vi /= norm;
+        }
+    }
+
+  return GSL_SUCCESS;
 }
