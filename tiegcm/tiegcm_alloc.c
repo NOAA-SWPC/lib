@@ -16,7 +16,7 @@
 #include "tiegcm.h"
 
 tiegcm_data *
-tiegcm_alloc(const size_t n)
+tiegcm_alloc(const size_t nt, const size_t nlon, const size_t nlat)
 {
   tiegcm_data *data;
 
@@ -28,33 +28,39 @@ tiegcm_alloc(const size_t n)
       return 0;
     }
 
-  tiegcm_realloc(n, data);
-
-  data->n = 0;
+  tiegcm_realloc(nt, nlon, nlat, data);
 
   return data;
 }
 
 tiegcm_data *
-tiegcm_realloc(const size_t n, tiegcm_data *data)
+tiegcm_realloc(const size_t nt, const size_t nlon, const size_t nlat,
+               tiegcm_data *data)
 {
   size_t i;
 
   if (!data)
     {
-      return tiegcm_alloc(n);
+      return tiegcm_alloc(nt, nlon, nlat);
     }
 
-  if (n <= data->ntot)
+  if (nt <= data->ntot)
     return data; /* nothing to do */
 
-  data->t = realloc(data->t, n * sizeof(time_t));
-  data->year = realloc(data->year, n * sizeof(double));
-  data->doy = realloc(data->doy, n * sizeof(double));
-  data->ut = realloc(data->ut, n * sizeof(double));
+  data->t = realloc(data->t, nt * sizeof(time_t));
+  data->year = realloc(data->year, nt * sizeof(double));
+  data->doy = realloc(data->doy, nt * sizeof(double));
+  data->ut = realloc(data->ut, nt * sizeof(double));
+
+  data->glon = realloc(data->glon, nlon * sizeof(double));
+  data->glat = realloc(data->glat, nlat * sizeof(double));
+
+  data->Bx = realloc(data->Bx, nt * nlon * nlat * sizeof(double));
+  data->By = realloc(data->By, nt * nlon * nlat * sizeof(double));
+  data->Bz = realloc(data->Bz, nt * nlon * nlat * sizeof(double));
 
   /* initialize newly allocated memory */
-  for (i = data->ntot; i < n; ++i)
+  for (i = data->ntot; i < nt; ++i)
     {
       data->t[i] = 0;
       data->year[i] = 0.0;
@@ -62,7 +68,9 @@ tiegcm_realloc(const size_t n, tiegcm_data *data)
       data->ut[i] = 0.0;
     }
 
-  data->ntot = n;
+  data->ntot = nt;
+  data->nlon = nlon;
+  data->nlat = nlat;
 
   return data;
 }
@@ -81,6 +89,21 @@ tiegcm_free(tiegcm_data *data)
 
   if (data->ut)
     free(data->ut);
+
+  if (data->glon)
+    free(data->glon);
+
+  if (data->glat)
+    free(data->glat);
+
+  if (data->Bx)
+    free(data->Bx);
+
+  if (data->By)
+    free(data->By);
+
+  if (data->Bz)
+    free(data->Bz);
 
   free(data);
 }

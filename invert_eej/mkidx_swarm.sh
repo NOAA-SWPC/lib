@@ -4,7 +4,7 @@
 # version available for each day
 
 # Use track-filtered data
-datadir="/data/SWARM/MAG/Stage1_CHAOS"
+datadir="/data/SWARM/MAG/Stage1"
 
 function dosat
 {
@@ -16,7 +16,7 @@ function dosat
   echo "sat = ${sat_name}"
 
   # loop over years
-  for year in $(seq 2013 2015); do
+  for year in $(seq 2013 2016); do
     echo "year = ${year}"
 
     # loop over months

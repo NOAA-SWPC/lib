@@ -37,8 +37,10 @@ tiegcm_read(const char *filename, tiegcm_data *data)
   int status;
   size_t cur_idx, i;
   int ncid;
-  int yearid, doyid, utid;
-  size_t nrec, ntot, ncur;
+  int timeid, glonid, glatid;
+  int yearid, doyid, utid, glonvid, glatvid, Bxvid, Byvid, Bzvid;
+  size_t ntot, ncur;
+  size_t nt, nlon, nlat;
 
   status = nc_open(filename, NC_NOWRITE, &ncid);
   if (status)
@@ -49,9 +51,39 @@ tiegcm_read(const char *filename, tiegcm_data *data)
     }
 
   status = 0;
+  status += nc_inq_dimid(ncid, "time", &timeid);
+  status += nc_inq_dimid(ncid, "glon", &glonid);
+  status += nc_inq_dimid(ncid, "glat", &glatid);
+
+  if (status)
+    {
+      fprintf(stderr, "tiegcm_read: error reading dimension ids: %s\n",
+              nc_strerror(status));
+      return data;
+    }
+
+  /* find dimension lengths */
+  status = 0;
+  status += nc_inq_dimlen(ncid, timeid, &nt);
+  status += nc_inq_dimlen(ncid, glonid, &nlon);
+  status += nc_inq_dimlen(ncid, glatid, &nlat);
+
+  if (status)
+    {
+      fprintf(stderr, "tiegcm_read: error reading dimension lengths: %s\n",
+              nc_strerror(status));
+      return data;
+    }
+
+  status = 0;
   status += nc_inq_varid(ncid, "year", &yearid);
   status += nc_inq_varid(ncid, "doy", &doyid);
   status += nc_inq_varid(ncid, "ut", &utid);
+  status += nc_inq_varid(ncid, "glon", &glonvid);
+  status += nc_inq_varid(ncid, "glat", &glatvid);
+  status += nc_inq_varid(ncid, "Bn_grd", &Bxvid);
+  status += nc_inq_varid(ncid, "Be_grd", &Byvid);
+  status += nc_inq_varid(ncid, "Bu_grd", &Bzvid);
 
   if (status)
     {
@@ -60,24 +92,26 @@ tiegcm_read(const char *filename, tiegcm_data *data)
       return data;
     }
 
-  /* since records start at 0 */
-  nrec = 142;
-
   /* allocate more data if needed */
   ntot = data ? data->ntot : 0;
-  ncur = data ? data->n : 0;
-  if (ntot < ncur + nrec)
-    data = tiegcm_realloc(nrec + ntot, data);
+  ncur = data ? data->nt : 0;
+  if (ntot < ncur + nt)
+    data = tiegcm_realloc(nt + ntot, nlon, nlat, data);
 
   if (!data)
     return 0;
 
-  cur_idx = data->n;
+  cur_idx = data->nt;
 
   status = 0;
   status += nc_get_var_double(ncid, yearid, &(data->year[cur_idx]));
   status += nc_get_var_double(ncid, doyid, &(data->doy[cur_idx]));
   status += nc_get_var_double(ncid, utid, &(data->ut[cur_idx]));
+  status += nc_get_var_double(ncid, glonvid, data->glon);
+  status += nc_get_var_double(ncid, glatvid, data->glat);
+  status += nc_get_var_double(ncid, Bxvid, data->Bx);
+  status += nc_get_var_double(ncid, Byvid, data->By);
+  status += nc_get_var_double(ncid, Bzvid, data->Bz);
 
   if (status)
     {
@@ -86,12 +120,12 @@ tiegcm_read(const char *filename, tiegcm_data *data)
       return data;
     }
 
-  data->n += nrec;
+  data->nt += nt;
 
   /* compute timestamps */
   putenv("TZ=GMT");
 
-  for (i = cur_idx; i < data->n; ++i)
+  for (i = cur_idx; i < data->nt; ++i)
     {
       int iyear = (int) data->year[i];
       int idoy = (int) data->doy[i];

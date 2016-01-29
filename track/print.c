@@ -38,9 +38,6 @@
 /* number of seconds for computing along-track differences */
 #define POLTOR_GRAD_DT             (40.0)
 
-#define MIN_KP                     (0.0)
-#define MAX_KP                     (20.0)
-
 typedef struct
 {
   int all;            /* print all tracks */
@@ -50,6 +47,10 @@ typedef struct
   double alt_max;     /* altitude maximum (km) */
   double qd_min;      /* minimum required QD latitude (deg) */
   double qd_max;      /* maximum required QD latitude (deg) */
+  double lon_min;     /* minimum longitude (deg) */
+  double lon_max;     /* maximum longitude (deg) */
+  double kp_min;      /* minimum kp */
+  double kp_max;      /* maximum kp */
   size_t downsample;  /* downsampling factor */
   double alpha;       /* smoothing factor for high latitudes */
   double thresh[4];   /* rms thresholds */
@@ -159,13 +160,19 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
 
   /* flag high kp data */
   {
-    const double kp_min = MIN_KP;
-    const double kp_max = MAX_KP;
-    size_t nkp = track_flag_kp(kp_min, kp_max, data, track_p);
+    size_t nkp = track_flag_kp(params->kp_min, params->kp_max, data, track_p);
 
     fprintf(stderr, "preprocess_data: flagged data outside kp window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
-            kp_min, kp_max,
+            params->kp_min, params->kp_max,
             nkp, data->n, (double)nkp / (double)data->n * 100.0);
+  }
+
+  /* flag longitude */
+  {
+    size_t nlon = track_flag_lon(params->lon_min, params->lon_max, data, track_p);
+
+    fprintf(stderr, "preprocess_data: flagged data due to longitude: %zu/%zu (%.1f%%) data flagged)\n",
+            nlon, data->n, (double)nlon / (double)data->n * 100.0);
   }
 
   /* print track statistics */
@@ -227,6 +234,10 @@ print_help(char *argv[])
   fprintf(stderr, "\t --lt_max | -k lt_max                        - local time maximum\n");
   fprintf(stderr, "\t --alt_min | -l alt_min                      - altitude minimum\n");
   fprintf(stderr, "\t --alt_max | -m alt_max                      - altitude maximum\n");
+  fprintf(stderr, "\t --lon_min | -t lon_min                      - longitude minimum\n");
+  fprintf(stderr, "\t --lon_max | -u lon_max                      - longitude maximum\n");
+  fprintf(stderr, "\t --kp_min | -v kp_min                        - kp minimum\n");
+  fprintf(stderr, "\t --kp_max | -w kp_max                        - kp maximum\n");
   fprintf(stderr, "\t --alpha | -q alpha                          - smoothing factor for high latitudes\n");
 }
 
@@ -250,6 +261,10 @@ main(int argc, char *argv[])
   params.alt_max = 1000.0;
   params.qd_min = -30.0;
   params.qd_max = 30.0;
+  params.lon_min = -200.0;
+  params.lon_max = 200.0;
+  params.kp_min = 0.0;
+  params.kp_max = 20.0;
   params.downsample = 15;
   params.alpha = -1.0;
   params.thresh[0] = 80.0;
@@ -272,12 +287,16 @@ main(int argc, char *argv[])
           { "lt_max", required_argument, NULL, 'k' },
           { "alt_min", required_argument, NULL, 'l' },
           { "alt_max", required_argument, NULL, 'm' },
+          { "lon_min", required_argument, NULL, 't' },
+          { "lon_max", required_argument, NULL, 'u' },
+          { "kp_min", required_argument, NULL, 'v' },
+          { "kp_max", required_argument, NULL, 'w' },
           { "output_file", required_argument, NULL, 'o' },
           { "alpha", required_argument, NULL, 'q' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "ab:c:d:j:k:l:m:o:q:s:", long_options, &option_index);
+      c = getopt_long(argc, argv, "ab:c:d:j:k:l:m:o:q:s:t:u:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -347,6 +366,22 @@ main(int argc, char *argv[])
             params.alt_max = atof(optarg);
             break;
 
+          case 't':
+            params.lon_min = atof(optarg);
+            break;
+
+          case 'u':
+            params.lon_max = atof(optarg);
+            break;
+
+          case 'v':
+            params.kp_min = atof(optarg);
+            break;
+
+          case 'w':
+            params.kp_max = atof(optarg);
+            break;
+
           case 'q':
             params.alpha = atof(optarg);
             break;
@@ -368,6 +403,10 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: altitude maximum = %.1f\n", params.alt_max);
   fprintf(stderr, "main: QD minimum       = %.1f\n", params.qd_min);
   fprintf(stderr, "main: QD maximum       = %.1f\n", params.qd_max);
+  fprintf(stderr, "main: lon minimum      = %.1f\n", params.lon_min);
+  fprintf(stderr, "main: lon maximum      = %.1f\n", params.lon_max);
+  fprintf(stderr, "main: kp minimum       = %.1f\n", params.kp_min);
+  fprintf(stderr, "main: kp maximum       = %.1f\n", params.kp_max);
   fprintf(stderr, "main: smoothing alpha  = %f\n", params.alpha);
 
   if (lp_data)

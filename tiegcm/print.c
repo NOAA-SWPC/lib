@@ -25,24 +25,54 @@
 
 /*
 print_data()
+  Print Bx/By/Bz grid for a fixed time
 
 Inputs: data - tiegcm data
 */
 
 int
-print_data(const tiegcm_data *data)
+print_data(const char *filename, const tiegcm_data *data)
 {
   int s = 0;
   size_t i;
+  size_t it, ilat, ilon;
+  FILE *fp;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "print_data: unable to open %s: %s\n",
+              filename, strerror(errno));
+    }
+
+  it = 0; /* time index */
 
   i = 1;
-  printf("# Field %zu: time (decimal year)\n", i++);
+  fprintf(fp, "# Time: %ld (%.6f)\n", data->t[it], data->doy[it] + data->ut[it] / 24.0);
+  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_y (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_z (nT)\n", i++);
 
-  for (i = 0; i < data->n; ++i)
+  for (ilon = 0; ilon < data->nlon; ++ilon)
     {
-      printf("%ld\n",
-             data->t[i]);
+      for (ilat = 0; ilat < data->nlat; ++ilat)
+        {
+          size_t idx = TIEGCM_BIDX(it, ilat, ilon, data);
+
+          fprintf(fp, "%8.4f %8.4f %8.2f %8.2f %8.2f\n",
+                  data->glon[ilon],
+                  data->glat[ilat],
+                  data->Bx[idx] * 1.0e9,
+                  data->By[idx] * 1.0e9,
+                  data->Bz[idx] * 1.0e9);
+        }
+
+      fprintf(fp, "\n");
     }
+
+  fclose(fp);
 
   return s;
 }
@@ -53,6 +83,7 @@ main(int argc, char *argv[])
   tiegcm_data *data;
   struct timeval tv0, tv1;
   char *infile = NULL;
+  char *outfile = "data.txt";
 
   while (1)
     {
@@ -97,10 +128,12 @@ main(int argc, char *argv[])
     }
 
   gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%zu records read, %g seconds)\n", data->n,
+  fprintf(stderr, "done (%zu records read, %g seconds)\n", data->nt,
           time_diff(tv0, tv1));
 
-  print_data(data);
+  fprintf(stderr, "main: writing data to %s...", outfile);
+  print_data(outfile, data);
+  fprintf(stderr, "done\n");
 
   tiegcm_free(data);
 
