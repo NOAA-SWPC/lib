@@ -2,7 +2,7 @@
 #
 # Plot X,Y,Z,F maps of Swarm residuals
 
-prefix="resFall"
+prefix="resF2"
 
 # Converted to EPS later
 outfile="${prefix}.ps"
@@ -126,14 +126,14 @@ outfile_eps=$(echo ${outfile} | sed -e 's/ps/eps/')
 
 # Convert to EPS to get rid of whitespace around edges
 #echo "Converting to EPS..."
-#ps2eps -f ${outfile}
+ps2eps -f ${outfile}
 
 # Convert to PNG
 #echo "Converting to PNG..."
-#convert -density 130 -flatten ${outfile_eps} ${outfile_png}
+convert -density 130 -flatten ${outfile_eps} ${outfile_png}
 
 # Delete PS/EPS files
-#rm -f ${outfile}
-#rm -f ${outfile_eps}
+rm -f ${outfile}
+rm -f ${outfile_eps}
 
 echo "Output is ${outfile_png}"

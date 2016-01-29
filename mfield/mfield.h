@@ -138,7 +138,7 @@ typedef struct
   gsl_matrix *mat_dY;      /* dY/dg ndata-by-nnm */
   gsl_matrix *mat_dZ;      /* dZ/dg ndata-by-nnm */
   gsl_multifit_nlinear_workspace *multifit_nlinear_p;
-  gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
+  gsl_multilarge_regnlinear_workspace *nlinear_workspace_p;
   gsl_matrix *block_J;     /* Jacobian matrix block, 4*data_block-by-p */
   gsl_vector *block_f;     /* residual vector block, 4*data_block-by-1 */
   gsl_vector *wts;         /* weights vector, 4*data_block-by-1 */

@@ -384,7 +384,7 @@ mfield_free(mfield_workspace *w)
     fclose(w->fp_dZ);
 
   if (w->nlinear_workspace_p)
-    gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
+    gsl_multilarge_regnlinear_free(w->nlinear_workspace_p);
 
   if (w->eigen_workspace_p)
     gsl_eigen_symm_free(w->eigen_workspace_p);
@@ -568,8 +568,8 @@ mfield_calc_uncertainties(mfield_workspace *w)
    * data) leading to a singular Jacobian
    */
   const size_t p = w->p_int;
-  gsl_vector * f = gsl_multilarge_nlinear_residual(w->nlinear_workspace_p);
-  gsl_matrix * JTJ = gsl_multilarge_nlinear_JTJ(w->nlinear_workspace_p);
+  gsl_vector * f = gsl_multilarge_regnlinear_residual(w->nlinear_workspace_p);
+  gsl_matrix * JTJ = gsl_multilarge_regnlinear_JTJ(w->nlinear_workspace_p);
   gsl_matrix_view m = gsl_matrix_submatrix(JTJ, 0, 0, p, p);
   double dof = (double)f->size - (double)w->p;
   double chisq, sigmasq;
@@ -605,7 +605,7 @@ int
 mfield_calc_evals(gsl_vector *evals, mfield_workspace *w)
 {
   int s;
-  gsl_matrix * JTJ = gsl_multilarge_nlinear_JTJ(w->nlinear_workspace_p);
+  gsl_matrix * JTJ = gsl_multilarge_regnlinear_JTJ(w->nlinear_workspace_p);
   gsl_matrix * A = gsl_matrix_alloc(w->p, w->p);
 
   /* copy lower triangle of JTJ to A */

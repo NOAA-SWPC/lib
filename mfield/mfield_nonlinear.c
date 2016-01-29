@@ -84,6 +84,7 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   double res0;                    /* initial residual */
   FILE *fp_res;
   char resfile[2048];
+  double lambda;                  /* regularization parameter */
 
   fdf.f = mfield_calc_f;
   fdf.df = mfield_calc_df;
@@ -175,8 +176,11 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   gsl_vector_memcpy(w->LTL, w->lambda_diag);
   gsl_vector_mul(w->LTL, w->lambda_diag);
 
+  lambda = 1.0;
+
   fprintf(stderr, "done\n");
 #else
+  lambda = 0.0;
   gsl_vector_set_all(w->lambda_diag, 0.0);
   gsl_vector_set_all(w->LTL, 0.0);
 #endif
@@ -191,26 +195,26 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
 
   fprintf(stderr, "mfield_calc_nonlinear: initializing multilarge...");
   gettimeofday(&tv0, NULL);
-  gsl_multilarge_nlinear_init(c, &fdf2, w->nlinear_workspace_p);
+  gsl_multilarge_regnlinear_init2(1.0, w->lambda_diag, c, &fdf2, w->nlinear_workspace_p);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   /* compute initial residual */
-  f = gsl_multilarge_nlinear_residual(w->nlinear_workspace_p);
+  f = gsl_multilarge_regnlinear_residual(w->nlinear_workspace_p);
   res0 = gsl_blas_dnrm2(f);
 
   fprintf(stderr, "mfield_calc_nonlinear: computing nonlinear least squares solution...");
   gettimeofday(&tv0, NULL);
-  s = gsl_multilarge_nlinear_driver(max_iter, xtol, gtol, ftol,
-                                    mfield_nonlinear_callback2, (void *) w,
-                                    &info, w->nlinear_workspace_p);
+  s = gsl_multilarge_regnlinear_driver(max_iter, xtol, gtol, ftol,
+                                       mfield_nonlinear_callback2, (void *) w,
+                                       &info, w->nlinear_workspace_p);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   if (s == GSL_SUCCESS)
     {
       fprintf(stderr, "mfield_calc_nonlinear: number of iterations: %zu\n",
-              gsl_multilarge_nlinear_niter(w->nlinear_workspace_p));
+              gsl_multilarge_regnlinear_niter(w->nlinear_workspace_p));
       fprintf(stderr, "mfield_calc_nonlinear: function evaluations: %zu\n",
               fdf2.nevalf);
       fprintf(stderr, "mfield_calc_nonlinear: Jacobian evaluations: %zu\n",
@@ -228,7 +232,7 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
 
   /* store final coefficients in physical units */
   {
-    gsl_vector *x_final = gsl_multilarge_nlinear_position(w->nlinear_workspace_p);
+    gsl_vector *x_final = gsl_multilarge_regnlinear_position(w->nlinear_workspace_p);
 
     gsl_vector_memcpy(w->c, x_final);
     mfield_coeffs(1, w->c, c, w);
@@ -395,7 +399,7 @@ mfield_init_nonlinear(mfield_workspace *w)
 
     fdf_params.accel = 0;
     fdf_params.h_fvv = 0.5;
-    w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, nres, p);
+    w->nlinear_workspace_p = gsl_multilarge_regnlinear_alloc(T, &fdf_params, nres, p, p);
   }
 
   fprintf(stderr, "mfield_init_nonlinear: writing matrices for nonlinear fit...");
@@ -2155,7 +2159,7 @@ mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
             mfield_set_sv(diag, cidx, lambda_sv, w);
 #else
           if (n >= nmin_sv)
-            mfield_set_sv(diag, cidx, lambda_sv * n * n, w);
+            mfield_set_sv(diag, cidx, lambda_sv * n * n * n, w);
 #endif
 
           if (n >= nmin_sa)

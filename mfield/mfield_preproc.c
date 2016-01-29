@@ -48,6 +48,7 @@
 
 static size_t model_flags(const size_t magdata_flags, const double t,
                           const double theta, const double phi, const double qdlat);
+void print_unflagged_data(const char *filename, const satdata_mag *data);
 
 /* local-time range for main field modeling */
 #define MFIELD_LT_MIN              (5.0)
@@ -80,7 +81,7 @@ static size_t model_flags(const size_t magdata_flags, const double t,
 #define MFIELD_HIGH_LATITUDE      (60.0)
 
 /* define to fit Z component at high latitudes instead of F */
-#define MFIELD_FIT_Z_HIGHLAT      1
+#define MFIELD_FIT_Z_HIGHLAT      0
 
 /* Global */
 solarpos_workspace *solarpos_workspace_p = NULL;
@@ -370,6 +371,8 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   struct timeval tv0, tv1;
   track_workspace *track_p = track_alloc();
 
+  print_unflagged_data("data_ts/data_ts.0", data);
+
   fprintf(stderr, "preprocess_data: initializing tracks...");
   gettimeofday(&tv0, NULL);
   track_init(data, NULL, track_p);
@@ -388,8 +391,12 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
               nrms, data->n, (double) nrms / (double) data->n * 100.0);
     }
 
+  print_unflagged_data("data_ts/data_ts.1", data);
+
   /* flag according to WMM criteria */
   satdata_filter_wmm(1, data);
+
+  print_unflagged_data("data_ts/data_ts.2", data);
 
   /* downsample data */
   {
@@ -405,6 +412,8 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
 
     fprintf(stderr, "done\n");
   }
+
+  print_unflagged_data("data_ts/data_ts.3", data);
 
   {
     size_t i;
@@ -430,6 +439,8 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
             nflag, data->n, (double)nflag / (double)data->n * 100.0);
   }
 
+  print_unflagged_data("data_ts/data_ts.4", data);
+
   /* print track statistics */
   {
     char *stat_file = "track_stats.dat";
@@ -444,6 +455,36 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   return track_p;
 } /* preprocess_data() */
 
+/* print unflagged data points for data selection visualization */
+void
+print_unflagged_data(const char *filename, const satdata_mag *data)
+{
+  size_t i;
+  FILE *fp;
+  const double tmin = satdata_epoch2year(data->t[0]);
+  const double tmax = satdata_epoch2year(data->t[data->n - 1]);
+  const double dt = 10.0;            /* bin size in days */
+  const double dt_yrs = dt / 365.25; /* convert to years */
+  const size_t n = (size_t) ((tmax - tmin) / dt_yrs);
+  gsl_histogram *h = gsl_histogram_alloc(n);
+
+  gsl_histogram_set_ranges_uniform(h, tmin, tmax);
+
+  fp = fopen(filename, "w");
+
+  for (i = 0; i < data->n; ++i)
+    {
+      if (data->flags[i])
+        continue;
+
+      gsl_histogram_increment(h, satdata_epoch2year(data->t[i]));
+    }
+
+  gsl_histogram_fprintf(fp, h, "%g", "%g");
+
+  fclose(fp);
+}
+
 void
 print_help(char *argv[])
 {
@@ -454,7 +495,7 @@ print_help(char *argv[])
   fprintf(stderr, "\t --swarm_asmv_file | -a swarm_asmv_index_file  - Swarm ASM-V index file\n");
   fprintf(stderr, "\t --downsample      | -d downsample             - downsampling factor\n");
   fprintf(stderr, "\t --euler_file      | -e euler_file             - Euler angles file\n");
-  fprintf(stderr, "\t --output_file     | -o output_file            - output file\n");
+  fprintf(stderr, "\t --output_file     | -o output_file            - binary output data file (magdata format)\n");
 }
 
 int
