@@ -666,7 +666,7 @@ msynth_eval_g(const double t, const double r, const double theta,
   const double t2 = 0.5 * t1 * t1; /* SA term (years^2) */
 
   /* after this date, use a linear model for gnm */
-  const double tend = 2013.5;
+  const double tend = 5013.5; /* XXX */
   const double t3 = tend - t0;
   const double t4 = 0.5 * t3 * t3;
 

@@ -39,14 +39,6 @@ print_help(char *argv[])
 int
 main(int argc, char *argv[])
 {
-  /*
-   * rms thresholds; only need to check scalar field; set threshold high to process data
-   * during strong storms: 17 March 2015 storm has scalar rms of up to 120 nT
-   */
-  const double thresh_swarm[] = { -1.0, -1.0, -1.0, 120.0 };
-  const double thresh_champ[] = { -1.0, -1.0, -1.0, 120.0 };
-
-  const double *thresh = NULL;
   satdata_mag *data = NULL;
   struct timeval tv0, tv1;
   mag_workspace *mag_workspace_p;
@@ -118,7 +110,6 @@ main(int argc, char *argv[])
             break;
 
           case 'c':
-            thresh = thresh_champ;
             fprintf(stderr, "main: reading %s...", optarg);
             gettimeofday(&tv0, NULL);
             data = satdata_champ_read_idx(optarg, 0);
@@ -169,7 +160,6 @@ main(int argc, char *argv[])
             break;
 
           case 's':
-            thresh = thresh_swarm;
             fprintf(stderr, "main: reading %s...", optarg);
             gettimeofday(&tv0, NULL);
             data = satdata_swarm_read_idx(optarg, 0);
@@ -257,13 +247,6 @@ main(int argc, char *argv[])
   track_workspace_p = track_alloc();
 
   track_init(data, NULL, track_workspace_p);
-
-  /* flag tracks with high rms */
-  {
-    size_t nrms = track_flag_rms("rms.dat", thresh, data, track_workspace_p);
-    fprintf(stderr, "main: flagged (%zu/%zu) (%.1f%%) points due to high rms\n",
-            nrms, data->n, (double) nrms / (double) data->n * 100.0);
-  }
 
   params.year = (int) satdata_epoch2year(data->t[0]);
   mag_workspace_p = mag_alloc(&params);

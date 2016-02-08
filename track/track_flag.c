@@ -42,7 +42,7 @@ Inputs: outfile  - file to write rms info
         data     - satellite data
         w        - track workspace
 
-Return: number of data points flagged due to high rms
+Return: number of tracks flagged due to high rms
 
 Notes:
 1) Tracks with high rms are flagged with SATDATA_FLG_OUTLIER
@@ -54,7 +54,7 @@ Notes:
 
 size_t
 track_flag_rms(const char *outfile, const double thresh[4],
-               satdata_mag *data, track_workspace *w)
+               size_t *ndata_flagged, satdata_mag *data, track_workspace *w)
 {
   FILE *fp;
   size_t i, j;
@@ -168,7 +168,10 @@ track_flag_rms(const char *outfile, const double thresh[4],
           ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
   fprintf(stderr, "track_flag_rms: rms data written to %s\n", outfile);
 
-  return nflagged;
+  if (ndata_flagged)
+    return nflagged;
+
+  return ntrack_flagged;
 } /* track_flag_rms() */
 
 /*
@@ -300,16 +303,18 @@ track_flag_lt()
   Flag any tracks outside of [lt_min,lt_max]. The LT for
 comparison is the LT at the time of the equator crossing
 
-Inputs: lt_min - minimum LT (hours)
-        lt_max - maximum LT (hours)
-        data   - satellite data
-        w      - track workspace
+Inputs: lt_min        - minimum LT (hours)
+        lt_max        - maximum LT (hours)
+        ndata_flagged - (output) number of data points flagged
+        data          - satellite data
+        w             - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
-track_flag_lt(const double lt_min, const double lt_max, satdata_mag *data, track_workspace *w)
+track_flag_lt(const double lt_min, const double lt_max, size_t *ndata_flagged,
+              satdata_mag *data, track_workspace *w)
 {
   size_t i;
   size_t nflagged = 0;        /* number of points flagged */
@@ -343,7 +348,10 @@ track_flag_lt(const double lt_min, const double lt_max, satdata_mag *data, track
   fprintf(stderr, "track_flag_lt: flagged %zu/%zu (%.1f%%) tracks due to LT\n",
           ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
 
-  return nflagged;
+  if (ndata_flagged)
+    *ndata_flagged = nflagged;
+
+  return ntrack_flagged;
 } /* track_flag_lt() */
 
 /*
@@ -402,12 +410,12 @@ Inputs: lon_min  - minimum longitude in [-180,180] (degrees)
         data     - satellite data
         w        - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
 track_flag_lon(const double lon_min, const double lon_max,
-               satdata_mag *data, track_workspace *w)
+               size_t *ndata_flagged, satdata_mag *data, track_workspace *w)
 {
   size_t i;
   size_t nflagged = 0;        /* number of points flagged */
@@ -431,7 +439,10 @@ track_flag_lon(const double lon_min, const double lon_max,
   fprintf(stderr, "track_flag_lon: flagged %zu/%zu (%.1f%%) tracks due to longitude\n",
           ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
 
-  return nflagged;
+  if (ndata_flagged)
+    *ndata_flagged = nflagged;
+
+  return ntrack_flagged;
 } /* track_flag_lon() */
 
 /*

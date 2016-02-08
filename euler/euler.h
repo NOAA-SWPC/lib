@@ -10,6 +10,8 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_matrix.h>
 
+#include "magdata.h"
+
 #define EULER_FLG_DERIV_ALPHA       (1 << 0)
 #define EULER_FLG_DERIV_BETA        (1 << 1)
 #define EULER_FLG_DERIV_GAMMA       (1 << 2)
@@ -50,6 +52,7 @@ int euler_write_swarm(const double fday_start, const double fday_end,
                       const euler_workspace *w);
 int euler_add(const double t, const gsl_vector *x, euler_workspace *w);
 int euler_apply(satdata_mag *data, const euler_workspace *w);
+int euler_magdata_apply(magdata *data, const euler_workspace *w);
 int euler_nec2vfm_t(const double t, const double q[],
                     const double B_in[3], double B_out[3],
                     const euler_workspace *w);

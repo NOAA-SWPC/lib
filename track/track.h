@@ -91,19 +91,19 @@ int track_filter(const char *filename, track_workspace *w);
 
 /* track_flag.c */
 size_t track_flag_rms(const char *outfile, const double thresh[4],
-                      satdata_mag *data, track_workspace *w);
+                      size_t *ndata_flagged, satdata_mag *data, track_workspace *w);
 size_t track_flag_jumps(const double thresh, satdata_mag *data, track_workspace *w);
 size_t track_flag_satdir(const int satdir, satdata_mag *data, track_workspace *w);
 size_t track_flag_ut(const double ut_min, const double ut_max, satdata_mag *data,
                      track_workspace *w);
-size_t track_flag_lt(const double lt_min, const double lt_max, satdata_mag *data,
-                     track_workspace *w);
+size_t track_flag_lt(const double lt_min, const double lt_max, size_t *ndata_flagged,
+                     satdata_mag *data, track_workspace *w);
 size_t track_flag_kp(const double kp_min, const double kp_max, satdata_mag *data,
                      track_workspace *w);
 size_t track_flag_season(int (*callback)(const double doy, const void *params),
                          const void *params, satdata_mag *data, track_workspace *w);
 size_t track_flag_lon(const double lon_min, const double lon_max,
-                      satdata_mag *data, track_workspace *w);
+                      size_t *ndata_flagged, satdata_mag *data, track_workspace *w);
 size_t track_flag_meanalt(const double alt_min, const double alt_max, satdata_mag *data,
                           track_workspace *w);
 size_t track_flag_incomplete(const double qd_min, const double qd_max, satdata_mag *data,

@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'elvira/log_C'
-outdir = 'elvira/log_C/plots'
+logdir = 'data_june2015/C'
+outdir = 'data_june2015/C/plots'
 
 cmd = sprintf('mkdir -p %s', outdir)
 tstr = system(cmd)

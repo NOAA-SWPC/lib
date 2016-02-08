@@ -20,6 +20,7 @@
 #include <gsl/gsl_spline.h>
 
 #include "common.h"
+#include "magdata.h"
 
 #include "euler.h"
 
@@ -325,6 +326,46 @@ euler_apply(satdata_mag *data, const euler_workspace *w)
 
   return s;
 } /* euler_apply() */
+
+/*
+euler_magdata_apply()
+  Apply Euler angle rotations to magdata dataset
+
+Inputs: data  - magdata
+        w     - workspace
+
+Return: success or error
+
+Notes:
+1) data->B is replaced with data->B_VFM vectors rotated
+with Euler angles and satellite quaternions
+*/
+
+int
+euler_magdata_apply(magdata *data, const euler_workspace *w)
+{
+  int s = 0;
+  size_t i;
+  double B_vfm[3], B_nec[3];
+
+  for (i = 0; i < data->n; ++i)
+    {
+      double *q = &(data->q[4 * i]);
+      double t = data->t[i];
+
+      B_vfm[0] = data->Bx_vfm[i];
+      B_vfm[1] = data->By_vfm[i];
+      B_vfm[2] = data->Bz_vfm[i];
+
+      s += euler_vfm2nec_t(t, q, B_vfm, B_nec, w);
+
+      data->Bx_nec[i] = B_nec[0];
+      data->By_nec[i] = B_nec[1];
+      data->Bz_nec[i] = B_nec[2];
+    }
+
+  return s;
+}
 
 /*
 euler_nec2vfm_t()

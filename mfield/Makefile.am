@@ -28,7 +28,7 @@ mfield_eval_main_LDADD = -lm /home/palken/usr/lib/libgsl.a -lgslcblas
 #mfield_sht_test_LDADD = $(top_builddir)/common/libcommon.la -lm -lnfft3 /home/palken/usr/lib/libgsl.a -lgslcblas
 
 mfield_residuals_SOURCES = mfield_residuals.c mfield_eval.c
-mfield_residuals_LDADD = -lm -lcdf -lsatdata -lindices -lgsl -lgslcblas -L/home/palken/usr/lib
+mfield_residuals_LDADD = $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/common/libcommon.la $(top_builddir)/track/libtrack.la -lm -lcdf -lsatdata -lindices -lgsl -lgslcblas -L/home/palken/usr/lib
 
 #mfield_dBdt_SOURCES = mfield_dBdt.c mfield.c mfield_data.c mfield_green.c
 #mfield_dBdt_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lpthread -lgfortran -L/home/palken/usr/lib

@@ -386,9 +386,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
       size_t nrms;
       double thresh[] = { 20.0, 25.0, 15.0, 15.0 };
 
-      nrms = track_flag_rms(rmsfile, thresh, data, track_p);
-      fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) points due to high rms\n",
-              nrms, data->n, (double) nrms / (double) data->n * 100.0);
+      nrms = track_flag_rms(rmsfile, thresh, NULL, data, track_p);
+      fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
+              nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
     }
 
   print_unflagged_data("data_ts/data_ts.1", data);

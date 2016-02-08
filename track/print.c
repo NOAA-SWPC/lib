@@ -135,19 +135,20 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
     const char *rmsfile = "satrms.dat";
     size_t nrms;
 
-    nrms = track_flag_rms(rmsfile, params->thresh, data, track_p);
-    fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) points due to high rms\n",
-            nrms, data->n, (double) nrms / (double) data->n * 100.0);
+    nrms = track_flag_rms(rmsfile, params->thresh, NULL, data, track_p);
+    fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
+            nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
   }
 
   /* flag local time */
   if (params->lt_min >= 0.0 && params->lt_max >= 0.0)
     {
-      size_t nlt = track_flag_lt(params->lt_min, params->lt_max, data, track_p);
+      size_t nlt_data;
+      size_t nlt = track_flag_lt(params->lt_min, params->lt_max, &nlt_data, data, track_p);
 
-      fprintf(stderr, "preprocess_data: flagged data outside LT window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+      fprintf(stderr, "preprocess_data: flagged data outside LT window [%g,%g]: %zu/%zu (%.1f%%) tracks flagged)\n",
               params->lt_min, params->lt_max,
-              nlt, data->n, (double)nlt / (double)data->n * 100.0);
+              nlt, track_p->n, (double)nlt / (double)track_p->n * 100.0);
     }
 
   /* flag altitude */
@@ -169,10 +170,10 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
 
   /* flag longitude */
   {
-    size_t nlon = track_flag_lon(params->lon_min, params->lon_max, data, track_p);
+    size_t nlon = track_flag_lon(params->lon_min, params->lon_max, NULL, data, track_p);
 
-    fprintf(stderr, "preprocess_data: flagged data due to longitude: %zu/%zu (%.1f%%) data flagged)\n",
-            nlon, data->n, (double)nlon / (double)data->n * 100.0);
+    fprintf(stderr, "preprocess_data: flagged data due to longitude: %zu/%zu (%.1f%%) tracks flagged)\n",
+            nlon, track_p->n, (double)nlon / (double)track_p->n * 100.0);
   }
 
   /* print track statistics */

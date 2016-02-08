@@ -387,9 +387,9 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
     size_t nrms;
     double thresh[] = { 80.0, 60.0, 30.0, 50.0 };
 
-    nrms = track_flag_rms(rmsfile, thresh, data, track_p);
-    fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) points due to high rms\n",
-            nrms, data->n, (double) nrms / (double) data->n * 100.0);
+    nrms = track_flag_rms(rmsfile, thresh, NULL, data, track_p);
+    fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
+            nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
   }
 
   /*
@@ -428,11 +428,11 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
   /* flag local time */
   if (params->lt_min >= 0.0 && params->lt_max >= 0.0)
     {
-      size_t nlt = track_flag_lt(params->lt_min, params->lt_max, data, track_p);
+      size_t nlt = track_flag_lt(params->lt_min, params->lt_max, NULL, data, track_p);
 
-      fprintf(stderr, "preprocess_data: flagged data outside LT window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+      fprintf(stderr, "preprocess_data: flagged data outside LT window [%g,%g]: %zu/%zu (%.1f%%) tracks flagged)\n",
               params->lt_min, params->lt_max,
-              nlt, data->n, (double)nlt / (double)data->n * 100.0);
+              nlt, track_p->n, (double)nlt / (double)track_p->n * 100.0);
     }
 
   /* flag altitude */

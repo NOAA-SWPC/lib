@@ -4,7 +4,7 @@
 # for a single satellite. Also plotted is
 # residuals vs QD latitude
 
-file = 'resF2.sat0'
+file = 'resZ2.sat0'
 
 nrow = 3
 ncol = 2

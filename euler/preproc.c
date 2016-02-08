@@ -405,9 +405,9 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
     const char *rmsfile = "satrms.dat";
     size_t nrms;
 
-    nrms = track_flag_rms(rmsfile, rms_thresh, data, track_p);
-    fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) points due to high rms\n",
-            nrms, data->n, (double) nrms / (double) data->n * 100.0);
+    nrms = track_flag_rms(rmsfile, rms_thresh, NULL, data, track_p);
+    fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
+            nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
   }
 
   /* flag according to WMM criteria */

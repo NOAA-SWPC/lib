@@ -208,32 +208,47 @@ mag_preproc(const mag_params *params, track_workspace *track_p,
 {
   int status = 0;
 
+  /* flag tracks with high rms */
+  {
+    /*
+     * rms thresholds; only need to check scalar field; set threshold high to process data
+     * during strong storms: 17 March 2015 storm has scalar rms of up to 120 nT.
+     *
+     * The 22-23 June 2015 storm has scalar rms up to 140 nT
+     */
+    const double thresh[] = { -1.0, -1.0, -1.0, 150.0 };
+    size_t nrms = track_flag_rms("rms.dat", thresh, NULL, data, track_p);
+
+    log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) tracks due to high rms\n",
+            nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
+  }
+
   /* flag data outside [lt_min,lt_max] */
   {
-    size_t nlt = track_flag_lt(params->lt_min, params->lt_max, data, track_p);
+    size_t nlt = track_flag_lt(params->lt_min, params->lt_max, NULL, data, track_p);
 
-    log_proc(w->log_general, "mag_preproc: flagged data outside LT window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
-            params->lt_min, params->lt_max,
-            nlt, data->n, (double)nlt / (double)data->n * 100.0);
+    log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) tracks due to LT window [%g,%g]\n",
+            nlt, track_p->n, (double)nlt / (double)track_p->n * 100.0,
+            params->lt_min, params->lt_max);
   }
 
   /* flag data outside [lon_min,lon_max] */
   {
-    size_t nlon = track_flag_lon(params->lon_min, params->lon_max, data, track_p);
+    size_t nlon = track_flag_lon(params->lon_min, params->lon_max, NULL, data, track_p);
 
-    log_proc(w->log_general, "mag_preproc: flagged data outside longitude window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
-            params->lon_min, params->lon_max,
-            nlon, data->n, (double)nlon / (double)data->n * 100.0);
+    log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) tracks due to longitude window [%g,%g]\n",
+            nlon, track_p->n, (double)nlon / (double)track_p->n * 100.0,
+            params->lon_min, params->lon_max);
   }
 
   /* flag data according to season */
   {
     size_t nseas = track_flag_season(mag_callback_season, params, data, track_p);
 
-    log_proc(w->log_general, "mag_preproc: flagged data outside season windows [%g,%g],[%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+    log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) data due to seasonal windows [%g,%g],[%g,%g]\n",
+            nseas, data->n, (double)nseas / (double)data->n * 100.0,
             params->season_min, params->season_max,
-            params->season_min2, params->season_max2,
-            nseas, data->n, (double)nseas / (double)data->n * 100.0);
+            params->season_min2, params->season_max2);
   }
 
   /* flag high kp data */
@@ -242,9 +257,9 @@ mag_preproc(const mag_params *params, track_workspace *track_p,
     const double kp_max = MAG_MAX_KP;
     size_t nkp = track_flag_kp(kp_min, kp_max, data, track_p);
 
-    log_proc(w->log_general, "mag_preproc: flagged data outside kp window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
-            kp_min, kp_max,
-            nkp, data->n, (double)nkp / (double)data->n * 100.0);
+    log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) data due to kp [%g,%g]\n",
+            nkp, data->n, (double)nkp / (double)data->n * 100.0,
+            kp_min, kp_max);
   }
 
   /* last check: flag tracks with very few good data points left */
