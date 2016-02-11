@@ -14,6 +14,7 @@
 #include <netcdf.h>
 
 #include <gsl/gsl_math.h>
+#include <gsl/gsl_vector.h>
 
 #include "common.h"
 #include "tiegcm.h"
@@ -148,6 +149,12 @@ tiegcm_read(const char *filename, tiegcm_data *data)
 
       data->t[i] = mktime(&tminfo);
     }
+
+  /* since B_up is given, we need to invert it to get B_z */
+  {
+    gsl_vector_view v = gsl_vector_view_array(data->Bz, nt * nlon * nlat);
+    gsl_vector_scale(&v.vector, -1.0);
+  }
 
   nc_close(ncid);
 

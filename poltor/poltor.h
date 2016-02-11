@@ -54,6 +54,7 @@
 #endif
 
 #define POLTOR_FLG_QD_HARMONICS      (1 << 0) /* use QD coordinates for spherical harmonics */
+#define POLTOR_FLG_REGULARIZE        (1 << 1) /* use regularization in inverse problem */
 
 typedef struct
 {

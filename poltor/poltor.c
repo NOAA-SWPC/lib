@@ -268,6 +268,9 @@ poltor_alloc(const poltor_parameters *params)
       return 0;
     }
 
+  /* initialize to identity matrix */
+  gsl_vector_set_all(w->L, 1.0);
+
   w->residuals = gsl_vector_complex_alloc(w->n);
   if (!w->residuals)
     {
@@ -415,17 +418,15 @@ poltor_calc(poltor_workspace *w)
 
   fprintf(stderr, "poltor_calc: computing regularization matrix...");
 
-#if POLTOR_SYNTH_DATA
+#if !POLTOR_SYNTH_DATA
 
-  /* no regularization (set lambda = 0 later) */
-  gsl_vector_set_all(w->L, 1.0);
-
-#else
-
-  /* construct L = diag(L) */
-  s = poltor_regularize(w->L, w);
-  if (s)
-    return s;
+  if (w->params.flags & POLTOR_FLG_REGULARIZE)
+    {
+      /* construct L = diag(L) */
+      s = poltor_regularize(w->L, w);
+      if (s)
+        return s;
+    }
 
 #endif
 
@@ -465,41 +466,36 @@ poltor_solve(poltor_workspace *w)
   int s = 0;
   struct timeval tv0, tv1;
   const double dof = (double) w->data->nres - (double) w->p;
-  double lambda; /* regularization parameter */
+  double lambda = 0.0; /* regularization parameter */
 
-#if POLTOR_SYNTH_DATA
+#if !POLTOR_SYNTH_DATA
 
-  /* no regularization */
-  lambda = 0.0;
-  gsl_vector_set_all(w->L, 1.0);
+  if (w->params.flags & POLTOR_FLG_REGULARIZE)
+    {
+      const char *lcurve_file = "lcurve.dat";
 
-#else
+      /* construct L = diag(L); this must be done again here
+       * in case user loads LLS system from a file
+       */
+      s = poltor_regularize(w->L, w);
+      if (s)
+        return s;
 
-  /* construct L = diag(L); this must be done again here
-   * in case user loads LLS system from a file
-   */
-  s = poltor_regularize(w->L, w);
-  if (s)
-    return s;
+      /* calculate L-curve */
+      fprintf(stderr, "poltor_solve: calculating L-curve...");
+      lls_complex_lcurve(w->reg_param, w->rho, w->eta, w->lls_workspace_p);
+      fprintf(stderr, "done\n");
 
-  {
-    const char *lcurve_file = "lcurve.dat";
+      /* find L-corve corner */
+      fprintf(stderr, "poltor_solve: calculating L-curve corner...");
+      gsl_multifit_linear_lcorner(w->rho, w->eta, &(w->reg_idx));
+      lambda = gsl_vector_get(w->reg_param, w->reg_idx);
+      fprintf(stderr, "done (lambda = %f)\n", lambda);
 
-    /* calculate L-curve */
-    fprintf(stderr, "poltor_solve: calculating L-curve...");
-    lls_complex_lcurve(w->reg_param, w->rho, w->eta, w->lls_workspace_p);
-    fprintf(stderr, "done\n");
-
-    /* find L-corve corner */
-    fprintf(stderr, "poltor_solve: calculating L-curve corner...");
-    gsl_multifit_linear_lcorner(w->rho, w->eta, &(w->reg_idx));
-    lambda = gsl_vector_get(w->reg_param, w->reg_idx);
-    fprintf(stderr, "done (lambda = %f)\n", lambda);
-
-    fprintf(stderr, "poltor_solve: writing L-curve to %s...", lcurve_file);
-    poltor_print_lcurve(lcurve_file, w);
-    fprintf(stderr, "done\n");
-  }
+      fprintf(stderr, "poltor_solve: writing L-curve to %s...", lcurve_file);
+      poltor_print_lcurve(lcurve_file, w);
+      fprintf(stderr, "done\n");
+    }
 
 #endif
 
