@@ -45,7 +45,7 @@ print_data(const char *filename, const tiegcm_data *data)
               filename, strerror(errno));
     }
 
-  it = 0; /* time index */
+  it = 10; /* time index */
 
   i = 1;
   fprintf(fp, "# Time: %ld (%.6f)\n", data->t[it], data->doy[it] + data->ut[it] / 24.0);

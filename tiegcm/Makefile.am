@@ -10,4 +10,4 @@ print_SOURCES = print.c
 print_LDADD = libtiegcm.la $(top_builddir)/common/libcommon.la -lm -lgsl -lgslcblas -lnetcdf
 
 stage1_SOURCES = stage1.c
-stage1_LDADD = libtiegcm.la $(top_builddir)/poltor/libpoltor.la $(top_builddir)/apex/libapex.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/track/libtrack.la -lm -lsatdata -lindices -lcdf -lgsl -llapacke -llapack -lptcblas -lptf77blas -latlas -lpthread -lnetcdf -lgfortran
+stage1_LDADD = libtiegcm.la $(top_builddir)/poltor/libpoltor.la $(top_builddir)/apex/libapex.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/common/libcommon.la $(top_builddir)/track/libtrack.la -lm -lsatdata -lindices -lcdf -lgsl -llapacke -llapack -lptcblas -lptf77blas -latlas -lpthread -lnetcdf -lgfortran
