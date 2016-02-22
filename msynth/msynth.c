@@ -41,21 +41,40 @@ Inputs: nmax      - maximum spherical harmonic degree
 msynth_workspace *
 msynth_alloc(const size_t nmax, const size_t nsnapshot, const double *epochs)
 {
+  return msynth_alloc2(nmax, 2, nsnapshot, epochs);
+}
+
+/*
+msynth_alloc2()
+  Allocate an msynth workspace
+
+Inputs: nmax_int  - maximum internal spherical harmonic degree
+        nmax_ext  - maximum external spherical harmonic degree
+        nsnapshot - number of snapshot models
+        epochs    - array of size nsnapshot containing model epochs
+                    (may be NULL if user wishes to fill in later)
+*/
+
+msynth_workspace *
+msynth_alloc2(const size_t nmax_int, const size_t nmax_ext,
+              const size_t nsnapshot, const double *epochs)
+{
   msynth_workspace *w;
+  const size_t nmax_max = GSL_MAX(nmax_int, nmax_ext);
   size_t nnm_tot;
-  size_t plm_array_size = gsl_sf_legendre_array_n(nmax);
+  size_t plm_array_size = gsl_sf_legendre_array_n(nmax_max);
   size_t i;
 
   w = calloc(1, sizeof(msynth_workspace));
   if (!w)
     return 0;
 
-  w->nmax = nmax;
-  w->nmax_ext = 2;
+  w->nmax = nmax_int;
+  w->nmax_ext = nmax_ext;
   w->R = 6371.2;
 
   /* exclude (0,0) coefficient */
-  nnm_tot = (nmax + 1) * (nmax + 1);
+  nnm_tot = (nmax_int + 1) * (nmax_int + 1);
   w->nnm = nnm_tot - 1;
   w->p = 3 * w->nnm; /* include SV,SA coefficients */
 
@@ -79,8 +98,8 @@ msynth_alloc(const size_t nmax, const size_t nsnapshot, const double *epochs)
       w->n_epochs = w->n_snapshot;
     }
 
-  w->cosmphi = malloc((nmax + 1) * sizeof(double));
-  w->sinmphi = malloc((nmax + 1) * sizeof(double));
+  w->cosmphi = malloc((nmax_max + 1) * sizeof(double));
+  w->sinmphi = malloc((nmax_max + 1) * sizeof(double));
 
   w->Plm = malloc(plm_array_size * sizeof(double));
   w->dPlm = malloc(plm_array_size * sizeof(double));
@@ -99,7 +118,7 @@ msynth_alloc(const size_t nmax, const size_t nsnapshot, const double *epochs)
   w->dZ_ext = malloc(w->nnm_ext * sizeof(double));
 
   w->eval_nmin = 1;
-  w->eval_nmax = nmax;
+  w->eval_nmax = nmax_max;
 
   w->data_start = -1.0;
   w->data_end = -1.0;

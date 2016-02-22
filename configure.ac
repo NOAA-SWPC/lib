@@ -25,6 +25,7 @@ AC_CONFIG_FILES([     \
   estist/Makefile     \
   euler/Makefile      \
   gd/Makefile         \
+  green/Makefile      \
   grid/Makefile       \
   hwm/Makefile        \
   invert_eej/Makefile \

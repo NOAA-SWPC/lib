@@ -6,6 +6,7 @@ SUBDIRS =     \
   chaos       \
   curvefit    \
 	efi         \
+	green       \
   grid        \
 	iri         \
 	julia       \

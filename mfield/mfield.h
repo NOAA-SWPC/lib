@@ -34,10 +34,10 @@
 #endif
 
 /* fit Euler angles to data */
-#define MFIELD_FIT_EULER       0
+#define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    0
+#define MFIELD_FIT_EXTFIELD    1
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)

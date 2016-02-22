@@ -16,8 +16,8 @@ typedef struct
   double *year; /* year, size nt */
   double *doy;  /* day of year, size nt */
   double *ut;   /* UT (hours), size nt */
-  double *glon; /* longitude (degrees), size nlon */
-  double *glat; /* latitude (degrees), size nlat */
+  double *glon; /* geodetic longitude (degrees), size nlon */
+  double *glat; /* geodetic latitude (degrees), size nlat */
 
   double *Bx;   /* B_x grid, nt-by-nlon-by-nlat */
   double *By;   /* B_y grid, nt-by-nlon-by-nlat */

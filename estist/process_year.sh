@@ -8,8 +8,8 @@ if test -n "$1"; then
   year="$1"
 fi
 
-outdir="/data/palken/lib/estist/data"
-prog="/data/palken/lib/estist/main"
+outdir="$MYLIBHOME/estist/data"
+prog="$MYLIBHOME/estist/main"
 
 mkdir -p ${outdir}
 

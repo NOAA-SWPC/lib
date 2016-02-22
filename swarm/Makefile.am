@@ -61,4 +61,4 @@ residuals_LDADD = $(top_builddir)/pomme/libpomme.la $(top_builddir)/common/libco
 swarmcdf2fday_SOURCES = swarmcdf2fday.c
 swarmcdf2fday_LDADD = $(top_builddir)/common/libcommon.la -lm ${commonlibs}
 
-AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos
+AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos -I$(top_builddir)/magdata

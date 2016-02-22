@@ -1341,7 +1341,22 @@ mfield_write_ascii(const char *filename, const double epoch,
 
 /*
 mfield_new_epoch()
-  Extrapolate model coefficients to new epoch
+  Extrapolate model coefficients to new epoch. The
+old Taylor series is:
+
+gnm(t) = gnm + (t - t0) dgnm + 1/2 (t - t0)^2 ddgnm
+
+We want a taylor series around a new epoch:
+
+gnm(t) = new_gnm + (t - new_t0) new_dgnm + 1/2 (t - new_t0)^2 new_ddgnm
+
+The new taylor coefficients are given as:
+
+new_gnm   = gnm + a dgnm + 1/2 a^2 ddgnm
+new_dgnm  = dgnm + a ddgnm
+new_ddgnm = ddgnm
+
+with: a = new_t0 - t0
 */
 
 int

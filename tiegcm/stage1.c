@@ -29,12 +29,138 @@
 
 #include "apex.h"
 #include "common.h"
+#include "geo.h"
+#include "green.h"
 #include "magdata.h"
 #include "oct.h"
 #include "poltor.h"
 #include "tiegcm.h"
 
 #define USE_SYNTH_DATA              0
+
+int
+print_spectrum(const char *filename, const gsl_vector *c,
+               const green_workspace *w)
+{
+  size_t nmax = w->nmax;
+  size_t n;
+  FILE *fp;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "print_spectrum: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  n = 1;
+  fprintf(fp, "# Field %zu: spherical harmonic degree n\n", n++);
+  fprintf(fp, "# Field %zu: power (nT^2)\n", n++);
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      double sum = 0.0;
+      int M = (int) n;
+      int m;
+
+      for (m = -M; m <= M; ++m)
+        {
+          size_t cidx = green_nmidx(n, m, w);
+          double knm = gsl_vector_get(c, cidx);
+
+          sum += knm * knm;
+        }
+
+      sum *= (n + 1.0);
+
+      fprintf(fp, "%zu %.12e\n", n, sum);
+    }
+
+  fclose(fp);
+
+  return 0;
+}
+
+/*
+print_residuals()
+  Print model residuals for a given timestamp
+
+Inputs: filename - where to store residuals
+        tidx     - time index
+        A        - model matrix
+        c        - model coefficients
+        data     - TIEGCM data
+*/
+
+double
+print_residuals(const char *filename, const size_t tidx,
+                const gsl_matrix *A, const gsl_vector *c,
+                const tiegcm_data *data)
+{
+  FILE *fp;
+  gsl_vector *b = gsl_vector_alloc(A->size1); /* model prediction */
+  size_t bidx = 0;
+  size_t ilon, ilat, j;
+  double rnorm = 0.0;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "print_residuals: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return 0.0;
+    }
+
+  /* compute b = A c */
+  gsl_blas_dgemv(CblasNoTrans, 1.0, A, c, 0.0, b);
+
+  j = 1;
+  fprintf(fp, "# Field %zu: geographic longitude (degrees)\n", j++);
+  fprintf(fp, "# Field %zu: geodetic latitude (degrees)\n", j++);
+  fprintf(fp, "# Field %zu: TIEGCM B_x (nT)\n", j++);
+  fprintf(fp, "# Field %zu: TIEGCM B_y (nT)\n", j++);
+  fprintf(fp, "# Field %zu: TIEGCM B_z (nT)\n", j++);
+  fprintf(fp, "# Field %zu: Modeled B_x (nT)\n", j++);
+  fprintf(fp, "# Field %zu: Modeled B_y (nT)\n", j++);
+  fprintf(fp, "# Field %zu: Modeled B_z (nT)\n", j++);
+
+  for (ilon = 0; ilon < data->nlon; ++ilon)
+    {
+      for (ilat = 0; ilat < data->nlat; ++ilat)
+        {
+          size_t idx = TIEGCM_BIDX(tidx, ilat, ilon, data);
+          double B_model[3], B_data[3];
+
+          B_data[0] = data->Bx[idx] * 1.0e9;
+          B_data[1] = data->By[idx] * 1.0e9;
+          B_data[2] = data->Bz[idx] * 1.0e9;
+
+          for (j = 0; j < 3; ++j)
+            {
+              B_model[j] = gsl_vector_get(b, bidx++);
+
+              /* update residual norm */
+              rnorm = gsl_hypot(rnorm, B_data[j] - B_model[j]);
+            }
+
+          fprintf(fp, "%f %f %f %f %f %f %f %f\n",
+                  data->glon[ilon],
+                  data->glat[ilat],
+                  data->Bx[idx] * 1.0e9,
+                  data->By[idx] * 1.0e9,
+                  data->Bz[idx] * 1.0e9,
+                  B_model[0],
+                  B_model[1],
+                  B_model[2]);
+        }
+    }
+
+  gsl_vector_free(b);
+  fclose(fp);
+
+  return rnorm;
+}
 
 int
 print_coefficients(poltor_workspace *w)
@@ -113,86 +239,6 @@ print_coefficients(poltor_workspace *w)
   return 0;
 } /* print_coefficients() */
 
-int
-print_residuals(const char *filename, poltor_workspace *w)
-{
-  size_t i, j;
-  FILE *fp;
-  magdata *data = w->data;
-
-  fp = fopen(filename, "w");
-  if (!fp)
-    {
-      fprintf(stderr, "print_residuals: unable to open %s: %s\n",
-              filename, strerror(errno));
-      return -1;
-    }
-
-  i = 1;
-  fprintf(fp, "# Field %zu: time (decimal years)\n", i++);
-  fprintf(fp, "# Field %zu: local time (hours)\n", i++);
-  fprintf(fp, "# Field %zu: altitude (km)\n", i++);
-  fprintf(fp, "# Field %zu: longitude (deg)\n", i++);
-  fprintf(fp, "# Field %zu: geocentric latitude (deg)\n", i++);
-  fprintf(fp, "# Field %zu: QD latitude (deg)\n", i++);
-  fprintf(fp, "# Field %zu: X observation (nT)\n", i++);
-  fprintf(fp, "# Field %zu: Y observation (nT)\n", i++);
-  fprintf(fp, "# Field %zu: Z observation (nT)\n", i++);
-  fprintf(fp, "# Field %zu: X residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: Y residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: Z residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: internal poloidal X model (nT)\n", i++);
-  fprintf(fp, "# Field %zu: internal poloidal Y model (nT)\n", i++);
-  fprintf(fp, "# Field %zu: internal poloidal Z model (nT)\n", i++);
-  fprintf(fp, "# Field %zu: external poloidal X model (nT)\n", i++);
-  fprintf(fp, "# Field %zu: external poloidal Y model (nT)\n", i++);
-  fprintf(fp, "# Field %zu: external poloidal Z model (nT)\n", i++);
-
-  for (i = 0; i < data->n; ++i)
-    {
-      double B_obs[3], B_model[3], B_int[4], B_sh[4], B_ext[4], B_tor[4], B_res[3];
-      time_t unix_time = satdata_epoch2timet(data->t[i]);
-      double lt = get_localtime(unix_time, data->phi[i]);
-
-      /* store observation vector */
-      magdata_residual(i, B_obs, data);
-
-      /* compute individual magnetic field models at this point */
-      poltor_eval_B_all(data->r[i], data->theta[i], data->phi[i], B_int, B_ext, B_sh, B_tor, w);
-
-      /* compute total model and residual vector */
-      for (j = 0; j < 3; ++j)
-        {
-          B_model[j] = B_int[j] + B_ext[j] + B_sh[j] + B_tor[j];
-          B_res[j] = B_obs[j] - B_model[j];
-        }
-
-      fprintf(fp, "%f %.2f %.2f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n",
-              satdata_epoch2year(data->t[i]),
-              lt,
-              data->r[i] - w->R,
-              data->phi[i] * 180.0 / M_PI,
-              90.0 - data->theta[i] * 180.0 / M_PI,
-              data->qdlat[i],
-              B_obs[0],
-              B_obs[1],
-              B_obs[2],
-              B_res[0],
-              B_res[1],
-              B_res[2],
-              B_int[0],
-              B_int[1],
-              B_int[2],
-              B_ext[0],
-              B_ext[1],
-              B_ext[2]);
-    }
-
-  fclose(fp);
-
-  return 0;
-} /* print_residuals() */
-
 /* plot current stream function grid */
 int
 print_chi(const char *filename, poltor_workspace *w)
@@ -252,7 +298,6 @@ magdata *
 tiegcm_magdata(const size_t tidx, tiegcm_data *data)
 {
   const size_t grid_size = data->nlon * data->nlat;
-  const double eps = 1.0e-6;
   magdata *mdata;
   magdata_datum datum;
   size_t ilat, ilon;
@@ -267,7 +312,6 @@ tiegcm_magdata(const size_t tidx, tiegcm_data *data)
   magdata_datum_init(&datum);
 
   datum.t = satdata_timet2epoch(data->t[tidx]);
-  datum.r = R_EARTH_KM;
   datum.flags = MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z;
 
   fprintf(stderr, "tiegcm_magdata: building magdata structure for time index %zu...", tidx);
@@ -278,18 +322,24 @@ tiegcm_magdata(const size_t tidx, tiegcm_data *data)
 
       for (ilat = 0; ilat < data->nlat; ++ilat)
         {
-          double theta = M_PI / 2.0 - data->glat[ilat] * M_PI / 180.0;
-          size_t idx = TIEGCM_BIDX(tidx, ilat, ilon, data);
+          double latd = data->glat[ilat] * M_PI / 180.0; /* geodetic latitude */
+          double thetad = M_PI / 2.0 - latd;             /* geodetic colatitude */
+          double r, latc, theta;                         /* geocentric radius, latitude and colatitude */
           double qdlat, alon, alat;
+          size_t idx = TIEGCM_BIDX(tidx, ilat, ilon, data);
 
-          if (theta < eps)
-            theta = eps;
-          if (theta > M_PI - eps)
-            theta = M_PI - eps;
+#if 0
+          geodetic2geo(latd, 0.0, &latc, &r);
+          theta = M_PI / 2.0 - latc;
+#else
+          theta = thetad;
+          r = R_EARTH_KM;
+#endif
 
-          apex_transform_geodetic(theta, phi, 0.0, &alon, &alat, &qdlat,
+          apex_transform_geodetic(thetad, phi, 0.0, &alon, &alat, &qdlat,
                                   NULL, NULL, NULL, apex_p);
 
+          datum.r = r;
           datum.theta = theta;
           datum.phi = phi;
           datum.qdlat = qdlat;
@@ -461,47 +511,38 @@ main_invert(magdata *mdata)
 }
 
 int
-main_build_matrix(const tiegcm_data *data, msynth_workspace *msynth_p,
+main_build_matrix(const magdata *mdata, green_workspace *green_p,
                   gsl_matrix *A)
 {
   const size_t n = A->size1;
   const size_t p = A->size2;
-  const double r = R_EARTH_KM;
   const double eps = 1.0e-6;
   size_t rowidx = 0;
   size_t ilon, ilat;
+  size_t i;
 
-  for (ilon = 0; ilon < data->nlon; ++ilon)
+  for (i = 0; i < mdata->n; ++i)
     {
-      double phi = data->glon[ilon] * M_PI / 180.0;
+      double r = mdata->r[i];
+      double theta = mdata->theta[i];
+      double phi = mdata->phi[i];
+      gsl_vector_view vx, vy, vz;
 
-      for (ilat = 0; ilat < data->nlat; ++ilat)
-        {
-          double theta = M_PI / 2.0 - data->glat[ilat] * M_PI / 180.0;
-          gsl_vector_view v, row;
+      if (theta < eps)
+        theta = eps;
+      if (theta > M_PI - eps)
+        theta = M_PI - eps;
 
-          if (theta < eps)
-            theta = eps;
-          if (theta > M_PI - eps)
-            theta = M_PI - eps;
+      vx = gsl_matrix_row(A, rowidx++);
+      vy = gsl_matrix_row(A, rowidx++);
+      vz = gsl_matrix_row(A, rowidx++);
 
-          /* compute external Green's functions */
-          msynth_green_ext(r, theta, phi, msynth_p);
-
-          /* copy Green's functions into matrix */
-
-          v = gsl_vector_view_array(msynth_p->dX_ext, p);
-          row = gsl_matrix_row(A, rowidx++);
-          gsl_vector_memcpy(&row.vector, &v.vector);
-
-          v = gsl_vector_view_array(msynth_p->dY_ext, p);
-          row = gsl_matrix_row(A, rowidx++);
-          gsl_vector_memcpy(&row.vector, &v.vector);
-
-          v = gsl_vector_view_array(msynth_p->dZ_ext, p);
-          row = gsl_matrix_row(A, rowidx++);
-          gsl_vector_memcpy(&row.vector, &v.vector);
-        }
+      /* compute external Green's functions */
+      green_calc_ext(r, theta, phi,
+                     vx.vector.data,
+                     vy.vector.data,
+                     vz.vector.data,
+                     green_p);
     }
 
   assert(rowidx == n);
@@ -586,15 +627,19 @@ int
 main_proc(const char *filename, tiegcm_data *data)
 {
   int status;
+  const char *res_file = "res.dat";
+  const char *spectrum_file = "spectrum.s";
+  const char *datamap_file = "datamap.dat";
   const size_t nmax = 60;
-  msynth_workspace *msynth_p = msynth_alloc2(nmax, nmax, 1, NULL);
+  green_workspace *green_p = green_alloc(nmax);
   const size_t n = 3 * data->nlon * data->nlat; /* number of residuals */
-  const size_t p = msynth_p->nnm;               /* number of external coefficients */
+  const size_t p = green_p->nnm;                /* number of external coefficients */
   const size_t nrhs = data->nt;                 /* number of right hand sides */
   gsl_matrix *A = gsl_matrix_alloc(n, p);       /* least squares matrix */
   gsl_matrix *B = gsl_matrix_alloc(n, nrhs);    /* right hand sides */
   gsl_matrix *X = gsl_matrix_alloc(p, nrhs);    /* solution vectors */
   gsl_vector *r = gsl_vector_alloc(n);          /* residual vector */
+  magdata *mdata;
   size_t k;
   FILE *fp;
   struct timeval tv0, tv1;
@@ -602,10 +647,19 @@ main_proc(const char *filename, tiegcm_data *data)
   fprintf(stderr, "main_proc: %zu observations\n", n);
   fprintf(stderr, "main_proc: %zu model coefficients\n", p);
 
+  /* store spatial locations in magdata structure - grid points are
+   * the same for all timestamps t_k */
+  mdata = tiegcm_magdata(0, data);
+
+  /* print data map */
+  fprintf(stderr, "main_proc: writing data map to %s...", datamap_file);
+  magdata_map(datamap_file, mdata);
+  fprintf(stderr, "done\n");
+
   /* construct least squares matrix (common for all timestamps) */
   fprintf(stderr, "main_proc: building least squares matrix A...");
   gettimeofday(&tv0, NULL);
-  status = main_build_matrix(data, msynth_p, A);
+  status = main_build_matrix(mdata, green_p, A);
   if (status)
     return status;
   gettimeofday(&tv1, NULL);
@@ -645,10 +699,30 @@ main_proc(const char *filename, tiegcm_data *data)
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds, s = %d)\n", time_diff(tv0, tv1), status);
 
+  /* print spectrum of coefficients at time t_0 */
+  {
+    const size_t k = 0;
+    gsl_vector_view x = gsl_matrix_column(X, k);
+    fprintf(stderr, "main_proc: writing spectrum to %s...", spectrum_file);
+    print_spectrum(spectrum_file, &x.vector, green_p);
+    fprintf(stderr, "done\n");
+  }
+
+  /* print residuals at time t_0 */
+  {
+    const size_t k = 0;
+    gsl_vector_view x = gsl_matrix_column(X, k);
+    double rnorm;
+
+    fprintf(stderr, "main_proc: writing residuals to %s...", res_file);
+    rnorm = print_residuals(res_file, k, A, &x.vector, data);
+    fprintf(stderr, "done (|| b - A x || = %.12e)\n", rnorm);
+  }
+
   for (k = 0; k < data->nt; ++k)
     {
       size_t N;
-#if 0
+#if 1
       gsl_vector_view b = gsl_matrix_column(B, k);
       gsl_vector_view x = gsl_matrix_column(X, k);
 
@@ -669,7 +743,7 @@ main_proc(const char *filename, tiegcm_data *data)
 
           for (m = 0; m <= M; ++m)
             {
-              size_t cidx = msynth_nmidx(N, m, msynth_p);
+              size_t cidx = green_nmidx(N, m, green_p);
               double knm = gsl_matrix_get(X, cidx, k);
 
               fprintf(fp, "%f ", knm);
@@ -724,7 +798,7 @@ main_proc(const char *filename, tiegcm_data *data)
 
 #endif
 
-  msynth_free(msynth_p);
+  green_free(green_p);
   gsl_matrix_free(A);
   gsl_matrix_free(B);
   gsl_matrix_free(X);
