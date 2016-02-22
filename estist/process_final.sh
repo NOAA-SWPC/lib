@@ -1,10 +1,10 @@
 #!/bin/sh
 # Create final Est/Ist data file from previously computed files
 
-outfile="/data/Indices/ESTIST/Est_Ist_index.pli"
+outfile="$DATAHOME/Indices/ESTIST/Est_Ist_index.pli"
 
-proc_script="/data/palken/lib/estist/process_year.sh"
-datadir="/data/palken/lib/estist/data"
+proc_script="$MYLIBHOME/estist/process_year.sh"
+datadir="$MYLIBHOME/estist/data"
 
 # Generate new data file for current year
 sh ${proc_script} 2016
