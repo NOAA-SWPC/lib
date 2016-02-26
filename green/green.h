@@ -26,6 +26,6 @@ int green_calc_int(const double r, const double theta, const double phi,
                    double *X, double *Y, double *Z, green_workspace *w);
 int green_calc_ext(const double r, const double theta, const double phi,
                    double *X, double *Y, double *Z, green_workspace *w);
-size_t green_nmidx(const size_t n, const int m, const green_workspace *w);
+size_t green_nmidx(const size_t n, const int m);
 
 #endif /* INCLUDED_green_h */

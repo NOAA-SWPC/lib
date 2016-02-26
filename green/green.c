@@ -115,7 +115,7 @@ green_calc_int(const double r, const double theta, const double phi,
       for (m = -ni; m <= ni; ++m)
         {
           int mabs = abs(m);
-          size_t cidx = green_nmidx(n, m, w);
+          size_t cidx = green_nmidx(n, m);
           size_t aidx = gsl_sf_legendre_array_index(n, mabs);
 
           if (m < 0)
@@ -190,7 +190,7 @@ green_calc_ext(const double r, const double theta, const double phi,
       for (m = -ni; m <= ni; ++m)
         {
           int mabs = abs(m);
-          size_t cidx = green_nmidx(n, m, w);
+          size_t cidx = green_nmidx(n, m);
           size_t pidx = gsl_sf_legendre_array_index(n, mabs);
 
           if (m < 0)
@@ -225,14 +225,14 @@ to a given (l,m) pair. The array will look like:
 
 (the (0,0) coefficient is not solved for)
 
-Inputs: l - SH degree (> 0)
+Inputs: n - SH degree (> 0)
         m - SH order (-l <= m <= l)
 
 Return: index in [0,nnm-1]
 */
 
 size_t
-green_nmidx(const size_t n, const int m, const green_workspace *w)
+green_nmidx(const size_t n, const int m)
 {
   size_t base = n * n; /* index of block for this n */
   int offset = m + n;  /* offset within block for this m */
@@ -243,15 +243,9 @@ green_nmidx(const size_t n, const int m, const green_workspace *w)
       fprintf(stderr, "green_nmidx: error: n = 0\n");
       return 0;
     }
-  else if (n > w->nmax)
-    {
-      fprintf(stderr, "green_nmidx: error: n(%zu) larger than nmax(%zu)\n",
-              n, w->nmax);
-      return 0;
-    }
 
   nmidx = base + offset;
 
   /* subtract 1 to exclude (0,0) coefficient */
   return nmidx - 1;
-} /* green_nmidx() */
+}
