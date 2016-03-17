@@ -1,10 +1,14 @@
 /*
  * stage1.c
  *
- * 1. Read tiegcm data file
- * 2. For each time step t_k, invert B(t_k) for SH coefficients
+ * 1. Read tiegcm data file(s)
+ * 2. For each time step t_k, invert B(t_k) grid for SH coefficients q_{nm}(t_k)
+ * 3. Store SH coefficients in a matrix:
  *
- * ./stage1 <-i tiegcm_nc_file>
+ *      X_{ij} = q_i(t_j) where i = shidx(n,m)
+ * 4. X matrix is output to a binary file
+ *
+ * ./stage1 <-i tiegcm_nc_file> [-o output_matrix_file]
  */
 
 #include <stdio.h>
@@ -34,6 +38,8 @@
 #include "magdata.h"
 #include "oct.h"
 #include "poltor.h"
+
+#include "io.h"
 #include "tiegcm.h"
 
 #define USE_SYNTH_DATA              0
@@ -66,7 +72,7 @@ print_spectrum(const char *filename, const gsl_vector *c,
 
       for (m = -M; m <= M; ++m)
         {
-          size_t cidx = green_nmidx(n, m, w);
+          size_t cidx = green_nmidx(n, m);
           double knm = gsl_vector_get(c, cidx);
 
           sum += knm * knm;
@@ -162,83 +168,6 @@ print_residuals(const char *filename, const size_t tidx,
   return rnorm;
 }
 
-int
-print_coefficients(poltor_workspace *w)
-{
-#if USE_SYNTH_DATA
-
-  /* print and check synthetic coefficients */
-  poltor_synth_print(w);
-
-#else
-
-  const double b = w->b;
-  const double R = w->R;
-  const size_t nmax_int = GSL_MIN(3, w->nmax_int);
-  const size_t mmax_int = GSL_MIN(3, w->mmax_int);
-  const size_t nmax_ext = GSL_MIN(2, w->nmax_ext);
-  const size_t mmax_ext = GSL_MIN(2, w->mmax_ext);
-  const size_t nmax_sh = GSL_MIN(2, w->nmax_sh);
-  const size_t mmax_sh = GSL_MIN(2, w->mmax_sh);
-  const size_t nmax_tor = GSL_MIN(3, w->nmax_tor);
-  const size_t mmax_tor = GSL_MIN(3, w->mmax_tor);
-  size_t n;
-
-  /* print internal poloidal coefficients */
-  fprintf(stderr, "Internal poloidal coefficients:\n");
-  for (n = 1; n <= nmax_int; ++n)
-    {
-      int ni = (int) GSL_MIN(n, mmax_int);
-      int m;
-
-      /*
-       * only need to print positive m coefficients since
-       * c_{n,-m} = c_{nm}
-       */
-      for (m = 0; m <= ni; ++m)
-        {
-          size_t cidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
-          gsl_complex coef = poltor_get(cidx, w);
-          double qnm = GSL_REAL(coef);
-          /* convert from poloidal to potential representation */
-          double gnm = -(double)n / (2.0*n + 1.0) * qnm *
-                       pow(b / R, n + 3.0);
-
-          fprintf(stderr, "g(%2zu,%2d) = %12g q(%2zu,%2d) = %12g [nT]\n",
-                  n, m, gnm,
-                  n, m, qnm);
-        }
-    }
-
-  /* print external poloidal coefficients */
-  fprintf(stderr, "External poloidal coefficients:\n");
-  for (n = 1; n <= nmax_ext; ++n)
-    {
-      int ni = (int) GSL_MIN(n, mmax_ext);
-      int m;
-
-      /*
-       * only need to print positive m coefficients since
-       * c_{n,-m} = c_{nm}
-       */
-      for (m = 0; m <= ni; ++m)
-        {
-          size_t cidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, w);
-          gsl_complex coef = poltor_get(cidx, w);
-          double knm = GSL_REAL(coef);
-
-          fprintf(stderr, "k(%2zu,%2d) = %12g [nT]\n",
-                  n,
-                  m,
-                  knm);
-        }
-    }
-
-#endif /* USE_SYNTH_DATA */
-
-  return 0;
-} /* print_coefficients() */
-
 /* plot current stream function grid */
 int
 print_chi(const char *filename, poltor_workspace *w)
@@ -277,7 +206,7 @@ print_chi(const char *filename, poltor_workspace *w)
         {
           double chi; /* current stream function */
 
-          poltor_eval_chi_ext(b, theta, phi, &chi, w);
+          /*poltor_eval_chi_ext(b, theta, phi, &chi, w);*/
 
           fprintf(fp, "%f %f %f\n",
                   phi * 180.0 / M_PI,
@@ -358,164 +287,11 @@ tiegcm_magdata(const size_t tidx, tiegcm_data *data)
   return mdata;
 }
 
-poltor_workspace *
-main_invert(magdata *mdata)
-{
-  size_t nmax_int = 0;
-  size_t mmax_int = 0;
-  size_t nmax_ext = 60;
-  size_t mmax_ext = 60;
-  size_t nmax_sh = 0;
-  size_t mmax_sh = 0;
-  size_t nmax_tor = 0;
-  size_t mmax_tor = 0;
-  double alpha_int = 0.0;
-  double alpha_sh = 0.0;
-  double alpha_tor = 0.0;
-  size_t robust_maxit = 1;
-  const double R = R_EARTH_KM;
-  const double b = R + 110.0;   /* radius of internal current shell (Sq+EEJ) */
-  const double d = R + 350.0;   /* radius of current shell for gravity/diamag */
-  double universal_time = 11.0; /* UT in hours for data selection */
-  char *datamap_file = "datamap.dat";
-  char *data_file = "data.dat";
-  char *spectrum_file = "tiegcm.s";
-  char *corr_file = "corr.dat";
-  char *residual_file = "res.dat";
-  char *output_file = NULL;
-  char *chisq_file = NULL;
-  char *lls_file = NULL;
-  char *Lcurve_file = NULL;
-  poltor_workspace *poltor_p;
-  poltor_parameters params;
-  struct timeval tv0, tv1;
-  int print_data = 0;
-
-  mmax_int = GSL_MIN(mmax_int, nmax_int);
-  mmax_ext = GSL_MIN(mmax_ext, nmax_ext);
-  mmax_sh = GSL_MIN(mmax_sh, nmax_sh);
-  mmax_tor = GSL_MIN(mmax_tor, nmax_tor);
-
-  fprintf(stderr, "main_invert: initializing spatial weighting histogram...");
-  gettimeofday(&tv0, NULL);
-  magdata_init(mdata);
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-
-  /* re-compute weights, nvec, nres based on flags update */
-  fprintf(stderr, "main_invert: computing spatial weighting of data...");
-  gettimeofday(&tv0, NULL);
-  magdata_calc(mdata);
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-
-  fprintf(stderr, "main_invert: setting unit spatial weights...");
-  magdata_unit_weights(mdata);
-  fprintf(stderr, "done\n");
-
-  params.R = R;
-  params.b = b;
-  params.d = d;
-  params.rmin = GSL_MAX(mdata->rmin, mdata->R + 250.0);
-  params.rmax = GSL_MIN(mdata->rmax, mdata->R + 450.0);
-  params.nmax_int = nmax_int;
-  params.mmax_int = mmax_int;
-  params.nmax_ext = nmax_ext;
-  params.mmax_ext = mmax_ext;
-  params.nmax_sh = nmax_sh;
-  params.mmax_sh = mmax_sh;
-  params.nmax_tor = nmax_tor;
-  params.mmax_tor = mmax_tor;
-  params.shell_J = 0;
-  params.data = mdata;
-  params.alpha_int = alpha_int;
-  params.alpha_sh = alpha_sh;
-  params.alpha_tor = alpha_tor;
-  params.flags = POLTOR_FLG_QD_HARMONICS*0;
-
-  poltor_p = poltor_alloc(&params);
-
-#if USE_SYNTH_DATA
-  fprintf(stderr, "main_invert: replacing with synthetic data...");
-  gettimeofday(&tv0, NULL);
-  poltor_synth(poltor_p);
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-#endif
-
-  {
-    size_t maxiter = robust_maxit;
-    size_t iter = 0;
-    char buf[2048];
-
-    while (iter++ < maxiter)
-      {
-        fprintf(stderr, "main_invert: ROBUST ITERATION %zu/%zu\n", iter, maxiter);
-
-        /* build LS system */
-        poltor_calc(poltor_p);
-
-        /* solve LS system */
-        poltor_solve(poltor_p);
-
-        sprintf(buf, "%s.iter%zu", spectrum_file, iter);
-        fprintf(stderr, "main_invert: printing spectrum to %s...", buf);
-        poltor_print_spectrum(buf, poltor_p);
-        fprintf(stderr, "done\n");
-      }
-  }
-
-  print_coefficients(poltor_p);
-
-#if 0
-  print_chi("chi.dat", poltor_p);
-
-  fprintf(stderr, "main_invert: printing correlation data to %s...", corr_file);
-  print_correlation(corr_file, poltor_p);
-  fprintf(stderr, "done\n");
-
-  fprintf(stderr, "main_invert: printing spectrum to %s...", spectrum_file);
-  poltor_print_spectrum(spectrum_file, poltor_p);
-  fprintf(stderr, "done\n");
-
-  if (Lcurve_file)
-    {
-      fprintf(stderr, "main_invert: writing L-curve data to %s...", Lcurve_file);
-      print_Lcurve(Lcurve_file, poltor_p);
-      fprintf(stderr, "done\n");
-    }
-
-  if (output_file)
-    {
-      fprintf(stderr, "main_invert: writing output coefficients to %s...", output_file);
-      poltor_write(output_file, poltor_p);
-      fprintf(stderr, "done\n");
-    }
-
-  if (chisq_file)
-    {
-      fprintf(stderr, "main_invert: printing chisq/dof to %s...", chisq_file);
-      print_chisq(chisq_file, poltor_p);
-      fprintf(stderr, "done\n");
-    }
-
-  if (residual_file)
-    {
-      fprintf(stderr, "main_invert: printing residuals to %s...", residual_file);
-      print_residuals(residual_file, poltor_p);
-      fprintf(stderr, "done\n");
-    }
-#endif
-
-  return poltor_p;
-}
-
 int
 main_build_matrix(const magdata *mdata, green_workspace *green_p,
                   gsl_matrix *A)
 {
   const size_t n = A->size1;
-  const size_t p = A->size2;
   const double eps = 1.0e-6;
   size_t rowidx = 0;
   size_t ilon, ilat;
@@ -624,7 +400,7 @@ lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X)
 }
 
 int
-main_proc(const char *filename, tiegcm_data *data)
+main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 {
   int status;
   const char *res_file = "res.dat";
@@ -644,8 +420,9 @@ main_proc(const char *filename, tiegcm_data *data)
   FILE *fp;
   struct timeval tv0, tv1;
 
-  fprintf(stderr, "main_proc: %zu observations\n", n);
-  fprintf(stderr, "main_proc: %zu model coefficients\n", p);
+  fprintf(stderr, "main_proc: %zu observations per grid\n", n);
+  fprintf(stderr, "main_proc: %zu SH model coefficients\n", p);
+  fprintf(stderr, "main_proc: %zu timestamps\n", nrhs);
 
   /* store spatial locations in magdata structure - grid points are
    * the same for all timestamps t_k */
@@ -669,13 +446,11 @@ main_proc(const char *filename, tiegcm_data *data)
 
   k = 1;
   fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", k++);
-  fprintf(fp, "# Field %zu: k(1,0) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: k(1,1) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: k(2,0) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: k(2,1) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: k(2,2) (nT)\n", k++);
-
-#if 1
+  fprintf(fp, "# Field %zu: q(1,0) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(1,1) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(2,0) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(2,1) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(2,2) (nT)\n", k++);
 
   fprintf(stderr, "main_proc: building rhs vectors...");
   gettimeofday(&tv0, NULL);
@@ -687,6 +462,9 @@ main_proc(const char *filename, tiegcm_data *data)
 
       /* construct rhs vector for time t_k */
       main_build_rhs(k, data, &b.vector);
+
+      if (k == 0)
+        printv_octave(&b.vector, "b");
     }
 
   gettimeofday(&tv1, NULL);
@@ -703,7 +481,7 @@ main_proc(const char *filename, tiegcm_data *data)
   {
     const size_t k = 0;
     gsl_vector_view x = gsl_matrix_column(X, k);
-    fprintf(stderr, "main_proc: writing spectrum to %s...", spectrum_file);
+    fprintf(stderr, "main_proc: writing spectrum at t0 to %s...", spectrum_file);
     print_spectrum(spectrum_file, &x.vector, green_p);
     fprintf(stderr, "done\n");
   }
@@ -722,7 +500,7 @@ main_proc(const char *filename, tiegcm_data *data)
   for (k = 0; k < data->nt; ++k)
     {
       size_t N;
-#if 1
+#if 0
       gsl_vector_view b = gsl_matrix_column(B, k);
       gsl_vector_view x = gsl_matrix_column(X, k);
 
@@ -743,7 +521,7 @@ main_proc(const char *filename, tiegcm_data *data)
 
           for (m = 0; m <= M; ++m)
             {
-              size_t cidx = green_nmidx(N, m, green_p);
+              size_t cidx = green_nmidx(N, m);
               double knm = gsl_matrix_get(X, cidx, k);
 
               fprintf(fp, "%f ", knm);
@@ -754,49 +532,10 @@ main_proc(const char *filename, tiegcm_data *data)
       fflush(fp);
     }
 
-#else
-
-  for (k = 0; k < data->nt; ++k)
-    {
-      magdata *mdata;
-
-      fprintf(stderr, "main_proc: processing grid for timestamp (%zu/%zu): %s",
-              k + 1, data->nt, ctime(&data->t[k]));
-      
-      mdata = tiegcm_magdata(k, data);
-
-      if (mdata)
-        {
-          poltor_workspace *poltor_p = main_invert(mdata);
-          size_t n;
-
-          fprintf(fp, "%ld ", data->t[k]);
-
-          for (n = 1; n <= 2; ++n)
-            {
-              int M = (int) n;
-              int m;
-
-              for (m = 0; m <= M; ++m)
-                {
-                  size_t cidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, poltor_p);
-                  gsl_complex coef = poltor_get(cidx, poltor_p);
-                  double knm = GSL_REAL(coef);
-
-                  fprintf(fp, "%f ", knm);
-                }
-            }
-
-          putc('\n', fp);
-          fflush(fp);
-
-          poltor_free(poltor_p);
-        }
-
-      magdata_free(mdata);
-    }
-
-#endif
+  /* write matrix of solution vectors to output file */
+  fprintf(stderr, "main_proc: writing solution matrix to %s...", outfile_mat);
+  write_matrix(outfile_mat, X);
+  fprintf(stderr, "done\n");
 
   green_free(green_p);
   gsl_matrix_free(A);
@@ -805,16 +544,19 @@ main_proc(const char *filename, tiegcm_data *data)
 
   fclose(fp);
 
+  fprintf(stderr, "main_proc: wrote qnm coefficients to %s\n", filename);
+
   return 0;
 }
 
 int
 main(int argc, char *argv[])
 {
-  tiegcm_data *data;
+  tiegcm_data *data = NULL;
   struct timeval tv0, tv1;
   char *infile = NULL;
-  char *outfile = "knm.dat";
+  char *outfile = "qnm.txt";
+  char *outfile_mat = "data/stage1_qnm.dat";
 
   while (1)
     {
@@ -825,7 +567,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:", long_options, &option_index);
+      c = getopt_long(argc, argv, "i:o:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -835,34 +577,35 @@ main(int argc, char *argv[])
             infile = optarg;
             break;
 
+          case 'o':
+            outfile_mat = optarg;
+            break;
+
           default:
             break;
         }
     }
 
-  if (!infile)
+  while (optind < argc)
     {
-      fprintf(stderr, "Usage: %s <-i tiegcm_nc_file>\n", argv[0]);
-      exit(1);
+      fprintf(stderr, "main: reading %s...", argv[optind]);
+      gettimeofday(&tv0, NULL);
+
+      data = tiegcm_read(argv[optind], data);
+      if (!data)
+        {
+          fprintf(stderr, "main: error reading %s\n", argv[optind]);
+          exit(1);
+        }
+
+      gettimeofday(&tv1, NULL);
+      fprintf(stderr, "done (%zu records read, %g seconds)\n", data->nt,
+              time_diff(tv0, tv1));
+
+      ++optind;
     }
 
-  fprintf(stderr, "input file = %s\n", infile);
-
-  fprintf(stderr, "main: reading %s...", infile);
-  gettimeofday(&tv0, NULL);
-
-  data = tiegcm_read(infile, NULL);
-  if (!data)
-    {
-      fprintf(stderr, "main: error reading %s\n", infile);
-      exit(1);
-    }
-
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%zu records read, %g seconds)\n", data->nt,
-          time_diff(tv0, tv1));
-
-  main_proc(outfile, data);
+  main_proc(outfile, outfile_mat, data);
 
   tiegcm_free(data);
 

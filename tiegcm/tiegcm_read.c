@@ -42,6 +42,7 @@ tiegcm_read(const char *filename, tiegcm_data *data)
   int yearid, doyid, utid, glonvid, glatvid, Bxvid, Byvid, Bzvid;
   size_t ntot, ncur;
   size_t nt, nlon, nlat;
+  size_t grid_base;
 
   status = nc_open(filename, NC_NOWRITE, &ncid);
   if (status)
@@ -104,15 +105,24 @@ tiegcm_read(const char *filename, tiegcm_data *data)
 
   cur_idx = data->nt;
 
+  if (nt > data->nt_max)
+    {
+      fprintf(stderr, "tiegcm_read: error: nt_max too small\n");
+      return 0;
+    }
+
+  /* offset for grid reading */
+  grid_base = data->nt * data->nlon * data->nlat;
+
   status = 0;
   status += nc_get_var_double(ncid, yearid, &(data->year[cur_idx]));
   status += nc_get_var_double(ncid, doyid, &(data->doy[cur_idx]));
   status += nc_get_var_double(ncid, utid, &(data->ut[cur_idx]));
   status += nc_get_var_double(ncid, glonvid, data->glon);
   status += nc_get_var_double(ncid, glatvid, data->glat);
-  status += nc_get_var_double(ncid, Bxvid, data->Bx);
-  status += nc_get_var_double(ncid, Byvid, data->By);
-  status += nc_get_var_double(ncid, Bzvid, data->Bz);
+  status += nc_get_var_double(ncid, Bxvid, &(data->Bx[grid_base]));
+  status += nc_get_var_double(ncid, Byvid, &(data->By[grid_base]));
+  status += nc_get_var_double(ncid, Bzvid, &(data->Bz[grid_base]));
 
   if (status)
     {
@@ -152,7 +162,7 @@ tiegcm_read(const char *filename, tiegcm_data *data)
 
   /* since B_up is given, we need to invert it to get B_z */
   {
-    gsl_vector_view v = gsl_vector_view_array(data->Bz, nt * nlon * nlat);
+    gsl_vector_view v = gsl_vector_view_array(&(data->Bz[grid_base]), nt * nlon * nlat);
     gsl_vector_scale(&v.vector, -1.0);
   }
 

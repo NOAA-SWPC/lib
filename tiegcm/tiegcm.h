@@ -23,6 +23,11 @@ typedef struct
   double *By;   /* B_y grid, nt-by-nlon-by-nlat */
   double *Bz;   /* B_z grid, nt-by-nlon-by-nlat */
 
+  double *workx; /* temporary B_x grid, nt_max-by-nlon-by-nlat */
+  double *worky; /* temporary B_y grid, nt_max-by-nlon-by-nlat */
+  double *workz; /* temporary B_z grid, nt_max-by-nlon-by-nlat */
+  size_t nt_max; /* maximum time snapshots in 1 TIEGCM file */
+
   size_t nt;    /* number of time snapshots stored */
   size_t nlon;  /* length of 'glon' */
   size_t nlat;  /* length of 'glat' */

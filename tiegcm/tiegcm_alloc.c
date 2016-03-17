@@ -30,6 +30,11 @@ tiegcm_alloc(const size_t nt, const size_t nlon, const size_t nlat)
 
   tiegcm_realloc(nt, nlon, nlat, data);
 
+  data->nt_max = 1000;
+  data->workx = malloc(data->nt_max * nlon * nlat * sizeof(double));
+  data->worky = malloc(data->nt_max * nlon * nlat * sizeof(double));
+  data->workz = malloc(data->nt_max * nlon * nlat * sizeof(double));
+
   return data;
 }
 
@@ -104,6 +109,15 @@ tiegcm_free(tiegcm_data *data)
 
   if (data->Bz)
     free(data->Bz);
+
+  if (data->workx)
+    free(data->workx);
+
+  if (data->worky)
+    free(data->worky);
+
+  if (data->workz)
+    free(data->workz);
 
   free(data);
 }
