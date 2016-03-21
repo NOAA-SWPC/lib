@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include <lapacke.h>
+#include <lapacke/lapacke.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_matrix.h>
@@ -133,6 +133,8 @@ lapack_eigen_herm(const gsl_matrix_complex * m, gsl_vector *eval, gsl_matrix_com
                      (lapack_complex_double *) evec->data,
                      ldz,
                      isuppz);
+
+  gsl_matrix_complex_transpose(evec);
 
   *eval_found = M;
 
