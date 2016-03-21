@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libtiegcm.la
 
-libtiegcm_la_SOURCES = io.c tiegcm_alloc.c tiegcm_read.c
+libtiegcm_la_SOURCES = io.c lapack_common.c tiegcm_alloc.c tiegcm_read.c
 
 AM_CPPFLAGS = -I$(top_builddir)/apex -I$(top_builddir)/common -I$(top_builddir)/green -I$(top_builddir)/magdata -I$(top_builddir)/track -I$(top_builddir)/msynth -I$(top_builddir)/poltor -I$(top_builddir)/lls
 

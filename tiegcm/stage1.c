@@ -3,7 +3,7 @@
  *
  * 1. Read tiegcm data file(s)
  * 2. For each time step t_k, invert B(t_k) grid for SH coefficients q_{nm}(t_k)
- * 3. Store SH coefficients in a matrix:
+ * 3. Store SH coefficients in a nnm-by-nt matrix:
  *
  *      X_{ij} = q_i(t_j) where i = shidx(n,m)
  * 4. X matrix is output to a binary file
@@ -40,6 +40,7 @@
 #include "poltor.h"
 
 #include "io.h"
+#include "lapack_common.h"
 #include "tiegcm.h"
 
 #define USE_SYNTH_DATA              0
@@ -160,6 +161,8 @@ print_residuals(const char *filename, const size_t tidx,
                   B_model[1],
                   B_model[2]);
         }
+
+      fprintf(fp, "\n");
     }
 
   gsl_vector_free(b);
@@ -357,49 +360,6 @@ main_build_rhs(const size_t tidx, const tiegcm_data *data,
 }
 
 int
-lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X)
-{
-  int s;
-  lapack_int m = A->size1;
-  lapack_int n = A->size2;
-  lapack_int nrhs = B->size2;
-  lapack_int lda = A->size1;
-  lapack_int ldb = B->size1;
-  lapack_int rank;
-  lapack_int *jpvt = malloc(n * sizeof(lapack_int));
-  gsl_matrix *work_A = gsl_matrix_alloc(A->size2, A->size1);
-  gsl_matrix *work_B = gsl_matrix_alloc(B->size2, B->size1);
-  double rcond = 1.0e-6;
-
-  gsl_matrix_transpose_memcpy(work_A, A);
-  gsl_matrix_transpose_memcpy(work_B, B);
-
-  s = LAPACKE_dgelsy(LAPACK_COL_MAJOR,
-                     m,
-                     n,
-                     nrhs,
-                     work_A->data,
-                     lda,
-                     work_B->data,
-                     ldb,
-                     jpvt,
-                     rcond,
-                     &rank);
-
-  /* store solution in X */
-  {
-    gsl_matrix_view m = gsl_matrix_submatrix(work_B, 0, 0, X->size2, X->size1);
-    gsl_matrix_transpose_memcpy(X, &m.matrix);
-  }
-
-  gsl_matrix_free(work_A);
-  gsl_matrix_free(work_B);
-  free(jpvt);
-
-  return s;
-}
-
-int
 main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 {
   int status;
@@ -419,6 +379,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   size_t k;
   FILE *fp;
   struct timeval tv0, tv1;
+  int rank;
 
   fprintf(stderr, "main_proc: %zu observations per grid\n", n);
   fprintf(stderr, "main_proc: %zu SH model coefficients\n", p);
@@ -473,9 +434,10 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   /* solve least squares system for all rhs vectors */
   fprintf(stderr, "main_proc: solving LS system with QR decomposition of A...");
   gettimeofday(&tv0, NULL);
-  status = lapack_lls(A, B, X);
+  status = lapack_lls(A, B, X, &rank);
   gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds, s = %d)\n", time_diff(tv0, tv1), status);
+  fprintf(stderr, "done (%g seconds, s = %d, rank = %d)\n",
+          time_diff(tv0, tv1), status, rank);
 
   /* print spectrum of coefficients at time t_0 */
   {
@@ -554,7 +516,6 @@ main(int argc, char *argv[])
 {
   tiegcm_data *data = NULL;
   struct timeval tv0, tv1;
-  char *infile = NULL;
   char *outfile = "qnm.txt";
   char *outfile_mat = "data/stage1_qnm.dat";
 
@@ -567,16 +528,12 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:o:", long_options, &option_index);
+      c = getopt_long(argc, argv, "o:", long_options, &option_index);
       if (c == -1)
         break;
 
       switch (c)
         {
-          case 'i':
-            infile = optarg;
-            break;
-
           case 'o':
             outfile_mat = optarg;
             break;
@@ -584,6 +541,13 @@ main(int argc, char *argv[])
           default:
             break;
         }
+    }
+
+  if (optind >= argc)
+    {
+      fprintf(stderr, "Usage: %s [-o binary_matrix_output_file] file1.nc file2.nc ...\n",
+              argv[0]);
+      exit(1);
     }
 
   while (optind < argc)

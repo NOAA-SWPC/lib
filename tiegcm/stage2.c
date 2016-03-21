@@ -1,10 +1,16 @@
 /*
  * stage2.c
+ *
+ * 1. Read in spherical harmonic time series from stage1 matrix file (nnm-by-nt)
+ * 2. Divide each time series into T smaller segments and perform
+ *    windowed Fourier transform of each segment
+ * 3. Build Q(omega) matrix, nnm-by-T
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <sys/time.h>
 #include <getopt.h>
 
 #include <gsl/gsl_math.h>
@@ -17,9 +23,11 @@
 #include <fftw3.h>
 #include <lapacke/lapacke.h>
 
+#include "common.h"
 #include "green.h"
 
 #include "io.h"
+#include "lapack_common.h"
 
 static double
 hamming_window(const double alpha, const double beta,
@@ -58,14 +66,14 @@ of the FFT for each time segment, with a fixed frequency omega,
 into an output array
 
 Inputs: omega - fixed frequency (per hour)
-        qnm   - input time series
+        qnm   - input time series, size nt
         Qnm   - (output) array of FFT values for each time
                 segment at frequency omega, size T where T
                 is the number of time segments
 */
 
 static int
-do_transform(const double omega, const gsl_vector *qnm, gsl_vector_complex *Qnm)
+do_transform(FILE *fp, const double omega, const gsl_vector *qnm, gsl_vector_complex *Qnm)
 {
   const size_t nsamples = qnm->size;                              /* number of time samples */
   const size_t T = Qnm->size;                                     /* number of time segments */
@@ -98,6 +106,35 @@ do_transform(const double omega, const gsl_vector *qnm, gsl_vector_complex *Qnm)
 
       GSL_SET_COMPLEX(&z, fft_out[fft_idx][0], fft_out[fft_idx][1]);
       gsl_vector_complex_set(Qnm, k, z);
+
+      if (k == 0)
+        {
+          size_t i;
+
+          for (i = 0; i < n; ++i)
+            {
+              double freqi, powi, periodi;
+              size_t idx;
+
+              if (i <= n/2 + 1)
+                idx = i;
+              else
+                idx = n - i;
+
+              freqi = 2.0 * M_PI * idx * (fs / n);
+              periodi = 2.0 * M_PI / (freqi * 24.0);
+              powi = fft_out[idx][0]*fft_out[idx][0] +
+                     fft_out[idx][1]*fft_out[idx][1];
+
+              fprintf(fp, "%f %f %f %f\n",
+                      gsl_vector_get(&vqnm.vector, i),
+                      gsl_vector_get(&vwork.vector, i),
+                      periodi,
+                      powi);
+            }
+
+          fprintf(fp, "\n\n");
+        }
 
       fftw_destroy_plan(plan);
       fftw_free(fft_out);
@@ -133,57 +170,15 @@ build_sdm(const gsl_matrix_complex *Q, gsl_matrix_complex *S)
   return 0;
 }
 
-static int
-sdm_decomp(const gsl_matrix_complex * S, gsl_vector *eval, gsl_matrix_complex *evec)
-{
-  int status;
-  const lapack_int N = S->size1;
-  gsl_matrix_complex *A = gsl_matrix_complex_alloc(N, N);
-  double vl = 0.0, vu = 0.0;
-  lapack_int il = 0, iu = 0;
-  lapack_int lda = A->size1;
-  lapack_int ldz = evec->size1;
-  double abstol = 0.0;
-  lapack_int M = 0;
-  lapack_int *isuppz = malloc(2*N*sizeof(lapack_int));
-
-  gsl_matrix_complex_transpose_memcpy(A, S);
-
-  status = LAPACKE_zheevr(LAPACK_COL_MAJOR,
-                          'V',
-                          'A',
-                          'L',
-                          N,
-                          (lapack_complex_double *) A->data,
-                          lda,
-                          vl,
-                          vu,
-                          il,
-                          iu,
-                          abstol,
-                          &M,
-                          eval->data,
-                          (lapack_complex_double *) evec->data,
-                          ldz,
-                          isuppz);
-
-  fprintf(stderr, "status = %d, found %d eigenvalues\n", status, M);
-
-  free(isuppz);
-  gsl_matrix_complex_free(A);
-
-  return 0;
-}
-
 int
 main(int argc, char *argv[])
 {
   const size_t nmax = 60;                 /* maximum spherical harmonic degree */
   char *infile = "data/stage1_qnm.dat";
-  char *outfile = "out.txt";
   gsl_matrix *A;
-  const double time_segment_length = 2.0; /* number of days in each time segment */
+  double time_segment_length = 5.0;       /* number of days in each time segment */
   size_t nt, T, nnm;
+  struct timeval tv0, tv1;
 
   /* nnm-by-T matrix storing power at frequency omega for each time segment and each
    * (n,m) channel */
@@ -200,7 +195,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:o:", long_options, &option_index);
+      c = getopt_long(argc, argv, "i:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -210,19 +205,19 @@ main(int argc, char *argv[])
             infile = optarg;
             break;
 
-          case 'o':
-            outfile = optarg;
+          case 't':
+            time_segment_length = atof(optarg);
             break;
 
           default:
-            fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-o output_file]\n", argv[0]);
+            fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-t time_segment_length (days)]\n", argv[0]);
             break;
         }
     }
 
   if (!infile)
     {
-      fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-o output_file]\n", argv[0]);
+      fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-t time_segment_length (days)]\n", argv[0]);
       exit(1);
     }
 
@@ -236,6 +231,9 @@ main(int argc, char *argv[])
   nt = A->size2;
   T = (nt / 24.0) / time_segment_length;
 
+  fprintf(stderr, "main: time segment length: %g [days]\n", time_segment_length);
+  fprintf(stderr, "main: number of time segments: %zu\n", T);
+
   /*nnm = A->size1;*/
   nnm = nmax*(nmax+2);
 
@@ -243,8 +241,16 @@ main(int argc, char *argv[])
   S = gsl_matrix_complex_alloc(nnm, nnm);
 
   {
+    const char *fft_file = "fft_data.txt";
+    FILE *fp = fopen(fft_file, "w");
     const double omega = 1.0 / 24.0; /* 1 cpd */
     size_t n;
+
+    n = 1;
+    fprintf(fp, "# Field %zu: qnm(t) for first time segment\n", n++);
+    fprintf(fp, "# Field %zu: Hamming-windowed qnm(t) for first time segment\n", n++);
+    fprintf(fp, "# Field %zu: Period (days)\n", n++);
+    fprintf(fp, "# Field %zu: Power (nT^2)\n", n++);
 
     fprintf(stderr, "main: building the Q matrix by performing windowed FFTs...");
 
@@ -258,11 +264,14 @@ main(int argc, char *argv[])
             gsl_vector_view qnm = gsl_matrix_row(A, cidx);
             gsl_vector_complex_view Qnm = gsl_matrix_complex_row(Q, cidx);
 
-            do_transform(omega, &qnm.vector, &Qnm.vector);
+            fprintf(fp, "# q(%zu,%d)\n", n, m);
+            do_transform(fp, omega, &qnm.vector, &Qnm.vector);
           }
       }
 
-    fprintf(stderr, "done\n");
+    fprintf(stderr, "done (data written to %s)\n", fft_file);
+
+    fclose(fp);
   }
 
   fprintf(stderr, "main: building spectral density matrix...");
@@ -274,13 +283,18 @@ main(int argc, char *argv[])
     const char *eval_txt_file = "eval.txt";
     const char *eval_file = "data/stage2_eval.dat";
     const char *evec_file = "data/stage2_evec.dat";
+    const char *Q_file = "data/stage2_Q.dat";
     gsl_vector *eval = gsl_vector_alloc(N);
     gsl_matrix_complex *evec = gsl_matrix_complex_alloc(N, N);
+    int status, eval_found;
     FILE *fp;
 
     fprintf(stderr, "main: performing eigendecomposition of SDM...");
-    sdm_decomp(S, eval, evec);
-    fprintf(stderr, "done\n");
+    gettimeofday(&tv0, NULL);
+    status = lapack_eigen_herm(S, eval, evec, &eval_found);
+    gettimeofday(&tv1, NULL);
+    fprintf(stderr, "done (%g seconds, status = %d, %d eigenvalues found)\n",
+            time_diff(tv0, tv1), status, eval_found);
 
     fprintf(stderr, "main: writing eigenvalues in text format to %s...",
             eval_txt_file);
@@ -297,6 +311,11 @@ main(int argc, char *argv[])
     fprintf(stderr, "main: writing eigenvectors in binary format to %s...",
             evec_file);
     write_matrix_complex(evec_file, evec);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "main: writing Q matrix in binary format to %s...",
+            Q_file);
+    write_matrix_complex(Q_file, Q);
     fprintf(stderr, "done\n");
 
     gsl_vector_free(eval);
