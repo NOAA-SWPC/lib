@@ -6,6 +6,7 @@
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_matrix.h>
+#include <gsl/gsl_eigen.h>
 
 int
 lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
@@ -95,6 +96,54 @@ lapack_complex_lls(const gsl_matrix_complex * A, const gsl_matrix_complex * B,
   gsl_matrix_complex_free(work_A);
   gsl_matrix_complex_free(work_B);
   free(jpvt);
+
+  return s;
+}
+
+int
+lapack_eigen_symm(const gsl_matrix * m, gsl_vector *eval, gsl_matrix *evec,
+                  int *eval_found)
+{
+  int s;
+  const lapack_int N = m->size1;
+  gsl_matrix *A = gsl_matrix_alloc(N, N);
+  double vl = 0.0, vu = 0.0;
+  lapack_int il = 0, iu = 0;
+  lapack_int lda = A->size1;
+  lapack_int ldz = evec->size1;
+  double abstol = 0.0;
+  lapack_int M = 0;
+  lapack_int *isuppz = malloc(2*N*sizeof(lapack_int));
+
+  gsl_matrix_transpose_memcpy(A, m);
+
+  s = LAPACKE_dsyevr(LAPACK_COL_MAJOR,
+                     'V',
+                     'A',
+                     'L',
+                     N,
+                     A->data,
+                     lda,
+                     vl,
+                     vu,
+                     il,
+                     iu,
+                     abstol,
+                     &M,
+                     eval->data,
+                     evec->data,
+                     ldz,
+                     isuppz);
+
+  gsl_matrix_transpose(evec);
+
+  /* sort into descending order */
+  gsl_eigen_symmv_sort(eval, evec, GSL_EIGEN_SORT_VAL_DESC);
+
+  *eval_found = M;
+
+  free(isuppz);
+  gsl_matrix_free(A);
 
   return s;
 }

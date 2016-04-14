@@ -1,6 +1,10 @@
 /*
  * stage3.c
  *
+ * 1. Print cumulative variance curve to determine how
+ *    many eigenvectors are needed
+ * 2. Solve U*alpha = Q where U is a matrix of principal
+ *    eigenvectors
  */
 
 #include <stdio.h>
@@ -8,6 +12,7 @@
 #include <math.h>
 #include <sys/time.h>
 #include <getopt.h>
+#include <complex.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
@@ -21,33 +26,145 @@
 #include "green.h"
 
 #include "io.h"
-#include "lapack_common.h"
+#include "lapack_wrapper.h"
+
+static double
+norm_fro(const gsl_matrix_complex * m)
+{
+  const size_t M = m->size1;
+  const size_t N = m->size2;
+  size_t i, j;
+  double sum = 0.0;
+
+  for (i = 0; i < M; ++i)
+    {
+      for (j = 0; j < N; ++j)
+        {
+          gsl_complex z = gsl_matrix_complex_get(m, i, j);
+          sum += gsl_complex_abs(z);
+        }
+    }
+
+  sum = sqrt(sum);
+
+  return sum;
+}
+
+int
+print_variance(const char *filename, const gsl_vector *eval)
+{
+  int s = 0;
+  const size_t n = eval->size;
+  FILE *fp = fopen(filename, "w");
+  size_t i;
+  double sum_all = 0.0;
+  double cumsum = 0.0;
+
+  i = 1;
+  fprintf(fp, "# Field %zu: eigenvalue number i\n", i++);
+  fprintf(fp, "# Field %zu: ( sum_{j=1}^i lambda_j ) / ( sum_j lambda_j )\n", i++);
+
+  /* compute sum_i lambda_i */
+  for (i = 0; i < n; ++i)
+    {
+      double lambda = gsl_vector_get(eval, i);
+      sum_all += lambda;
+    }
+
+  /* invert loop to print largest eigenvalues first */
+  for (i = n; i > 0 && i--; )
+    {
+      double lambda = gsl_vector_get(eval, i);
+      cumsum += lambda;
+      fprintf(fp, "%zu %.12e\n", n - i, cumsum / sum_all);
+    }
+
+  fclose(fp);
+
+  return s;
+}
+
+/*
+solve_PCA()
+  Solve PCA problem by computing alpha, such that
+
+U alpha = Q
+
+in a least squares sense, where U are the principal eigenvectors
+of the SDM
+
+Inputs: P        - number of eigenvectors of SDM to use
+        Q        - Fourier coefficient matrix, nnm-by-T
+        evec     - eigenvector matrix, nnm-by-nnm
+        alpha    - (output) alpha matrix, P-by-T
+        Qt       - (output) Q~ = U*alpha, nnm-by-T
+*/
+
+int
+solve_PCA(const size_t P, const gsl_matrix_complex * Q,
+          const gsl_matrix_complex * evec, gsl_matrix_complex * alpha,
+          gsl_matrix_complex * Qt)
+{
+  int status = 0;
+  const size_t T = Q->size2; /* number of time segments */
+  const size_t nnm = evec->size1;
+  gsl_matrix_complex *R;     /* R = Q - U*alpha */
+  struct timeval tv0, tv1;
+  double residual;           /* || Q - U*alpha || */
+  int rank;
+
+  /* select largest P eigenvectors of SDM */
+  gsl_matrix_complex_const_view U = gsl_matrix_complex_const_submatrix(evec, 0, nnm - P, nnm, P);
+
+  /* solve: U*alpha = Q */
+  fprintf(stderr, "solve_PCA: solving PCA problem for alpha...");
+  gettimeofday(&tv0, NULL);
+  status = lapack_complex_lls(&U.matrix, Q, alpha, &rank);
+  gettimeofday(&tv1, NULL);
+
+  /* compute: Q~ = U*alpha */
+  gsl_blas_zgemm(CblasNoTrans, CblasNoTrans, GSL_COMPLEX_ONE, &U.matrix, alpha,
+                 GSL_COMPLEX_ZERO, Qt);
+
+  /* compute: R = Q - Q~ */
+  R = gsl_matrix_complex_alloc(nnm, T);
+  gsl_matrix_complex_memcpy(R, Q);
+  gsl_matrix_complex_sub(R, Qt);
+
+  residual = norm_fro(R);
+
+  fprintf(stderr, "done (%g seconds, status = %d, rank = %d, residual = %.12e)\n",
+          time_diff(tv0, tv1), status, rank, residual);
+
+  gsl_matrix_complex_free(R);
+
+  return status;
+}
 
 int
 main(int argc, char *argv[])
 {
-  size_t nnm;
   char *qnm_file = "data/stage1_qnm.dat";
   char *eval_file = "data/stage2_eval.dat";
   char *evec_file = "data/stage2_evec.dat";
   char *Q_file = "data/stage2_Q.dat";
-  struct timeval tv0, tv1;
+
+  char *variance_file = "variance.txt";
 
   /* nnm-by-T matrix storing power at frequency omega for each time segment and each
    * (n,m) channel */
   gsl_matrix_complex *Q;
-  gsl_matrix_complex *Qt;    /* Q~ = U*alpha */
 
   gsl_matrix_complex *evec;  /* eigenvectors of SDM */
   gsl_vector *eval;          /* eigenvalues of SDM */
-
   gsl_matrix_complex *alpha; /* alpha matrix, P-by-T */
+  gsl_matrix_complex *Qt;    /* Q~ = U*alpha, nnm-by-T */
+
   gsl_matrix *qnm;           /* qnm(t) matrix */
 
+  size_t nnm;
   size_t T;                  /* number of time segments */
   size_t P;                  /* number of principal eigenvectors to use (<= T) */
-  gsl_matrix_complex_view U; /* largest P eigenvectors of SDM */
-  int status, rank;
 
   while (1)
     {
@@ -86,8 +203,13 @@ main(int argc, char *argv[])
   Q = read_matrix_complex(Q_file);
   fprintf(stderr, "done (%zu-by-%zu matrix read)\n", Q->size1, Q->size2);
 
+  /* plot a variance curve to help decide how many eigenvectors to keep */
+  fprintf(stderr, "main: writing variance curve to %s...", variance_file);
+  print_variance(variance_file, eval);
+  fprintf(stderr, "done\n");
+
   T = Q->size2;
-  P = GSL_MIN(20, T);
+  P = GSL_MIN(11, T);
   nnm = evec->size1;
 
   fprintf(stderr, "main: using %zu largest eigenvectors\n", P);
@@ -95,35 +217,29 @@ main(int argc, char *argv[])
   alpha = gsl_matrix_complex_alloc(P, T);
   Qt = gsl_matrix_complex_alloc(nnm, T);
 
-  /* select the P largest eigenvectors of SDM */
-  U = gsl_matrix_complex_submatrix(evec, 0, nnm - P, nnm, P);
-
-  /* solve: U*alpha = Q */
-  fprintf(stderr, "main: solving PCA problem for alpha...");
-  gettimeofday(&tv0, NULL);
-  status = lapack_complex_lls(&U.matrix, Q, alpha, &rank);
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds, status = %d, rank = %d)\n",
-          time_diff(tv0, tv1), status, rank);
-
-  /* compute: Q~ = U*alpha */
-  gsl_blas_zgemm(CblasNoTrans, CblasNoTrans, GSL_COMPLEX_ONE, &U.matrix, alpha,
-                 GSL_COMPLEX_ZERO, Qt);
+  /* find alpha such that || Q - U*alpha || is
+   * minimized in a least squares sense */
+  solve_PCA(P, Q, evec, alpha, Qt);
 
   {
-    size_t k;
-    size_t cidx = green_nmidx(2, 0);
+    const size_t nt = qnm->size2;
+    const size_t cidx = green_nmidx(3, 1);
+    const double omega = 2.0*M_PI / 24.0; /* 1 cpd frequency in hr^{-1} */
+    size_t i;
 
-    for (k = 0; k < T; ++k)
+    for (i = 0; i < nt; ++i)
       {
-        gsl_complex Qnm = gsl_matrix_complex_get(Q, cidx, k);
+        double t = (double) i;
+        double qnmt = gsl_matrix_get(qnm, cidx, i);
+        size_t k = (size_t) ((t / nt) * T); /* time segment bin */
+        gsl_complex expterm = gsl_complex_rect(cos(omega*t), sin(omega*t));
         gsl_complex Qtnm = gsl_matrix_complex_get(Qt, cidx, k);
+        gsl_complex val = gsl_complex_mul(Qtnm, expterm);
 
-        printf("%f %f %f %f\n",
-               GSL_REAL(Qnm),
-               GSL_IMAG(Qnm),
-               GSL_REAL(Qtnm),
-               GSL_IMAG(Qtnm));
+        printf("%f %f %f\n",
+               t / 24.0,
+               qnmt,
+               GSL_REAL(val));
       }
   }
 

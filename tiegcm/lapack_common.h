@@ -14,6 +14,8 @@ int lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
                int *rank);
 int lapack_complex_lls(const gsl_matrix_complex * A, const gsl_matrix_complex * B,
                        gsl_matrix_complex * X, int *rank);
+int lapack_eigen_symm(const gsl_matrix * m, gsl_vector *eval, gsl_matrix *evec,
+                      int *eval_found);
 int lapack_eigen_herm(const gsl_matrix_complex * m, gsl_vector *eval, gsl_matrix_complex *evec,
                       int *eval_found);
 

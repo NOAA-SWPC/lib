@@ -27,7 +27,7 @@
 #include "green.h"
 
 #include "io.h"
-#include "lapack_common.h"
+#include "lapack_wrapper.h"
 
 static double
 hamming_window(const double alpha, const double beta,
@@ -89,6 +89,7 @@ do_transform(FILE *fp, const double omega, const gsl_vector *qnm, gsl_vector_com
     {
       size_t end_idx = GSL_MIN(start_idx + nwindow - 1, nsamples - 1);
       size_t n = end_idx - start_idx + 1;
+      double sqrtn = sqrt((double) n);
       gsl_vector_const_view vqnm = gsl_vector_const_subvector(qnm, start_idx, n);
       gsl_vector_view vwork = gsl_vector_subvector(work, 0, n);
       fftw_complex *fft_out = fftw_malloc(sizeof(fftw_complex) * (n/2 + 1));
@@ -104,7 +105,8 @@ do_transform(FILE *fp, const double omega, const gsl_vector *qnm, gsl_vector_com
       plan = fftw_plan_dft_r2c_1d(n, vwork.vector.data, fft_out, FFTW_ESTIMATE);
       fftw_execute(plan);
 
-      GSL_SET_COMPLEX(&z, fft_out[fft_idx][0], fft_out[fft_idx][1]);
+      /* normalize by dividing by sqrt(n) */
+      GSL_SET_COMPLEX(&z, fft_out[fft_idx][0] / sqrtn, fft_out[fft_idx][1] / sqrtn);
       gsl_vector_complex_set(Qnm, k, z);
 
       if (k == 0)

@@ -40,7 +40,7 @@
 #include "poltor.h"
 
 #include "io.h"
-#include "lapack_common.h"
+#include "lapack_wrapper.h"
 #include "tiegcm.h"
 
 #define USE_SYNTH_DATA              0
@@ -123,6 +123,7 @@ print_residuals(const char *filename, const size_t tidx,
   gsl_blas_dgemv(CblasNoTrans, 1.0, A, c, 0.0, b);
 
   j = 1;
+  fprintf(fp, "# Grid for timestamp %ld\n", data->t[tidx]);
   fprintf(fp, "# Field %zu: geographic longitude (degrees)\n", j++);
   fprintf(fp, "# Field %zu: geodetic latitude (degrees)\n", j++);
   fprintf(fp, "# Field %zu: TIEGCM B_x (nT)\n", j++);
@@ -169,61 +170,6 @@ print_residuals(const char *filename, const size_t tidx,
   fclose(fp);
 
   return rnorm;
-}
-
-/* plot current stream function grid */
-int
-print_chi(const char *filename, poltor_workspace *w)
-{
-  const double b = w->R + 110.0;
-  const double lat_min = -80.0;
-  const double lat_max = 80.0;
-  const double lon_min = -180.0;
-  const double lon_max = 180.0;
-  const double phi_min = lon_min * M_PI / 180.0;
-  const double phi_max = lon_max * M_PI / 180.0;
-  const double theta_min = M_PI / 2.0 - lat_max * M_PI / 180.0;
-  const double theta_max = M_PI / 2.0 - lat_min * M_PI / 180.0;
-  double theta, phi;
-  FILE *fp;
-  size_t i;
-
-  fp = fopen(filename, "w");
-  if (!fp)
-    {
-      fprintf(stderr, "print_chi: unable to open %s: %s\n",
-              filename, strerror(errno));
-      return -1;
-    }
-
-  i = 1;
-  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: chi (external) (kA)\n", i++);
-
-  fprintf(stderr, "print_chi: writing current stream function to %s...", filename);
-
-  for (phi = phi_min; phi < phi_max; phi += 2.0 * M_PI / 180.0)
-    {
-      for (theta = theta_min; theta < theta_max; theta += 2.0 * M_PI / 180.0)
-        {
-          double chi; /* current stream function */
-
-          /*poltor_eval_chi_ext(b, theta, phi, &chi, w);*/
-
-          fprintf(fp, "%f %f %f\n",
-                  phi * 180.0 / M_PI,
-                  90.0 - theta * 180.0 / M_PI,
-                  chi);
-        }
-      fprintf(fp, "\n");
-    }
-
-  fprintf(stderr, "done\n");
-
-  fclose(fp);
-
-  return 0;
 }
 
 magdata *
