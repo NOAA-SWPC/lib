@@ -144,6 +144,9 @@ solve_PCA(const size_t P, const gsl_matrix_complex * Q,
 int
 main(int argc, char *argv[])
 {
+  const size_t nmax = 60;
+  const size_t mmax = GSL_MIN(nmax, 30);
+  green_workspace *green_p = green_alloc(nmax, mmax);
   char *qnm_file = "data/stage1_qnm.dat";
   char *eval_file = "data/stage2_eval.dat";
   char *evec_file = "data/stage2_evec.dat";
@@ -223,7 +226,7 @@ main(int argc, char *argv[])
 
   {
     const size_t nt = qnm->size2;
-    const size_t cidx = green_nmidx(3, 1);
+    const size_t cidx = green_nmidx(3, 1, green_p);
     const double omega = 2.0*M_PI / 24.0; /* 1 cpd frequency in hr^{-1} */
     size_t i;
 
@@ -249,6 +252,7 @@ main(int argc, char *argv[])
   gsl_matrix_complex_free(Qt);
   gsl_matrix_free(qnm);
   gsl_vector_free(eval);
+  green_free(green_p);
 
   return 0;
 }

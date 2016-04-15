@@ -2,11 +2,13 @@
  * stage1.c
  *
  * 1. Read tiegcm data file(s)
- * 2. For each time step t_k, invert B(t_k) grid for SH coefficients q_{nm}(t_k)
- * 3. Store SH coefficients in a nnm-by-nt matrix:
+ * 2. For each time step t_k, invert B(t_k) grid for SH coefficients k_{nm}(t_k)
+ * 3. Determine spherical harmonic coefficients of current stream function
+ *    on a shell at radius b, q_{nm}(t_k)
+ * 4. Store q_{nm}(t) SH coefficients in a nnm-by-nt matrix:
  *
  *      X_{ij} = q_i(t_j) where i = shidx(n,m)
- * 4. X matrix is output to a binary file
+ * 5. X matrix is output to a binary file
  *
  * ./stage1 <-i tiegcm_nc_file> [-o output_matrix_file]
  */
@@ -44,50 +46,6 @@
 #include "tiegcm.h"
 
 #define USE_SYNTH_DATA              0
-
-int
-print_spectrum(const char *filename, const gsl_vector *c,
-               const green_workspace *w)
-{
-  size_t nmax = w->nmax;
-  size_t n;
-  FILE *fp;
-
-  fp = fopen(filename, "w");
-  if (!fp)
-    {
-      fprintf(stderr, "print_spectrum: unable to open %s: %s\n",
-              filename, strerror(errno));
-      return -1;
-    }
-
-  n = 1;
-  fprintf(fp, "# Field %zu: spherical harmonic degree n\n", n++);
-  fprintf(fp, "# Field %zu: power (nT^2)\n", n++);
-
-  for (n = 1; n <= nmax; ++n)
-    {
-      double sum = 0.0;
-      int M = (int) n;
-      int m;
-
-      for (m = -M; m <= M; ++m)
-        {
-          size_t cidx = green_nmidx(n, m);
-          double knm = gsl_vector_get(c, cidx);
-
-          sum += knm * knm;
-        }
-
-      sum *= (n + 1.0);
-
-      fprintf(fp, "%zu %.12e\n", n, sum);
-    }
-
-  fclose(fp);
-
-  return 0;
-}
 
 /*
 print_residuals()
@@ -305,15 +263,56 @@ main_build_rhs(const size_t tidx, const tiegcm_data *data,
   return 0;
 }
 
+/*
+convert_qnm()
+  Convert k_{nm}(t) time series to q_{nm}(t)
+
+Inputs: b       - radius of current shell (km)
+        v       - vector of k_{nm}(t) for some time t, size nnm
+        green_p - green workspace
+*/
+
+int
+convert_qnm(const double b, gsl_vector * v, const green_workspace * green_p)
+{
+  const size_t nmax = green_p->nmax;
+  const size_t mmax = green_p->mmax;
+  const double ratio = b / green_p->R;
+  double rterm = pow(ratio, -1.0); /* (b/R)^{n-2} */
+  size_t n;
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int M = (int) GSL_MIN(n, mmax);
+      int m;
+      double nfac = (2.0 * n + 1.0) / (n + 1.0);
+
+      for (m = -M; m <= M; ++m)
+        {
+          size_t cidx = green_nmidx(n, m, green_p);
+          double knm = gsl_vector_get(v, cidx);
+
+          gsl_vector_set(v, cidx, nfac * rterm * knm);
+        }
+
+      /* (b/R)^{n-2} */
+      rterm *= ratio;
+    }
+
+  return 0;
+}
+
 int
 main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 {
   int status;
   const char *res_file = "res.dat";
   const char *spectrum_file = "spectrum.s";
+  const char *spectrum_azim_file = "spectrum_azim.s";
   const char *datamap_file = "datamap.dat";
   const size_t nmax = 60;
-  green_workspace *green_p = green_alloc(nmax);
+  const size_t mmax = GSL_MIN(nmax, 30);
+  green_workspace *green_p = green_alloc(nmax, mmax);
   const size_t n = 3 * data->nlon * data->nlat; /* number of residuals */
   const size_t p = green_p->nnm;                /* number of external coefficients */
   const size_t nrhs = data->nt;                 /* number of right hand sides */
@@ -351,14 +350,6 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
   fp = fopen(filename, "w");
 
-  k = 1;
-  fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", k++);
-  fprintf(fp, "# Field %zu: q(1,0) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(1,1) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(2,0) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(2,1) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(2,2) (nT)\n", k++);
-
   fprintf(stderr, "main_proc: building rhs vectors...");
   gettimeofday(&tv0, NULL);
 
@@ -389,8 +380,13 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   {
     const size_t k = 0;
     gsl_vector_view x = gsl_matrix_column(X, k);
+
     fprintf(stderr, "main_proc: writing spectrum at t0 to %s...", spectrum_file);
-    print_spectrum(spectrum_file, &x.vector, green_p);
+    green_print_spectrum(spectrum_file, &x.vector, green_p);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "main_proc: writing azimuth spectrum at t0 to %s...", spectrum_azim_file);
+    green_print_spectrum_azim(spectrum_azim_file, &x.vector, green_p);
     fprintf(stderr, "done\n");
   }
 
@@ -404,6 +400,29 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
     rnorm = print_residuals(res_file, k, A, &x.vector, data);
     fprintf(stderr, "done (|| b - A x || = %.12e)\n", rnorm);
   }
+
+#if 0
+  /* convert k_{nm}(t) to q_{nm}(t) */
+  fprintf(stderr, "main_proc: converting knm to qnm...");
+  gettimeofday(&tv0, NULL);
+  {
+    for (k = 0; k < data->nt; ++k)
+      {
+        gsl_vector_view Xk = gsl_matrix_column(X, k);
+        convert_qnm(b, &Xk.vector, green_p);
+      }
+  }
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+#endif
+
+  k = 1;
+  fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", k++);
+  fprintf(fp, "# Field %zu: q(1,0) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(1,1) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(2,0) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(2,1) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: q(2,2) (nT)\n", k++);
 
   for (k = 0; k < data->nt; ++k)
     {
@@ -429,7 +448,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
           for (m = 0; m <= M; ++m)
             {
-              size_t cidx = green_nmidx(N, m);
+              size_t cidx = green_nmidx(N, m, green_p);
               double knm = gsl_matrix_get(X, cidx, k);
 
               fprintf(fp, "%f ", knm);
@@ -452,7 +471,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
   fclose(fp);
 
-  fprintf(stderr, "main_proc: wrote qnm coefficients to %s\n", filename);
+  fprintf(stderr, "main_proc: wrote knm coefficients to %s\n", filename);
 
   return 0;
 }
@@ -462,8 +481,8 @@ main(int argc, char *argv[])
 {
   tiegcm_data *data = NULL;
   struct timeval tv0, tv1;
-  char *outfile = "qnm.txt";
-  char *outfile_mat = "data/stage1_qnm.dat";
+  char *outfile = "knm.txt";
+  char *outfile_mat = "data/stage1_knm.dat";
 
   while (1)
     {

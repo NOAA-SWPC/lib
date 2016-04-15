@@ -176,6 +176,8 @@ int
 main(int argc, char *argv[])
 {
   const size_t nmax = 60;                 /* maximum spherical harmonic degree */
+  const size_t mmax = GSL_MIN(nmax, 30);  /* maximum spherical harmonic order */
+  green_workspace *green_p = green_alloc(nmax, mmax);
   char *infile = "data/stage1_qnm.dat";
   gsl_matrix *A;
   double time_segment_length = 5.0;       /* number of days in each time segment */
@@ -262,7 +264,7 @@ main(int argc, char *argv[])
 
         for (m = -ni; m <= ni; ++m)
           {
-            size_t cidx = green_nmidx(n, m);
+            size_t cidx = green_nmidx(n, m, green_p);
             gsl_vector_view qnm = gsl_matrix_row(A, cidx);
             gsl_vector_complex_view Qnm = gsl_matrix_complex_row(Q, cidx);
 
@@ -326,6 +328,7 @@ main(int argc, char *argv[])
 
   gsl_matrix_free(A);
   gsl_matrix_complex_free(Q);
+  green_free(green_p);
 
   return 0;
 }
