@@ -65,6 +65,7 @@ mfield_data_alloc(const size_t nsources, const double epoch)
   w->t_mu = -1.0;
   w->t_sigma = -1.0;
   w->t0_data = -1.0;
+  w->t1_data = -1.0;
 
   return w;
 } /* mfield_data_alloc() */
@@ -192,6 +193,8 @@ Notes:
 
 2) w->t0_data is initialized to the timestamp of the first data point (CDF_EPOCH)
 
+3) w->t1_data is initialized to the timestamp of the last data point (CDF_EPOCH)
+
 3) w->t0 and w->t1 are initialized to the first/last timestamps of each satellite
 */
 
@@ -204,6 +207,7 @@ mfield_data_init(mfield_data_workspace *w)
   gsl_rstat_reset(w->rstat_workspace_p);
 
   w->t0_data = 1.0e15;
+  w->t1_data = -1.0e15;
   for (i = 0; i < w->nsources; ++i)
     {
       magdata *mptr = mfield_data_ptr(i, w);
@@ -211,7 +215,13 @@ mfield_data_init(mfield_data_workspace *w)
       magdata_t(&(w->t0[i]), &(w->t1[i]), mptr);
 
       if (mptr->n != 0)
-        w->t0_data = GSL_MIN(w->t0_data, w->t0[i]);
+        {
+          if (w->t0[i] > 0.0)
+            w->t0_data = GSL_MIN(w->t0_data, w->t0[i]);
+
+          if (w->t1[i] > 0.0)
+            w->t1_data = GSL_MAX(w->t1_data, w->t1[i]);
+        }
 
       for (j = 0; j < mptr->n; ++j)
         {

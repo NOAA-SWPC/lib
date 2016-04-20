@@ -58,6 +58,8 @@ pca_alloc()
   w->Y = malloc(w->nnm * sizeof(double));
   w->Z = malloc(w->nnm * sizeof(double));
 
+  w->work = gsl_vector_alloc(w->nnm);
+
   w->G = gsl_matrix_alloc(w->nnm, w->nnm);
 
   pca_calc_G(w->b, w);
@@ -94,6 +96,9 @@ pca_free(pca_workspace *w)
 
   if (w->Z)
     free(w->Z);
+
+  if (w->work)
+    gsl_vector_free(w->work);
 
   free(w);
 }
@@ -169,16 +174,10 @@ pca_print_map(const char *filename, const double r, const size_t pcidx,
               pca_workspace *w)
 {
   int s = 0;
-  const size_t nnm = w->nnm;
   const double b = w->b; /* radius of current shell */
   FILE *fp;
   double lat, lon;
-  green_workspace *green_p = w->green_workspace_p;
-  gsl_vector_view Xv = gsl_vector_view_array(w->X, nnm);
-  gsl_vector_view Yv = gsl_vector_view_array(w->Y, nnm);
-  gsl_vector_view Zv = gsl_vector_view_array(w->Z, nnm);
   gsl_vector_const_view pc_knm = gsl_matrix_const_column(w->U, pcidx);
-  gsl_vector_const_view pc_gnm = gsl_matrix_const_column(w->G, pcidx);
   size_t i;
 
   fp = fopen(filename, "w");
@@ -190,7 +189,9 @@ pca_print_map(const char *filename, const double r, const size_t pcidx,
     }
 
   i = 1;
-  fprintf(fp, "# Principle component %zu/%zu\n", pcidx + 1, w->nnm);
+  fprintf(fp, "# Principal component %zu/%zu\n", pcidx + 1, w->nnm);
+  fprintf(fp, "# Current shell radius: %g km\n", b);
+  fprintf(fp, "# Magnetic field shell radius: %g km\n", r);
   fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: chi (kA / nT)\n", i++);
@@ -208,33 +209,11 @@ pca_print_map(const char *filename, const double r, const size_t pcidx,
           double B_pc[3];
           double chi;
 
+          /* compute current stream function for this PC */
           chi = pca_chi(b, theta, phi, &pc_knm.vector, w);
 
-          /*
-           * If r < b, the current shell is an external source so
-           * we can directly use the knm coefficients in the U matrix.
-           *
-           * If r > b, the current shell is an internal source, and
-           * we must first compute the gnm coefficients from knm (done
-           * in pca_alloc via pca_calc_G, and then use internal Green's functions
-           * for the dot product
-           */
-          if (r <= b)
-            {
-              green_calc_ext(r, theta, phi, w->X, w->Y, w->Z, green_p);
-
-              gsl_blas_ddot(&pc_knm.vector, &Xv.vector, &B_pc[0]);
-              gsl_blas_ddot(&pc_knm.vector, &Yv.vector, &B_pc[1]);
-              gsl_blas_ddot(&pc_knm.vector, &Zv.vector, &B_pc[2]);
-            }
-          else
-            {
-              green_calc_int(r, theta, phi, w->X, w->Y, w->Z, green_p);
-
-              gsl_blas_ddot(&pc_gnm.vector, &Xv.vector, &B_pc[0]);
-              gsl_blas_ddot(&pc_gnm.vector, &Yv.vector, &B_pc[1]);
-              gsl_blas_ddot(&pc_gnm.vector, &Zv.vector, &B_pc[2]);
-            }
+          /* compute magnetic field vector for this PC */
+          pca_pc_B(pcidx, r, theta, phi, B_pc, w);
 
           fprintf(fp, "%f %f %f %f %f %f\n",
                   lon,
@@ -251,6 +230,125 @@ pca_print_map(const char *filename, const double r, const size_t pcidx,
   fclose(fp);
 
   return s;
+}
+
+/*
+pca_pc_B()
+  Compute the (unit) magnetic field vector at a given
+point (r,theta,phi) due to a single PC
+
+Inputs: pcidx - PC index in [0,nnm-1]
+        r     - radius (km)
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        B     - (output) unit magnetic field vector B for pcidx
+        w     - workspace
+*/
+
+int
+pca_pc_B(const size_t pcidx, const double r, const double theta, const double phi,
+         double B[3], pca_workspace *w)
+{
+  int s = 0;
+  const size_t nnm = w->nnm;
+  gsl_vector_view Xv = gsl_vector_view_array(w->X, nnm);
+  gsl_vector_view Yv = gsl_vector_view_array(w->Y, nnm);
+  gsl_vector_view Zv = gsl_vector_view_array(w->Z, nnm);
+
+  /*
+   * If r < b, the current shell is an external source so
+   * we can directly use the knm coefficients in the U matrix.
+   *
+   * If r > b, the current shell is an internal source, and
+   * we must first compute the gnm coefficients from knm (done
+   * in pca_alloc via pca_calc_G), and then use internal Green's functions
+   * for the dot product
+   */
+  if (r <= w->b)
+    {
+      gsl_vector_const_view pc_knm = gsl_matrix_const_column(w->U, pcidx);
+
+      green_calc_ext(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
+
+      gsl_blas_ddot(&pc_knm.vector, &Xv.vector, &B[0]);
+      gsl_blas_ddot(&pc_knm.vector, &Yv.vector, &B[1]);
+      gsl_blas_ddot(&pc_knm.vector, &Zv.vector, &B[2]);
+    }
+  else
+    {
+      gsl_vector_const_view pc_gnm = gsl_matrix_const_column(w->G, pcidx);
+
+      green_calc_int(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
+
+      gsl_blas_ddot(&pc_gnm.vector, &Xv.vector, &B[0]);
+      gsl_blas_ddot(&pc_gnm.vector, &Yv.vector, &B[1]);
+      gsl_blas_ddot(&pc_gnm.vector, &Zv.vector, &B[2]);
+    }
+
+  return s;
+}
+
+/*
+pca_B()
+  Compute total magnetic field vector at a given point, using
+a linear combination of principal components:
+
+B(r) = sum_i alpha_i B_i(r)
+
+where B_i(r) is the unit magnetic field of the ith principal component:
+
+B_i(r) = [ dX^T(r) ; dY^T(r) ; dZ^T(r) ] U_i, 0 <= i < nnm
+
+Inputs: alpha - coefficients of sum
+        r     - radius (km)
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        B     - (output) magnetic field vector
+        w     - workspace
+*/
+
+int
+pca_B(const gsl_vector *alpha, const double r, const double theta, const double phi,
+      double B[3], pca_workspace *w)
+{
+  const size_t p = alpha->size; /* number of principal components to use to compute B */
+  const size_t nnm = w->nnm;
+  gsl_vector_view Xv = gsl_vector_view_array(w->X, nnm);
+  gsl_vector_view Yv = gsl_vector_view_array(w->Y, nnm);
+  gsl_vector_view Zv = gsl_vector_view_array(w->Z, nnm);
+  gsl_matrix *U;
+  size_t i;
+
+  gsl_vector_set_zero(w->work);
+
+  if (r <= w->b)
+    {
+      /* external current source, use U matrix and external Green's functions */
+      U = w->U;
+      green_calc_ext(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
+    }
+  else
+    {
+      /* internal current source, use G matrix and internal Green's functions */
+      U = w->G;
+      green_calc_int(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
+    }
+
+  /* compute: work = sum_i alpha_i U_i over largest p principal components */
+  for (i = 0; i < p; ++i)
+    {
+      double ai = gsl_vector_get(alpha, i);
+      gsl_vector_view Ui = gsl_matrix_column(U, i);
+
+      gsl_blas_daxpy(ai, &Ui.vector, w->work);
+    }
+
+  /* compute B = [ dX^T ; dY^T ; dZ^T ] * sum_i alpha_i U_i */
+  gsl_blas_ddot(w->work, &Xv.vector, &B[0]);
+  gsl_blas_ddot(w->work, &Yv.vector, &B[1]);
+  gsl_blas_ddot(w->work, &Zv.vector, &B[2]);
+
+  return 0;
 }
 
 /*

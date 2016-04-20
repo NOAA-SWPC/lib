@@ -31,9 +31,14 @@ print_help(char *argv[])
   fprintf(stderr, "\t --season_max | -g season_max        - maximum season (doy)\n");
   fprintf(stderr, "\t --season_min2 | -h season_min2      - minimum season 2 (doy)\n");
   fprintf(stderr, "\t --season_max2 | -j season_max2      - maximum season 2 (doy)\n");
+  fprintf(stderr, "\t --sq_nmax_int | -t nmax             - nmax for Sq internal\n");
+  fprintf(stderr, "\t --sq_mmax_int | -u mmax             - mmax for Sq internal\n");
+  fprintf(stderr, "\t --sq_nmax_ext | -v nmax             - nmax for Sq external\n");
+  fprintf(stderr, "\t --sq_mmax_ext | -w mmax             - mmax for Sq external\n");
   fprintf(stderr, "\t --curr_alt | -k curr_alt            - altitude of line current shell (km)\n");
   fprintf(stderr, "\t --qdmax | -q qdmax                  - maximum QD latitude for line currents (deg)\n");
   fprintf(stderr, "\t --profiles_only | -p                - compute magnetic/current profiles only (no EEF)\n");
+  fprintf(stderr, "\t --vector | -z                       - use vector data instead of scalar\n");
 }
 
 int
@@ -60,6 +65,7 @@ main(int argc, char *argv[])
   params.season_min2 = -1.0;
   params.season_max2 = -1.0;
   params.profiles_only = 0;
+  params.use_vector = 0;
 
   /* spherical harmonic degrees for Sq filter */
   params.sq_nmax_int = 12;
@@ -92,10 +98,11 @@ main(int argc, char *argv[])
           { "sq_mmax_int", required_argument, NULL, 'u' },
           { "sq_nmax_ext", required_argument, NULL, 'v' },
           { "sq_mmax_ext", required_argument, NULL, 'w' },
+          { "vector", required_argument, NULL, 'z' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:s:t:u:v:w:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:s:t:u:v:w:z", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -213,6 +220,10 @@ main(int argc, char *argv[])
 
           case 'w':
             params.sq_mmax_ext = (size_t) atoi(optarg);
+            break;
+
+          case 'z':
+            params.use_vector = 1;
             break;
 
           default:

@@ -1,8 +1,11 @@
-#!/bin/sh
+#!/bin/bash
 #
 # This script computes main,crustal,external field values for CHAMP data
 #
 # Usage: ./stage1.sh [year]
+
+# load environment variables
+. $HOME/.bashrc
 
 # Keep every nth sample
 down_sample="1"

@@ -2,7 +2,7 @@
 #
 # Make index file for CHAMP
 
-datadir="/nfs/satmag/CHAMP/Stage2"
+datadir="$DATAHOME/CHAMP/Stage1_CHAOS"
 idxfile="champ.idx"
 
 find $datadir -name "*.cdf" | sort -g > ${idxfile}

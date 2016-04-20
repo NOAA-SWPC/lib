@@ -1,18 +1,19 @@
 lib_LTLIBRARIES = libmag.la
 
-libmag_la_SOURCES = \
-	coord.c           \
-	geod2geoc.c       \
-	green.c           \
-	inverteef.c       \
-	lls.c             \
-  log.c             \
-	mag.c             \
-	mag_eej.c         \
-	mag_log.c         \
-	mag_sqfilt.c      \
-	pde.c             \
-	sigma.c           \
+libmag_la_SOURCES =        \
+	coord.c                  \
+	geod2geoc.c              \
+	green.c                  \
+	inverteef.c              \
+	lls.c                    \
+  log.c                    \
+	mag.c                    \
+	mag_eej.c                \
+	mag_log.c                \
+	mag_sqfilt_scalar.c      \
+	mag_sqfilt_vector.c      \
+	pde.c                    \
+	sigma.c                  \
 	swarmeef.c
 
 bin_PROGRAMS = corr main swarmeef_print compare

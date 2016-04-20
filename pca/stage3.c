@@ -24,9 +24,9 @@
 
 #include "common.h"
 #include "green.h"
+#include "lapack_wrapper.h"
 
 #include "io.h"
-#include "lapack_wrapper.h"
 
 static double
 norm_fro(const gsl_matrix_complex * m)
@@ -71,12 +71,11 @@ print_variance(const char *filename, const gsl_vector *eval)
       sum_all += lambda;
     }
 
-  /* invert loop to print largest eigenvalues first */
-  for (i = n; i > 0 && i--; )
+  for (i = 0; i < n; ++i)
     {
       double lambda = gsl_vector_get(eval, i);
       cumsum += lambda;
-      fprintf(fp, "%zu %.12e\n", n - i, cumsum / sum_all);
+      fprintf(fp, "%zu %.12e\n", i + 1, cumsum / sum_all);
     }
 
   fclose(fp);
@@ -114,7 +113,7 @@ solve_PCA(const size_t P, const gsl_matrix_complex * Q,
   int rank;
 
   /* select largest P eigenvectors of SDM */
-  gsl_matrix_complex_const_view U = gsl_matrix_complex_const_submatrix(evec, 0, nnm - P, nnm, P);
+  gsl_matrix_complex_const_view U = gsl_matrix_complex_const_submatrix(evec, 0, 0, nnm, P);
 
   /* solve: U*alpha = Q */
   fprintf(stderr, "solve_PCA: solving PCA problem for alpha...");
@@ -147,7 +146,7 @@ main(int argc, char *argv[])
   const size_t nmax = 60;
   const size_t mmax = GSL_MIN(nmax, 30);
   green_workspace *green_p = green_alloc(nmax, mmax);
-  char *qnm_file = "data/stage1_qnm.dat";
+  char *knm_file = "data/stage1_knm.dat";
   char *eval_file = "data/stage2_eval.dat";
   char *evec_file = "data/stage2_evec.dat";
   char *Q_file = "data/stage2_Q.dat";
@@ -163,7 +162,7 @@ main(int argc, char *argv[])
   gsl_matrix_complex *alpha; /* alpha matrix, P-by-T */
   gsl_matrix_complex *Qt;    /* Q~ = U*alpha, nnm-by-T */
 
-  gsl_matrix *qnm;           /* qnm(t) matrix */
+  gsl_matrix *knm;           /* knm(t) matrix */
 
   size_t nnm;
   size_t T;                  /* number of time segments */
@@ -190,9 +189,9 @@ main(int argc, char *argv[])
         }
     }
 
-  fprintf(stderr, "main: reading qnm matrix from %s...", qnm_file);
-  qnm = pca_read_matrix(qnm_file);
-  fprintf(stderr, "done (%zu-by-%zu matrix read)\n", qnm->size1, qnm->size2);
+  fprintf(stderr, "main: reading knm matrix from %s...", knm_file);
+  knm = pca_read_matrix(knm_file);
+  fprintf(stderr, "done (%zu-by-%zu matrix read)\n", knm->size1, knm->size2);
 
   fprintf(stderr, "main: reading eigenvalues from %s...", eval_file);
   eval = pca_read_vector(eval_file);
@@ -225,7 +224,7 @@ main(int argc, char *argv[])
   solve_PCA(P, Q, evec, alpha, Qt);
 
   {
-    const size_t nt = qnm->size2;
+    const size_t nt = knm->size2;
     const size_t cidx = green_nmidx(3, 1, green_p);
     const double omega = 2.0*M_PI / 24.0; /* 1 cpd frequency in hr^{-1} */
     size_t i;
@@ -233,7 +232,7 @@ main(int argc, char *argv[])
     for (i = 0; i < nt; ++i)
       {
         double t = (double) i;
-        double qnmt = gsl_matrix_get(qnm, cidx, i);
+        double knmt = gsl_matrix_get(knm, cidx, i);
         size_t k = (size_t) ((t / nt) * T); /* time segment bin */
         gsl_complex expterm = gsl_complex_rect(cos(omega*t), sin(omega*t));
         gsl_complex Qtnm = gsl_matrix_complex_get(Qt, cidx, k);
@@ -241,7 +240,7 @@ main(int argc, char *argv[])
 
         printf("%f %f %f\n",
                t / 24.0,
-               qnmt,
+               knmt,
                GSL_REAL(val));
       }
   }
@@ -250,7 +249,7 @@ main(int argc, char *argv[])
   gsl_matrix_complex_free(evec);
   gsl_matrix_complex_free(alpha);
   gsl_matrix_complex_free(Qt);
-  gsl_matrix_free(qnm);
+  gsl_matrix_free(knm);
   gsl_vector_free(eval);
   green_free(green_p);
 

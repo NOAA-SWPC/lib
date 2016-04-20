@@ -2,7 +2,7 @@
 #
 # Plot X,Y,Z,F maps of Swarm residuals
 
-prefix="resF2"
+prefix="res"
 
 # Converted to EPS later
 outfile="${prefix}.ps"

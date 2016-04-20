@@ -196,7 +196,7 @@ copy_track(const size_t track_idx, const satdata_mag *data,
       datum.theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
       datum.phi = data->longitude[i] * M_PI / 180.0;
       datum.qdlat = data->qdlat[i];
-      datum.ne = 0.0; /* filled in later */
+      datum.ne = data->ne[i];
       datum.satdir = satdata_mag_satdir(i, data);
       datum.flags = flags;
 
@@ -305,7 +305,7 @@ read_champ(const char *filename)
 }
 
 int
-callback_season(const double doy, void *params)
+callback_season(const double doy, const void *params)
 {
   preprocess_parameters *p = (preprocess_parameters *) params;
   int s = -1;
@@ -512,7 +512,7 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
     fprintf(stderr, "done\n");
   }
 
-#if 1
+#if 0
   /* XXX This code is introducting NaN's into the CHAMP B_z vector data
    * on 17 september 2000 ???
    */

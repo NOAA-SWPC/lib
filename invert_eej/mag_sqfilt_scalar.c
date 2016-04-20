@@ -1,8 +1,8 @@
 /*
- * mag_sqfilt.c
+ * mag_sqfilt_scalar.c
  *
- * Fit spherical harmonic model to satellite scalar residuals to remove
- * Sq and external fields
+ * Fit spherical harmonic model to satellite scalar or vector residuals
+ * to remove Sq and external fields
  */
 
 #include <stdio.h>
@@ -24,24 +24,24 @@
 
 #include "Gdef.h"
 
-static int sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_workspace *w);
+static int sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w);
 static int sqfilt_linear_matrix_row(const double r, const double thetaq,
                                     const double phi,
                                     const double b_int[3],
                                     gsl_vector *v, mag_workspace *w);
 static int sqfilt_calc_F2(const gsl_vector *c, mag_workspace *w);
 static size_t sqfilt_nmidx(const size_t type, const size_t n, const int m,
-                           const mag_sqfilt_workspace *w);
+                           const mag_sqfilt_scalar_workspace *w);
 
-mag_sqfilt_workspace *
-mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
-                 const size_t nmax_ext, const size_t mmax_ext)
+mag_sqfilt_scalar_workspace *
+mag_sqfilt_scalar_alloc(const size_t nmax_int, const size_t mmax_int,
+                        const size_t nmax_ext, const size_t mmax_ext)
 {
   const size_t ndata = 10000; /* maximum data expected in 1 track */
   size_t l, n;
-  mag_sqfilt_workspace *w;
+  mag_sqfilt_scalar_workspace *w;
 
-  w = calloc(1, sizeof(mag_sqfilt_workspace));
+  w = calloc(1, sizeof(mag_sqfilt_scalar_workspace));
   if (!w)
     return 0;
 
@@ -132,10 +132,10 @@ mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
   }
 
   return w;
-} /* mag_sqfilt_alloc() */
+} /* mag_sqfilt_scalar_alloc() */
 
 void
-mag_sqfilt_free(mag_sqfilt_workspace *w)
+mag_sqfilt_scalar_free(mag_sqfilt_scalar_workspace *w)
 {
   if (w->base_int)
     free(w->base_int);
@@ -174,7 +174,7 @@ mag_sqfilt_free(mag_sqfilt_workspace *w)
 }
 
 /*
-mag_sqfilt()
+mag_sqfilt_scalar()
   Fit a simple spherical harmonic model to a single satellite
 track of scalar F^(1) residual data, excluding the EEJ at low-latitudes.
 
@@ -187,7 +187,7 @@ mag_p->track.Sq_model contains the b . (M + K) Sq model
 */
 
 int
-mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w)
+mag_sqfilt_scalar(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
 {
   int s;
   gsl_vector_view bv;
@@ -236,15 +236,15 @@ mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w)
   /* convert back to general form */
   s = gsl_multifit_linear_genform1(w->L, w->c, w->c, w->multifit_workspace_p);
 
-  fprintf(stderr, "mag_sqfilt: final regularization factor = %g (smax = %g)\n", lambda, smax);
-  fprintf(stderr, "mag_sqfilt: multifit residual norm = %.6e\n", w->rnorm);
-  fprintf(stderr, "mag_sqfilt: multifit solution norm = %.6e\n", w->snorm);
+  fprintf(stderr, "mag_sqfilt_scalar: final regularization factor = %g (smax = %g)\n", lambda, smax);
+  fprintf(stderr, "mag_sqfilt_scalar: multifit residual norm = %.6e\n", w->rnorm);
+  fprintf(stderr, "mag_sqfilt_scalar: multifit solution norm = %.6e\n", w->snorm);
 
   /* calculate F^(2) residuals (eq 9 of paper) */
   sqfilt_calc_F2(w->c, mag_p);
 
   return s;
-} /* mag_sqfilt() */
+} /* mag_sqfilt_scalar() */
 
 /****************************************************
  *       INTERNAL ROUTINES                          *
@@ -266,7 +266,7 @@ Notes:
 */
 
 static int
-sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_workspace *w)
+sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
 {
   int s = 0;
 
@@ -376,7 +376,7 @@ sqfilt_linear_matrix_row(const double r, const double thetaq,
   int s = 0;
   const double R = 6371.2;
   green_workspace *green_p = w->green_workspace_p;
-  mag_sqfilt_workspace *sqfilt_p = w->sqfilt_workspace_p;
+  mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
   double phi_sm, theta_sm, lat_sm;
   double lat = M_PI / 2.0 - thetaq;
   time_t unix_time = satdata_epoch2timet(w->track.t_eq);
@@ -460,7 +460,7 @@ Notes:
 static int
 sqfilt_calc_F2(const gsl_vector *c, mag_workspace *w)
 {
-  mag_sqfilt_workspace *sqfilt_p = w->sqfilt_workspace_p;
+  mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
   size_t i;
   mag_track *track = &(w->track);
   gsl_vector *v = sqfilt_p->work_p;
@@ -538,7 +538,7 @@ Return: index in [0,nnm-1]
 */
 
 static size_t
-sqfilt_nmidx(const size_t type, const size_t n, const int m, const mag_sqfilt_workspace *w)
+sqfilt_nmidx(const size_t type, const size_t n, const int m, const mag_sqfilt_scalar_workspace *w)
 {
   int ns;
   size_t mmax, *baseptr;

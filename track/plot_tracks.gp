@@ -49,7 +49,7 @@ do for [idx=0:nplot - 1] {
 np = idx + 1
 
 # Retrieve timestamp string
-cmd = sprintf('/nfs/satmag_work/palken/corr/common/time2str2 %s', word(tarr, np))
+cmd = sprintf('/data/palken/lib/common/time2str2 %s', word(tarr, np))
 tstr = system(cmd)
 
 # Retrieve longitude of equator crossing
@@ -66,7 +66,7 @@ ltstr = sprintf('%02d:%02d', lthour, ltmin)
 alt = word(altarr, np) + 0
 altstr = sprintf('altitude = %.1f km', alt)
 
-cmd = sprintf('/nfs/satmag_work/palken/corr/common/time2str3 %s', word(tarr, np))
+cmd = sprintf('/data/palken/lib/common/time2str3 %s', word(tarr, np))
 fstr = system(cmd)
 set out sprintf('%s/plot_%s.png', outdir, fstr)
 

@@ -35,6 +35,7 @@ typedef struct
   double *X;       /* temporary workspace, size nnm */
   double *Y;
   double *Z;
+  gsl_vector *work; /* size nnm */
 
   green_workspace *green_workspace_p;
 } pca_workspace;
@@ -49,5 +50,9 @@ int pca_variance(const char *filename, const double thresh, size_t * nsing,
                  pca_workspace *w);
 int pca_print_map(const char *filename, const double r, const size_t pcidx,
                   pca_workspace *w);
+int pca_pc_B(const size_t pcidx, const double r, const double theta, const double phi,
+             double B[3], pca_workspace *w);
+int pca_B(const gsl_vector *alpha, const double r, const double theta, const double phi,
+          double B[3], pca_workspace *w);
 
 #endif /* INCLUDED_pca_h */

@@ -4,5 +4,5 @@
 # year
 
 for year in $(seq 2007 2010); do
-  screen -d -m -S p${year} sh stage1_chaos.sh ${year}
+  screen -d -m -S p${year} /bin/bash stage1_chaos.sh ${year}
 done

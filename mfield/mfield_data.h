@@ -21,7 +21,8 @@ typedef struct
 
   double t_mu;       /* mean of timestamps (years) */
   double t_sigma;    /* stddev of timestamps (years) */
-  double t0_data;    /* timetamp of first data point (CDF_EPOCH) */
+  double t0_data;    /* timestamp of first data point (CDF_EPOCH) */
+  double t1_data;    /* timestamp of last data point (CDF_EPOCH) */
 
   gsl_rstat_workspace *rstat_workspace_p;
 } mfield_data_workspace;

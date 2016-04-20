@@ -15,7 +15,7 @@
  * [-i igrf12_mf_candidate]
  * [-z]
  * [-n nmax]
- * [-t epoch]
+ * [-e epoch]
  * [-o output_file]
  * [-d]                      - Compute model difference with CHAOS
  *
@@ -144,7 +144,7 @@ main(int argc, char *argv[])
 
   if (!msynth1)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h chaos_file] [-p pomme_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-t epoch] [-o output_file] [-d]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h chaos_file] [-p pomme_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-e epoch] [-o output_file] [-d]\n", argv[0]);
       exit(1);
     }
 

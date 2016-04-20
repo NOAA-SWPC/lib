@@ -61,8 +61,16 @@ mag_alloc(mag_params *params)
 
   w->green_workspace_p = green_alloc(params->sq_nmax_int);
 
-  w->sqfilt_workspace_p = mag_sqfilt_alloc(params->sq_nmax_int, params->sq_mmax_int,
-                                           params->sq_nmax_ext, params->sq_mmax_ext);
+  if (params->use_vector)
+    {
+      w->sqfilt_vector_workspace_p = mag_sqfilt_vector_alloc(params->sq_nmax_int, params->sq_mmax_int,
+                                                             params->sq_nmax_ext, params->sq_mmax_ext);
+    }
+  else
+    {
+      w->sqfilt_scalar_workspace_p = mag_sqfilt_scalar_alloc(params->sq_nmax_int, params->sq_mmax_int,
+                                                             params->sq_nmax_ext, params->sq_mmax_ext);
+    }
 
   w->eej_workspace_p = mag_eej_alloc(params->year, params->ncurr,
                                      params->curr_altitude, params->qdlat_max);
@@ -100,6 +108,7 @@ mag_alloc(mag_params *params)
   w->log_general = log_alloc(LOG_APPEND|LOG_TIMESTAMP, "%s/invert.log", params->log_dir);
   w->log_profile = log_alloc(LOG_WRITE, "%s/profile.dat", params->log_dir);
   w->log_F2 = log_alloc(LOG_WRITE, "%s/F2.dat", params->log_dir);
+  w->log_B2 = log_alloc(LOG_WRITE, "%s/B2.dat", params->log_dir);
   w->log_Sq_Lcurve = log_alloc(LOG_WRITE, "%s/Sq_lcurve.dat", params->log_dir);
   w->log_Sq_Lcorner = log_alloc(LOG_WRITE, "%s/Sq_lcorner.dat", params->log_dir);
   w->log_EEJ_Lcurve = log_alloc(LOG_WRITE, "%s/EEJ_lcurve.dat", params->log_dir);
@@ -113,6 +122,7 @@ mag_alloc(mag_params *params)
   /* initialize headers in log files */
   mag_log_profile(1, 0, 0.0, 1, w);
   mag_log_F2(1, w);
+  mag_log_B2(1, w);
   mag_log_Sq_Lcurve(1, w);
   mag_log_Sq_Lcorner(1, w);
   mag_log_LC(1, w);
@@ -137,8 +147,11 @@ mag_free(mag_workspace *w)
   if (w->green_workspace_p)
     green_free(w->green_workspace_p);
 
-  if (w->sqfilt_workspace_p)
-    mag_sqfilt_free(w->sqfilt_workspace_p);
+  if (w->sqfilt_vector_workspace_p)
+    mag_sqfilt_vector_free(w->sqfilt_vector_workspace_p);
+
+  if (w->sqfilt_scalar_workspace_p)
+    mag_sqfilt_scalar_free(w->sqfilt_scalar_workspace_p);
 
   if (w->eej_workspace_p)
     mag_eej_free(w->eej_workspace_p);
@@ -160,6 +173,9 @@ mag_free(mag_workspace *w)
 
   if (w->log_F2)
     log_free(w->log_F2);
+
+  if (w->log_B2)
+    log_free(w->log_B2);
 
   if (w->log_Sq_Lcurve)
     log_free(w->log_Sq_Lcurve);
@@ -211,12 +227,13 @@ mag_preproc(const mag_params *params, track_workspace *track_p,
   /* flag tracks with high rms */
   {
     /*
-     * rms thresholds; only need to check scalar field; set threshold high to process data
+     * rms thresholds; set threshold high to process data
      * during strong storms: 17 March 2015 storm has scalar rms of up to 120 nT.
      *
      * The 22-23 June 2015 storm has scalar rms up to 140 nT
      */
-    const double thresh[] = { -1.0, -1.0, -1.0, 150.0 };
+    /*const double thresh[] = { -1.0, -1.0, -1.0, 150.0 };*/
+    const double thresh[] = { 210.0, 170.0, 150.0, 160.0 };
     size_t nrms = track_flag_rms("rms.dat", thresh, NULL, data, track_p);
 
     log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) tracks due to high rms\n",
@@ -373,8 +390,6 @@ mag_proc(const mag_params *params, track_workspace *track_p,
 
       fprintf(stderr, "mag_proc: found track %zu, %s, lon = %g, lt = %g, kp = %g, dir = %d\n",
               ntrack, buf, lon_eq, lt_eq, kp, dir);
-      if (ntrack == 44)
-        printf("here\n");
 
       /*
        * store track in workspace, compute magnetic coordinates, and
@@ -384,8 +399,12 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       if (s)
         return s; /* error occurred */
 
-      /* filter out Sq and compute F^(2) residuals */
-      s = mag_sqfilt(w, w->sqfilt_workspace_p);
+      /* filter out Sq and compute B^(2) or F^(2) residuals */
+      if (params->use_vector)
+        s = mag_sqfilt_vector(w, w->sqfilt_vector_workspace_p);
+      else
+        s = mag_sqfilt_scalar(w, w->sqfilt_scalar_workspace_p);
+
       if (s)
         return s;
 
@@ -397,8 +416,11 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       /* log information for this profile (track number, t_eq, lon_eq) */
       mag_log_profile(0, ntrack, kp, dir, w);
 
-      /* print F^(2) residuals to log file */
-      mag_log_F2(0, w);
+      /* print F^(2) or B^(2) residuals to log file */
+      if (params->use_vector)
+        mag_log_B2(0, w);
+      else
+        mag_log_F2(0, w);
 
       /* output Sq L-curve and corners */
       mag_log_Sq_Lcurve(0, w);
@@ -586,6 +608,9 @@ mag_compute_F1(const double t_eq, const double phi_eq, const size_t sidx,
       track->thetaq[idx] = M_PI / 2.0 - qdlat * M_PI / 180.0;
       track->qdlat[idx] = qdlat;
       track->F[idx] = data->F[i];
+      track->X[idx] = SATDATA_VEC_X(data->B, i);
+      track->Y[idx] = SATDATA_VEC_Y(data->B, i);
+      track->Z[idx] = SATDATA_VEC_Z(data->B, i);
       track->Bx_int[idx] = B_int[0];
       track->By_int[idx] = B_int[1];
       track->Bz_int[idx] = B_int[2];
@@ -594,6 +619,9 @@ mag_compute_F1(const double t_eq, const double phi_eq, const size_t sidx,
 
       /* compute F^(1) residuals */
       track->F1[idx] = data->F[i] - B_tot[3];
+      track->X1[idx] = SATDATA_VEC_X(data->B, i) - B_tot[0];
+      track->Y1[idx] = SATDATA_VEC_Y(data->B, i) - B_tot[1];
+      track->Z1[idx] = SATDATA_VEC_Z(data->B, i) - B_tot[2];
 
       if (++idx >= MAG_MAX_TRACK)
         {

@@ -50,6 +50,9 @@ static size_t model_flags(const size_t magdata_flags, const double t,
                           const double theta, const double phi, const double qdlat);
 void print_unflagged_data(const char *filename, const satdata_mag *data);
 
+/* use SMDL index for filtering instead of WMM criteria */
+#define MFIELD_FILTER_SMDL         0
+
 /* local-time range for main field modeling */
 #define MFIELD_LT_MIN              (5.0)
 #define MFIELD_LT_MAX              (22.0)
@@ -81,7 +84,7 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 #define MFIELD_HIGH_LATITUDE      (60.0)
 
 /* define to fit Z component at high latitudes instead of F */
-#define MFIELD_FIT_Z_HIGHLAT      1
+#define MFIELD_FIT_Z_HIGHLAT      0
 
 /* Global */
 solarpos_workspace *solarpos_workspace_p = NULL;
@@ -318,6 +321,7 @@ model_flags(const size_t magdata_flags, const double t,
     }
   else
     {
+#if !MFIELD_FILTER_SMDL
       double lat_rad = lat_deg * M_PI / 180.0;
       double zenith;
 
@@ -328,6 +332,11 @@ model_flags(const size_t magdata_flags, const double t,
       /* large zenith angle means darkness */
       if (zenith >= MFIELD_MAX_ZENITH)
         flags |= MAGDATA_FLG_FIT_MF;
+#else
+      /* if using SMDL filtering, don't use zenith criteria, use all high
+       * latitude points which pass the SMDL filter */
+      flags |= MAGDATA_FLG_FIT_MF;
+#endif
     }
 
   return flags;
@@ -393,8 +402,27 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
 
   print_unflagged_data("data_ts/data_ts.1", data);
 
+#if MFIELD_FILTER_SMDL
+
+  /* flag according to SMDL index */
+  {
+    size_t nsmdl;
+    const double smdl_lo = 6.0;
+    const double smdl_hi = 50.0;
+
+    fprintf(stderr, "main: flagging according to SMDL thresholds (lo = %g, hi = %g)...",
+            smdl_lo, smdl_hi);
+    nsmdl = satdata_filter_smdl(smdl_lo, smdl_hi, data);
+    fprintf(stderr, "done (%zu/%zu (%.1f%%) points flagged\n",
+            nsmdl, data->n, (double)nsmdl / (double)data->n * 100.0);
+  }
+
+#else
+
   /* flag according to WMM criteria */
   satdata_filter_wmm(1, data);
+
+#endif
 
   print_unflagged_data("data_ts/data_ts.2", data);
 

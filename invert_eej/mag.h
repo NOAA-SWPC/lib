@@ -57,6 +57,7 @@ typedef struct
   size_t ncurr;                   /* number of line currents */
   double qdlat_max;               /* maximum QD latitude for line currents (deg) */
   int profiles_only;              /* compute profiles only (no EEF) */
+  int use_vector;                 /* use vector data instead of scalar */
 } mag_params;
 
 /* store 1 satellite track */
@@ -70,6 +71,9 @@ typedef struct
   double qdlat[MAG_MAX_TRACK];    /* QD latitude in degrees */
   double lat_deg[MAG_MAX_TRACK];  /* geocentric latitude in degrees */
   double F[MAG_MAX_TRACK];        /* scalar field measurement in nT */
+  double X[MAG_MAX_TRACK];        /* X field measurement in nT */
+  double Y[MAG_MAX_TRACK];        /* Y field measurement in nT */
+  double Z[MAG_MAX_TRACK];        /* Z field measurement in nT */
   double Bx_int[MAG_MAX_TRACK];   /* Bx_internal NEC (nT) */
   double By_int[MAG_MAX_TRACK];   /* By_internal NEC (nT) */
   double Bz_int[MAG_MAX_TRACK];   /* Bz_internal NEC (nT) */
@@ -77,6 +81,12 @@ typedef struct
   double dF_ext[MAG_MAX_TRACK];   /* b_int . B_ext (nT) */
   double F1[MAG_MAX_TRACK];       /* F_sat - F_int - dF_ext (nT) */
   double F2[MAG_MAX_TRACK];       /* F^(1) - b . (M + K) (nT) */
+  double X1[MAG_MAX_TRACK];       /* X_sat - X_int - X_ext (nT) */
+  double Y1[MAG_MAX_TRACK];       /* Y_sat - Y_int - Y_ext (nT) */
+  double Z1[MAG_MAX_TRACK];       /* Z_sat - Z_int - Z_ext (nT) */
+  double X2[MAG_MAX_TRACK];       /* X^(1) - (M + K)_X (nT) */
+  double Y2[MAG_MAX_TRACK];       /* Y^(1) - (M + K)_Y (nT) */
+  double Z2[MAG_MAX_TRACK];       /* Z^(1) - (M + K)_Z (nT) */
   double Sq_int[MAG_MAX_TRACK];   /* internal Sq model b . M (nT) */
   double Sq_ext[MAG_MAX_TRACK];   /* external Sq model b . K (nT) */
   double F2_fit[MAG_MAX_TRACK];   /* fit to F^(2) from line current model */
@@ -168,7 +178,48 @@ typedef struct
   size_t reg_idx;    /* index of optimal regularization parameter */
 
   gsl_multifit_linear_workspace *multifit_workspace_p;
-} mag_sqfilt_workspace;
+} mag_sqfilt_scalar_workspace;
+
+typedef struct
+{
+  gsl_matrix *X;     /* least squares matrix */
+  gsl_vector *c;     /* coefficient vector */
+  gsl_vector *rhs;   /* right hand side vector */
+  gsl_vector *L;     /* regularization matrix L */
+  size_t p;          /* number of coefficients for Sq model */
+  size_t n;          /* number of data for LS fit */
+  size_t ntot;       /* total data size allocated */
+  double rnorm;      /* residual norm || y - X c || */
+  double snorm;      /* solution norm || L c || */
+
+  size_t nmax_int;   /* maximum internal spherical harmonic degree */
+  size_t mmax_int;   /* maximum internal spherical harmonic order */
+  size_t nmax_ext;   /* maximum external spherical harmonic degree */
+  size_t mmax_ext;   /* maximum external spherical harmonic order */
+  size_t p_int;      /* number of internal coefficients */
+  size_t p_ext;      /* number of external coefficients */
+  size_t int_offset; /* offset in 'c' of internal coefficients */
+  size_t ext_offset; /* offset in 'c' of external coefficients */
+
+  /*
+   * indexing for coefficients, base[n] gives the offset in c for
+   * all coefficients of degree n
+   */
+  size_t *base_int;
+  size_t *base_ext;
+
+  gsl_vector *work1; /* workspace of size p */
+  gsl_vector *work2; /* workspace of size p */
+  gsl_vector *work3; /* workspace of size p */
+
+  size_t nreg;       /* number of regularization parameters for L-curve analysis */
+  gsl_vector *rho;   /* vector of residual norms */
+  gsl_vector *eta;   /* vector of solution norms */
+  gsl_vector *reg_param; /* vector of regularization parameters */
+  size_t reg_idx;    /* index of optimal regularization parameter */
+
+  gsl_multifit_linear_workspace *multifit_workspace_p;
+} mag_sqfilt_vector_workspace;
 
 typedef struct
 {
@@ -185,6 +236,7 @@ typedef struct
   log_workspace *log_general;
   log_workspace *log_profile;
   log_workspace *log_F2;
+  log_workspace *log_B2;
   log_workspace *log_Sq_Lcurve;
   log_workspace *log_Sq_Lcorner;
   log_workspace *log_LC;
@@ -195,7 +247,8 @@ typedef struct
   log_workspace *log_model;
   log_workspace *log_EEF;
 
-  mag_sqfilt_workspace *sqfilt_workspace_p;
+  mag_sqfilt_scalar_workspace *sqfilt_scalar_workspace_p;
+  mag_sqfilt_vector_workspace *sqfilt_vector_workspace_p;
   mag_eej_workspace *eej_workspace_p;
   pde_workspace *pde_workspace_p;
   inverteef_workspace *inverteef_workspace_p;
@@ -223,6 +276,7 @@ int mag_log_profile(const int header, const size_t ntrack,
                     const double kp, const int dir,
                     const mag_workspace *w);
 int mag_log_F2(const int header, const mag_workspace *w);
+int mag_log_B2(const int header, const mag_workspace *w);
 int mag_log_Sq_Lcurve(const int header, const mag_workspace *w);
 int mag_log_Sq_Lcorner(const int header, const mag_workspace *w);
 int mag_log_LC(const int header, const mag_workspace *w);
@@ -234,11 +288,11 @@ int mag_log_model(const int header, const mag_workspace *w);
 int mag_log_EEF(const int header, const time_t t, const double phi,
                 const double kp, const mag_workspace *w);
 
-/* mag_sqfilt.c */
-mag_sqfilt_workspace *mag_sqfilt_alloc(const size_t nmax_int, const size_t mmax_int,
-                                       const size_t nmax_ext, const size_t mmax_ext);
-void mag_sqfilt_free(mag_sqfilt_workspace *w);
-int mag_sqfilt(mag_workspace *mag_p, mag_sqfilt_workspace *w);
+/* mag_sqfilt_scalar.c */
+mag_sqfilt_scalar_workspace *mag_sqfilt_scalar_alloc(const size_t nmax_int, const size_t mmax_int,
+                                                     const size_t nmax_ext, const size_t mmax_ext);
+void mag_sqfilt_scalar_free(mag_sqfilt_scalar_workspace *w);
+int mag_sqfilt_scalar(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w);
 
 /* mag_eej.c */
 mag_eej_workspace *mag_eej_alloc(const int year, const size_t ncurr,

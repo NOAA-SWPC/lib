@@ -14,6 +14,11 @@
 #define PCA_STAGE1_KNM     "/data/palken/lib/pca/data/stage1_knm.dat"
 #define PCA_STAGE1_DATA    "/data/palken/lib/pca/data/stage1_data.dat"
 
+/* Stage2: singular values, left and right singular vectors data files */
+#define PCA_STAGE2_SVAL    "/data/palken/lib/pca/data/stage2_sval.dat"
+#define PCA_STAGE2_U       "/data/palken/lib/pca/data/stage2_U.dat"
+#define PCA_STAGE2_V       "/data/palken/lib/pca/data/stage2_V.dat"
+
 /* Stage2b: singular values, left and right singular vectors data files */
 #define PCA_STAGE2B_SVAL   "/data/palken/lib/pca/data/stage2b_sval.dat"
 #define PCA_STAGE2B_U      "/data/palken/lib/pca/data/stage2b_U.dat"
@@ -35,6 +40,7 @@ typedef struct
   double *X;       /* temporary workspace, size nnm */
   double *Y;
   double *Z;
+  gsl_vector *work; /* size nnm */
 
   green_workspace *green_workspace_p;
 } pca_workspace;
@@ -49,5 +55,9 @@ int pca_variance(const char *filename, const double thresh, size_t * nsing,
                  pca_workspace *w);
 int pca_print_map(const char *filename, const double r, const size_t pcidx,
                   pca_workspace *w);
+int pca_pc_B(const size_t pcidx, const double r, const double theta, const double phi,
+             double B[3], pca_workspace *w);
+int pca_B(const gsl_vector *alpha, const double r, const double theta, const double phi,
+          double B[3], pca_workspace *w);
 
 #endif /* INCLUDED_pca_h */

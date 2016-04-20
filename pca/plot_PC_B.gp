@@ -3,7 +3,7 @@
 # Plot magnetic field response for first few PCs
 
 nrow = 3
-ncol = 3
+ncol = 1
 
 load 'multi_default.cfg'
 
@@ -14,12 +14,6 @@ hbuffer = 1.5
 
 load 'multi_defs.cfg'
 load 'multi_png.cfg'
-
-set output "B.png"
-
-file = 'pc_time.txt'
-
-comps = "B_x B_y B_z"
 
 unset key
 
@@ -35,47 +29,40 @@ set cblabel "dimensionless"
 set pm3d map
 load 'moreland.pal'
 
-set multiplot layout nrow,ncol
+do for [pcidx=1:40] {
 
-pc1_idx = 4
-pc2_idx = 8
-pc3_idx = 12
+  file = sprintf('maps/map%d.dat', pcidx - 1)
+  outfile = sprintf('maps/B%d.png', pcidx - 1)
+  set output outfile
 
-do for [idx=1:3] {
+  str = sprintf('Generating plot %s...', outfile)
+  print str
+
+  load 'multi_reset.cfg'
+
+  set multiplot layout nrow,ncol
 
   set format x ""
   unset xlabel
 
-  if (idx == 1) {
-    set cbrange [-10:10]
-  } else {
-    if (idx == 2) {
-      set cbrange [-4:4]
-    } else {
-      set cbrange [-10:10]
-    }
-  }
+  tstr = sprintf('PC%d', pcidx)
 
-  set title word(comps,idx)
-  splot file us 1:2:pc1_idx
-  unset title
+  set title tstr." B_x"
+  set cbrange [-10:10]
+  splot file us 1:2:4
 
   load 'incrow.cfg'
 
-  splot file us 1:2:pc2_idx
+  set title tstr." B_y"
+  set cbrange [-4:4]
+  splot file us 1:2:5
 
   load 'incrow.cfg'
 
-  set xlabel "longitude (degrees)"
-  set format x "%g"
+  set title tstr." B_z"
+  set cbrange [-10:10]
+  splot file us 1:2:6
 
-  splot file us 1:2:pc3_idx
+  unset multiplot
 
-  load 'inccolumn.cfg'
-
-  pc1_idx = pc1_idx + 1
-  pc2_idx = pc2_idx + 1
-  pc3_idx = pc3_idx + 1
 }
-
-unset multiplot

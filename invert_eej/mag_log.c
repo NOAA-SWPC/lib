@@ -143,6 +143,71 @@ mag_log_F2(const int header, const mag_workspace *w)
 } /* mag_log_F2() */
 
 /*
+mag_log_B2()
+  Log computed B^(2) residuals to a file
+
+Inputs: header - 1 = print header, 0 = don't
+        w      - workspace
+
+Notes
+1) track is stored in w->track
+*/
+
+int
+mag_log_B2(const int header, const mag_workspace *w)
+{
+  int s = 0;
+  const size_t downsample = 5; /* downsample to keep file size reasonable */
+  size_t i;
+  mag_track *track = (mag_track *) &(w->track);
+
+  if (header)
+    {
+      /* print header information */
+      i = 1;
+      log_proc(w->log_B2, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: local time (hours)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: season (day of year in [0,365])\n", i++);
+      log_proc(w->log_B2, "# Field %zu: geocentric radius (km)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: longitude (degrees)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: geocentric latitude (degrees)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: QD latitude (degrees)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: measured X (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: measured Y (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: measured Z (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: X^(1) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: Y^(1) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: Z^(1) (nT)\n", i++);
+      return s;
+    }
+
+  for (i = 0; i < track->n; i += downsample)
+    {
+      time_t unix_time = satdata_epoch2timet(track->t[i]);
+      double lt = get_localtime(unix_time, track->phi[i]);
+
+      log_proc(w->log_B2, "%ld %6.3f %6.2f %9.4f %9.4f %8.4f %8.4f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n",
+               unix_time,
+               lt,
+               get_season(unix_time),
+               track->r[i],
+               track->phi[i] * 180.0 / M_PI,
+               track->lat_deg[i],
+               track->qdlat[i],
+               track->X[i],
+               track->Y[i],
+               track->Z[i],
+               track->X1[i],
+               track->Y1[i],
+               track->Z1[i]);
+    }
+
+  log_proc(w->log_B2, "\n\n");
+
+  return s;
+}
+
+/*
 mag_log_Sq_Lcurve()
   Log Sq filter L-curves to a file
 
@@ -156,7 +221,7 @@ mag_log_Sq_Lcurve(const int header, const mag_workspace *w)
   int s = 0;
   const size_t downsample = 1;
   size_t i;
-  mag_sqfilt_workspace *sqfilt_p = w->sqfilt_workspace_p;
+  mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
 
   if (header)
     {
@@ -194,7 +259,7 @@ mag_log_Sq_Lcorner(const int header, const mag_workspace *w)
 {
   int s = 0;
   size_t i;
-  mag_sqfilt_workspace *sqfilt_p = w->sqfilt_workspace_p;
+  mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
 
   if (header)
     {

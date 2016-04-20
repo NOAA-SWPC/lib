@@ -51,7 +51,7 @@
 /* maximum spherical harmonic degree (internal) */
 #define NMAX_MF              30
 #define NMAX_SV              15
-#define NMAX_SA              8
+#define NMAX_SA              15
 
 #define MAX_BUFFER           2048
 
@@ -490,6 +490,9 @@ print_residuals(const char *filename, mfield_workspace *w)
           int fit_X = MAGDATA_ExistX(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
           int fit_Y = MAGDATA_ExistY(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
           int fit_Z = MAGDATA_ExistZ(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
+
+          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+            continue;
 
           mfield_eval(mptr->t[j], r, theta, phi, B_int, w);
           mfield_eval_ext(mptr->t[j], r, theta, phi, B_ext, w);

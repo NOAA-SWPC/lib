@@ -12,40 +12,42 @@ AC_PROG_FC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
-AC_CONFIG_FILES([     \
-  Makefile            \
-  apex/Makefile       \
-  apex/apex.h         \
-  champ/Makefile      \
-  chaos/Makefile      \
-  common/Makefile     \
-  cond/Makefile       \
-  curvefit/Makefile   \
-  efi/Makefile        \
-  estist/Makefile     \
-  euler/Makefile      \
-  gd/Makefile         \
-  green/Makefile      \
-  grid/Makefile       \
-  hwm/Makefile        \
-  invert_eej/Makefile \
-  iri/Makefile        \
-  julia/Makefile      \
-  levmar/Makefile     \
-  lis/Makefile        \
-  lls/Makefile        \
-  magdata/Makefile    \
-  mageq/Makefile      \
-  mfield/Makefile     \
-  msis/Makefile       \
-  msynth/Makefile     \
-  msynth/msynth.h     \
-  peak/Makefile       \
-  poltor/Makefile     \
-  pomme/Makefile      \
-  swarm/Makefile      \
-  tiegcm/Makefile     \
-  track/Makefile      \
+AC_CONFIG_FILES([            \
+  Makefile                   \
+  apex/Makefile              \
+  apex/apex.h                \
+  champ/Makefile             \
+  chaos/Makefile             \
+  common/Makefile            \
+  cond/Makefile              \
+  curvefit/Makefile          \
+  efi/Makefile               \
+  estist/Makefile            \
+  euler/Makefile             \
+  gd/Makefile                \
+  green/Makefile             \
+  grid/Makefile              \
+  hwm/Makefile               \
+  invert_eej/Makefile        \
+  iri/Makefile               \
+  julia/Makefile             \
+  lapack_wrapper/Makefile    \
+  levmar/Makefile            \
+  lis/Makefile               \
+  lls/Makefile               \
+  magdata/Makefile           \
+  mageq/Makefile             \
+  mfield/Makefile            \
+  msis/Makefile              \
+  msynth/Makefile            \
+  msynth/msynth.h            \
+  peak/Makefile              \
+  poltor/Makefile            \
+  pomme/Makefile             \
+  swarm/Makefile             \
+  pca/Makefile               \
+  pca/pca.h                  \
+  track/Makefile             \
 ])
 
 AC_OUTPUT

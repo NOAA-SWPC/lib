@@ -565,7 +565,7 @@ magdata_print(const char *filename, const magdata *data)
       if (data->flags[i] & MAGDATA_FLG_DISCARD)
         continue;
 
-      Te = 1000.0;
+      Te = 1500.0;
       Ti = 1000.0;
       B_nec[0] = data->Bx_nec[i];
       B_nec[1] = data->By_nec[i];

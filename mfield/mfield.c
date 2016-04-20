@@ -475,6 +475,9 @@ mfield_init(mfield_workspace *w)
   fprintf(stderr, "mfield_init: t_mu    = %g [years]\n", w->t_mu);
   fprintf(stderr, "mfield_init: t_sigma = %g [years]\n", w->t_sigma);
 
+  fprintf(stderr, "mfield_init: data tmin = %.2f\n", satdata_epoch2year(w->data_workspace_p->t0_data));
+  fprintf(stderr, "mfield_init: data tmax = %.2f\n", satdata_epoch2year(w->data_workspace_p->t1_data));
+
   /* find time of first available data in CDF_EPOCH */
   w->t0_data = w->data_workspace_p->t0_data;
 

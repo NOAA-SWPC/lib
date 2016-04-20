@@ -1,5 +1,5 @@
 #bin_PROGRAMS = calc_crf2s calc_euler crust dynamo plot_tracks print print_all print_crust print_alt residuals stage1 swarmcdf2fday testcal
-bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust print_alt print_tracks residuals plotsep stage1 swarmcdf2fday
+bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust print_alt print_tracks pca_fit residuals plotsep stage1 swarmcdf2fday
 
 commonlibs = -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas
 
@@ -33,6 +33,9 @@ print_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsyn
 print_tracks_SOURCES = print_tracks.c
 print_tracks_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
 
+pca_fit_SOURCES = pca_fit.c
+pca_fit_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/pca/libpca.la $(top_builddir)/green/libgreen.la  $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
+
 print_lt_SOURCES = print_lt.c
 print_lt_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
 
@@ -61,4 +64,4 @@ residuals_LDADD = $(top_builddir)/pomme/libpomme.la $(top_builddir)/common/libco
 swarmcdf2fday_SOURCES = swarmcdf2fday.c
 swarmcdf2fday_LDADD = $(top_builddir)/common/libcommon.la -lm ${commonlibs}
 
-AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos -I$(top_builddir)/magdata
+AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos -I$(top_builddir)/magdata -I$(top_builddir)/pca -I$(top_builddir)/green

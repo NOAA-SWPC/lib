@@ -1,7 +1,7 @@
 /*
  * stage2.c
  *
- * 1. Read in spherical harmonic time series from stage1 matrix file (nnm-by-nt)
+ * 1. Read in spherical harmonic time series k_nm(t) from stage1 matrix file (nnm-by-nt)
  * 2. Divide each time series into T smaller segments and perform
  *    windowed Fourier transform of each segment
  * 3. Build Q(omega) matrix, nnm-by-T
@@ -17,6 +17,7 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_complex.h>
+#include <gsl/gsl_complex_math.h>
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_eigen.h>
 
@@ -25,9 +26,10 @@
 
 #include "common.h"
 #include "green.h"
+#include "lapack_wrapper.h"
 
 #include "io.h"
-#include "lapack_wrapper.h"
+#include "pca.h"
 
 static double
 hamming_window(const double alpha, const double beta,
@@ -149,46 +151,24 @@ do_transform(FILE *fp, const double omega, const gsl_vector *qnm, gsl_vector_com
   return 0;
 }
 
-static int
-build_sdm(const gsl_matrix_complex *Q, gsl_matrix_complex *S)
-{
-  const size_t T = Q->size2;
-  size_t k;
-  gsl_complex z;
-
-  gsl_matrix_complex_set_zero(S);
-
-  for (k = 0; k < T; ++k)
-    {
-      gsl_vector_complex_const_view Xk = gsl_matrix_complex_const_column(Q, k);
-
-      /* S += X_k X_k^H */
-      gsl_blas_zher(CblasLower, 1.0, &Xk.vector, S);
-    }
-
-  GSL_SET_COMPLEX(&z, 1.0 / (double)T, 0.0);
-  gsl_matrix_complex_scale(S, z);
-
-  return 0;
-}
-
 int
 main(int argc, char *argv[])
 {
-  const size_t nmax = 60;                 /* maximum spherical harmonic degree */
-  const size_t mmax = GSL_MIN(nmax, 30);  /* maximum spherical harmonic order */
-  green_workspace *green_p = green_alloc(nmax, mmax);
-  char *infile = "data/stage1_qnm.dat";
+  size_t nmax, mmax;
+  green_workspace *green_p;
+  char *infile = PCA_STAGE1_KNM;
   gsl_matrix *A;
   double time_segment_length = 5.0;       /* number of days in each time segment */
   size_t nt, T, nnm;
   struct timeval tv0, tv1;
 
   /* nnm-by-T matrix storing power at frequency omega for each time segment and each
-   * (n,m) channel */
+   * (n,m) channel, Q = [ X_1 X_2 ... X_T ] */
   gsl_matrix_complex *Q;
 
-  gsl_matrix_complex *S; /* spectral density matrix */
+  gsl_vector *S;           /* singular values of Q */
+  gsl_matrix_complex *U;   /* left singular vectors of Q */
+  gsl_matrix_complex *V;   /* right singular vectors of Q */
 
   while (1)
     {
@@ -225,7 +205,12 @@ main(int argc, char *argv[])
       exit(1);
     }
 
-  fprintf(stderr, "input file = %s\n", infile);
+  fprintf(stderr, "main: reading %s...", PCA_STAGE1_DATA);
+  pca_read_data(PCA_STAGE1_DATA, &nmax, &mmax);
+  fprintf(stderr, "done (nmax = %zu mmax = %zu)\n", nmax, mmax);
+
+  green_p = green_alloc(nmax, mmax);
+  nnm = green_nnm(green_p);
 
   fprintf(stderr, "main: reading %s...", infile);
   A = pca_read_matrix(infile);
@@ -237,97 +222,103 @@ main(int argc, char *argv[])
 
   fprintf(stderr, "main: time segment length: %g [days]\n", time_segment_length);
   fprintf(stderr, "main: number of time segments: %zu\n", T);
-
-  /*nnm = A->size1;*/
-  nnm = nmax*(nmax+2);
+  fprintf(stderr, "main: number of SH coefficients: %zu\n", nnm);
 
   Q = gsl_matrix_complex_alloc(nnm, T);
-  S = gsl_matrix_complex_alloc(nnm, nnm);
+
+  S = gsl_vector_alloc(nnm);
+  U = gsl_matrix_complex_alloc(nnm, nnm);
+  V = gsl_matrix_complex_alloc(T, T);
 
   {
     const char *fft_file = "fft_data.txt";
     FILE *fp = fopen(fft_file, "w");
     const double omega = 1.0 / 24.0; /* 1 cpd */
+    gsl_complex z = gsl_complex_rect(1.0 / sqrt((double) T), 0.0);
     size_t n;
 
     n = 1;
-    fprintf(fp, "# Field %zu: qnm(t) for first time segment\n", n++);
-    fprintf(fp, "# Field %zu: Hamming-windowed qnm(t) for first time segment\n", n++);
+    fprintf(fp, "# Field %zu: knm(t) for first time segment\n", n++);
+    fprintf(fp, "# Field %zu: Hamming-windowed knm(t) for first time segment\n", n++);
     fprintf(fp, "# Field %zu: Period (days)\n", n++);
     fprintf(fp, "# Field %zu: Power (nT^2)\n", n++);
 
-    fprintf(stderr, "main: building the Q matrix by performing windowed FFTs...");
+    fprintf(stderr, "main: building the %zu-by-%zu Q matrix by performing windowed FFTs...",
+            Q->size1, Q->size2);
 
     for (n = 1; n <= nmax; ++n)
       {
-        int m, ni = (int) n;
+        int M = (int) GSL_MIN(n, mmax);
+        int m;
 
-        for (m = -ni; m <= ni; ++m)
+        for (m = -M; m <= M; ++m)
           {
             size_t cidx = green_nmidx(n, m, green_p);
-            gsl_vector_view qnm = gsl_matrix_row(A, cidx);
+            gsl_vector_view knm = gsl_matrix_row(A, cidx);
             gsl_vector_complex_view Qnm = gsl_matrix_complex_row(Q, cidx);
 
-            fprintf(fp, "# q(%zu,%d)\n", n, m);
-            do_transform(fp, omega, &qnm.vector, &Qnm.vector);
+            fprintf(fp, "# k(%zu,%d)\n", n, m);
+            do_transform(fp, omega, &knm.vector, &Qnm.vector);
           }
       }
+
+    /* scale by 1/sqrt(T) - this acts as a weight factor */
+    gsl_matrix_complex_scale(Q, z);
 
     fprintf(stderr, "done (data written to %s)\n", fft_file);
 
     fclose(fp);
   }
 
-  fprintf(stderr, "main: building spectral density matrix...");
-  build_sdm(Q, S);
-  fprintf(stderr, "done\n");
-
   {
-    const size_t N = S->size1;
-    const char *eval_txt_file = "eval.txt";
-    const char *eval_file = "data/stage2_eval.dat";
-    const char *evec_file = "data/stage2_evec.dat";
+    const char *sval_txt_file = "sval.txt";
+    const char *sval_file = PCA_STAGE2_SVAL;
+    const char *U_file = PCA_STAGE2_U;
+    const char *V_file = PCA_STAGE2_V;
     const char *Q_file = "data/stage2_Q.dat";
-    gsl_vector *eval = gsl_vector_alloc(N);
-    gsl_matrix_complex *evec = gsl_matrix_complex_alloc(N, N);
-    int status, eval_found;
+    int status;
     FILE *fp;
 
-    fprintf(stderr, "main: performing eigendecomposition of SDM...");
+    fprintf(stderr, "main: performing SVD of Q...");
     gettimeofday(&tv0, NULL);
-    status = lapack_eigen_herm(S, eval, evec, &eval_found);
+    status = lapack_complex_svd(Q, S, U, V);
     gettimeofday(&tv1, NULL);
-    fprintf(stderr, "done (%g seconds, status = %d, %d eigenvalues found)\n",
-            time_diff(tv0, tv1), status, eval_found);
+    fprintf(stderr, "done (%g seconds, status = %d)\n",
+            time_diff(tv0, tv1), status);
 
-    fprintf(stderr, "main: writing eigenvalues in text format to %s...",
-            eval_txt_file);
-    fp = fopen(eval_txt_file, "w");
-    gsl_vector_fprintf(fp, eval, "%.12e");
+    fprintf(stderr, "main: writing singular values in text format to %s...",
+            sval_txt_file);
+    fp = fopen(sval_txt_file, "w");
+    gsl_vector_fprintf(fp, S, "%.12e");
     fclose(fp);
     fprintf(stderr, "done\n");
 
-    fprintf(stderr, "main: writing eigenvalues in binary format to %s...",
-            eval_file);
-    pca_write_vector(eval_file, eval);
+    fprintf(stderr, "main: writing singular values in binary format to %s...",
+            sval_file);
+    pca_write_vector(sval_file, S);
     fprintf(stderr, "done\n");
 
-    fprintf(stderr, "main: writing eigenvectors in binary format to %s...",
-            evec_file);
-    pca_write_matrix_complex(evec_file, evec);
+    fprintf(stderr, "main: writing left singular vectors in binary format to %s...",
+            U_file);
+    pca_write_matrix_complex(U_file, U);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "main: writing right singular vectors in binary format to %s...",
+            V_file);
+    pca_write_matrix_complex(V_file, V);
     fprintf(stderr, "done\n");
 
     fprintf(stderr, "main: writing Q matrix in binary format to %s...",
             Q_file);
     pca_write_matrix_complex(Q_file, Q);
     fprintf(stderr, "done\n");
-
-    gsl_vector_free(eval);
-    gsl_matrix_complex_free(evec);
   }
 
   gsl_matrix_free(A);
   gsl_matrix_complex_free(Q);
+  gsl_vector_free(S);
+  gsl_matrix_complex_free(U);
+  gsl_matrix_complex_free(V);
   green_free(green_p);
 
   return 0;
