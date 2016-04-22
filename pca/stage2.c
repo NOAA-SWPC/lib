@@ -30,108 +30,89 @@
 
 #include "io.h"
 #include "pca.h"
+#include "window.h"
 
-static double
-hamming_window(const double alpha, const double beta,
-               const size_t n, const size_t N)
-{
-  double ratio = 2.0 * M_PI * n / ((double)N - 1.0);
-  double w = alpha - beta*cos(ratio);
-
-  return w;
-}
-
-static int
-apply_window(gsl_vector *v)
-{
-  const size_t N = v->size;
-  const double alpha = 0.53836;
-  const double beta = 0.46164;
-  size_t n;
-
-  for (n = 0; n < N; ++n)
-    {
-      double wn = hamming_window(alpha, beta, n, N);
-      double *ptr = gsl_vector_ptr(v, n);
-
-      *ptr *= wn;
-    }
-
-  return 0;
-}
+#define MAX_FREQ          100
 
 /*
 do_transform()
   Divide input time series into smaller segments and computed
 windowed FFT of each segment. Store the complex coefficients
-of the FFT for each time segment, with a fixed frequency omega,
-into an output array
+of the FFT for each time segment and each frequency into an
+output matrix
 
-Inputs: omega - fixed frequency (per hour)
-        qnm   - input time series, size nt
-        Qnm   - (output) array of FFT values for each time
-                segment at frequency omega, size T where T
-                is the number of time segments
+Inputs:
+        knm          - input time series, size nt
+        rowidx       - row of Q matrices corresponding to (n,m)
+        fs           - sampling frequency in 1/days
+        window_size  - number of days per window
+        window_shift - number of days to advance/slide forward
+        Q            - (output) for each frequency omega_i,
+                       Q[i](rowidx,:) is set to the FFT value at frequency
+                       omega_i for each time segment
 */
 
 static int
-do_transform(FILE *fp, const double omega, const gsl_vector *qnm, gsl_vector_complex *Qnm)
+do_transform(FILE *fp, const gsl_vector *knm, const size_t rowidx,
+             const double fs, const double window_size, const double window_shift,
+             gsl_matrix_complex *Q[MAX_FREQ])
 {
-  const size_t nsamples = qnm->size;                              /* number of time samples */
-  const size_t T = Qnm->size;                                     /* number of time segments */
-  const size_t nwindow = (size_t) ((double)nsamples / (double)T); /* size of window */
-  const double fs = 1.0;                                          /* sampling rate = 1/hr */
-  const double fny = 0.5 * fs;                                    /* Nyquist frequency (per hour) */
-  size_t start_idx = 0;                                           /* index of starting sample for current time segment */
-  size_t k;
+  const size_t nsamples = knm->size;              /* number of time samples */
+  size_t start_idx = 0;
+  size_t nwindow = (size_t) (window_size * fs);   /* optimal number of samples per window */
+  size_t nforward = (size_t) (window_shift * fs); /* number of samples to slide forward */
+  int done = 0;
+  size_t k = 0;                                   /* current window index */
+  size_t nfreq = nwindow / 2 + 1;
   gsl_vector *work = gsl_vector_alloc(nwindow);
+  fftw_complex *fft_out = fftw_malloc(sizeof(fftw_complex) * nfreq);
 
-  /* loop over time segments */
-  for (k = 0; k < T; ++k)
+  while (!done)
     {
       size_t end_idx = GSL_MIN(start_idx + nwindow - 1, nsamples - 1);
-      size_t n = end_idx - start_idx + 1;
+      size_t n = end_idx - start_idx + 1;         /* size of actual window */
       double sqrtn = sqrt((double) n);
-      gsl_vector_const_view vqnm = gsl_vector_const_subvector(qnm, start_idx, n);
+      gsl_vector_const_view vknm = gsl_vector_const_subvector(knm, start_idx, n);
       gsl_vector_view vwork = gsl_vector_subvector(work, 0, n);
-      fftw_complex *fft_out = fftw_malloc(sizeof(fftw_complex) * (n/2 + 1));
       fftw_plan plan;
-      size_t fft_idx = (n / 2) * (omega / fny); /* index of desired frequency in fft_out */
-      gsl_complex z;
+      size_t i;
 
-      gsl_vector_memcpy(&vwork.vector, &vqnm.vector);
+      /* apply window to current time segment */
+      gsl_vector_memcpy(&vwork.vector, &vknm.vector);
+      apply_ps1(&vwork.vector);
 
-      /* apply window to time segment */
-      apply_window(&vwork.vector);
-
+      /* compute windowed FFT */
       plan = fftw_plan_dft_r2c_1d(n, vwork.vector.data, fft_out, FFTW_ESTIMATE);
       fftw_execute(plan);
 
-      /* normalize by dividing by sqrt(n) */
-      GSL_SET_COMPLEX(&z, fft_out[fft_idx][0] / sqrtn, fft_out[fft_idx][1] / sqrtn);
-      gsl_vector_complex_set(Qnm, k, z);
+      /* loop over frequencies omega_i and store FFT output in Q[i] matrix */
+      for (i = 0; i < nfreq; ++i)
+        {
+          gsl_vector_complex_view Qinm = gsl_matrix_complex_row(Q[i], rowidx);
+          gsl_complex z = gsl_complex_rect(fft_out[i][0] / sqrtn, fft_out[i][1] / sqrtn);
+
+          gsl_vector_complex_set(&Qinm.vector, k, z);
+        }
 
       if (k == 0)
         {
-          size_t i;
-
           for (i = 0; i < n; ++i)
             {
               double freqi, powi, periodi;
               size_t idx;
 
-              if (i <= n/2 + 1)
+              if (i <= n/2)
                 idx = i;
               else
                 idx = n - i;
 
               freqi = 2.0 * M_PI * idx * (fs / n);
-              periodi = 2.0 * M_PI / (freqi * 24.0);
+              periodi = 2.0 * M_PI / freqi;
               powi = fft_out[idx][0]*fft_out[idx][0] +
                      fft_out[idx][1]*fft_out[idx][1];
 
               fprintf(fp, "%f %f %f %f\n",
-                      gsl_vector_get(&vqnm.vector, i),
+                      gsl_vector_get(&vknm.vector, i),
                       gsl_vector_get(&vwork.vector, i),
                       periodi,
                       powi);
@@ -141,34 +122,87 @@ do_transform(FILE *fp, const double omega, const gsl_vector *qnm, gsl_vector_com
         }
 
       fftw_destroy_plan(plan);
-      fftw_free(fft_out);
 
-      start_idx = end_idx + 1;
+      ++k;
+
+      start_idx += nforward;
+      if (start_idx >= nsamples)
+        done = 1;
     }
 
   gsl_vector_free(work);
+  fftw_free(fft_out);
 
   return 0;
+}
+
+/*
+count_windows()
+  Count number of time segment windows in FFT analysis. So
+for a sliding 2 day window with a 1 day overlap, set
+
+window_size = 2
+window_shift = 1
+
+Inputs: nsamples     - total number of samples in time series
+        fs           - sampling frequency in 1/days
+        window_size  - number of days per window
+        window_shift - number of days to advance/slide forward
+
+Return: total number of windows
+*/
+
+size_t
+count_windows(const size_t nsamples, const double fs,
+              const double window_size, const double window_shift)
+{
+  size_t T = 0;                                   /* number of windows */
+  size_t start_idx = 0;
+  size_t nforward = (size_t) (window_shift * fs); /* number of samples to slide forward */
+  int done = 0;
+
+  while (!done)
+    {
+      ++T;
+
+      start_idx += nforward;
+      if (start_idx >= nsamples)
+        done = 1;
+    }
+
+  return T;
 }
 
 int
 main(int argc, char *argv[])
 {
+  const double fs = 24.0;         /* sample frequency in 1/days */
   size_t nmax, mmax;
   green_workspace *green_p;
   char *infile = PCA_STAGE1_KNM;
   gsl_matrix *A;
-  double time_segment_length = 5.0;       /* number of days in each time segment */
+  double window_size = 2.0;       /* number of days in each time segment */
+  double window_shift = 1.0;      /* number of days to shift forward in time */
+  size_t nwindow = (size_t) (window_size * fs); /* number of samples per time window segment */
+  size_t nfreq = nwindow / 2 + 1; /* number of frequencies returned from FFT */
   size_t nt, T, nnm;
   struct timeval tv0, tv1;
 
   /* nnm-by-T matrix storing power at frequency omega for each time segment and each
    * (n,m) channel, Q = [ X_1 X_2 ... X_T ] */
-  gsl_matrix_complex *Q;
+  gsl_matrix_complex *Q[MAX_FREQ];
 
-  gsl_vector *S;           /* singular values of Q */
-  gsl_matrix_complex *U;   /* left singular vectors of Q */
-  gsl_matrix_complex *V;   /* right singular vectors of Q */
+  gsl_vector *S[MAX_FREQ];          /* singular values of Q */
+  gsl_matrix_complex *U[MAX_FREQ];  /* left singular vectors of Q */
+  gsl_matrix_complex *V[MAX_FREQ];  /* right singular vectors of Q */
+
+  size_t i;
+
+  if (nfreq > MAX_FREQ)
+    {
+      fprintf(stderr, "main: error: MAX_FREQ not large enough (%zu)\n", nfreq);
+      exit(1);
+    }
 
   while (1)
     {
@@ -190,18 +224,18 @@ main(int argc, char *argv[])
             break;
 
           case 't':
-            time_segment_length = atof(optarg);
+            window_size = atof(optarg);
             break;
 
           default:
-            fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-t time_segment_length (days)]\n", argv[0]);
+            fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-t window_size (days)]\n", argv[0]);
             break;
         }
     }
 
   if (!infile)
     {
-      fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-t time_segment_length (days)]\n", argv[0]);
+      fprintf(stderr, "Usage: %s <-i stage1_matrix_file> [-t window_size (days)]\n", argv[0]);
       exit(1);
     }
 
@@ -218,22 +252,26 @@ main(int argc, char *argv[])
 
   /* compute number of time segments */
   nt = A->size2;
-  T = (nt / 24.0) / time_segment_length;
+  T = count_windows(nt, fs, window_size, window_shift);
 
-  fprintf(stderr, "main: time segment length: %g [days]\n", time_segment_length);
+  fprintf(stderr, "main: time segment length: %g [days]\n", window_size);
+  fprintf(stderr, "main: time segment slide:  %g [days]\n", window_shift);
   fprintf(stderr, "main: number of time segments: %zu\n", T);
   fprintf(stderr, "main: number of SH coefficients: %zu\n", nnm);
+  fprintf(stderr, "main: number of frequencies: %zu\n", nfreq);
 
-  Q = gsl_matrix_complex_alloc(nnm, T);
-
-  S = gsl_vector_alloc(nnm);
-  U = gsl_matrix_complex_alloc(nnm, nnm);
-  V = gsl_matrix_complex_alloc(T, T);
+  /* allocate a matrix for each frequency */
+  for (i = 0; i < nfreq; ++i)
+    {
+      Q[i] = gsl_matrix_complex_alloc(nnm, T);
+      S[i] = gsl_vector_alloc(nnm);
+      U[i] = gsl_matrix_complex_alloc(nnm, nnm);
+      V[i] = gsl_matrix_complex_alloc(T, T);
+    }
 
   {
     const char *fft_file = "fft_data.txt";
     FILE *fp = fopen(fft_file, "w");
-    const double omega = 1.0 / 24.0; /* 1 cpd */
     gsl_complex z = gsl_complex_rect(1.0 / sqrt((double) T), 0.0);
     size_t n;
 
@@ -243,8 +281,8 @@ main(int argc, char *argv[])
     fprintf(fp, "# Field %zu: Period (days)\n", n++);
     fprintf(fp, "# Field %zu: Power (nT^2)\n", n++);
 
-    fprintf(stderr, "main: building the %zu-by-%zu Q matrix by performing windowed FFTs...",
-            Q->size1, Q->size2);
+    fprintf(stderr, "main: building the %zu-by-%zu Q matrices by performing windowed FFTs...",
+            nnm, T);
 
     for (n = 1; n <= nmax; ++n)
       {
@@ -255,15 +293,17 @@ main(int argc, char *argv[])
           {
             size_t cidx = green_nmidx(n, m, green_p);
             gsl_vector_view knm = gsl_matrix_row(A, cidx);
-            gsl_vector_complex_view Qnm = gsl_matrix_complex_row(Q, cidx);
 
             fprintf(fp, "# k(%zu,%d)\n", n, m);
-            do_transform(fp, omega, &knm.vector, &Qnm.vector);
+            do_transform(fp, &knm.vector, cidx, fs, window_size, window_shift, Q);
           }
       }
 
     /* scale by 1/sqrt(T) - this acts as a weight factor */
-    gsl_matrix_complex_scale(Q, z);
+    for (i = 0; i < nfreq; ++i)
+      {
+        gsl_matrix_complex_scale(Q[i], z);
+      }
 
     fprintf(stderr, "done (data written to %s)\n", fft_file);
 
@@ -271,27 +311,46 @@ main(int argc, char *argv[])
   }
 
   {
-    const char *sval_txt_file = "sval.txt";
+    const size_t nmodes = 25; /* number of left singular vectors to output */
+    int status;
+    char buf[2048];
+
+    for (i = 0; i < nfreq; ++i)
+      {
+        double freq = (fs / nwindow) * i;
+
+        fprintf(stderr, "main: performing SVD of Q for frequency %g [cpd]...", freq);
+        gettimeofday(&tv0, NULL);
+        status = lapack_complex_svd(Q[i], S[i], U[i], V[i]);
+        gettimeofday(&tv1, NULL);
+        fprintf(stderr, "done (%g seconds, status = %d)\n",
+                time_diff(tv0, tv1), status);
+
+        sprintf(buf, "modes/S_%zu", i);
+        fprintf(stderr, "main: writing singular values for frequency %g [cpd] in text format to %s...",
+                freq, buf);
+        pca_write_S(buf, nmax, mmax, freq, window_size, window_shift, S[i]);
+        fprintf(stderr, "done\n");
+
+        sprintf(buf, "modes/U_%zu", i);
+        fprintf(stderr, "main: writing left singular vectors for frequency %g [cpd] in text format to %s...",
+                freq, buf);
+        pca_write_complex_U(buf, nmax, mmax, freq, window_size, window_shift, nmodes, U[i]);
+        fprintf(stderr, "done\n");
+
+        sprintf(buf, "modes/V_%zu", i);
+        fprintf(stderr, "main: writing right singular vectors for frequency %g [cpd] in text format to %s...",
+                freq, buf);
+        pca_write_complex_V(buf, nmax, mmax, freq, window_size, window_shift, nmodes, V[i]);
+        fprintf(stderr, "done\n");
+      }
+
+#if 0
+    {
     const char *sval_file = PCA_STAGE2_SVAL;
     const char *U_file = PCA_STAGE2_U;
     const char *V_file = PCA_STAGE2_V;
     const char *Q_file = "data/stage2_Q.dat";
-    int status;
-    FILE *fp;
-
-    fprintf(stderr, "main: performing SVD of Q...");
-    gettimeofday(&tv0, NULL);
-    status = lapack_complex_svd(Q, S, U, V);
-    gettimeofday(&tv1, NULL);
-    fprintf(stderr, "done (%g seconds, status = %d)\n",
-            time_diff(tv0, tv1), status);
-
-    fprintf(stderr, "main: writing singular values in text format to %s...",
-            sval_txt_file);
-    fp = fopen(sval_txt_file, "w");
-    gsl_vector_fprintf(fp, S, "%.12e");
-    fclose(fp);
-    fprintf(stderr, "done\n");
 
     fprintf(stderr, "main: writing singular values in binary format to %s...",
             sval_file);
@@ -312,13 +371,11 @@ main(int argc, char *argv[])
             Q_file);
     pca_write_matrix_complex(Q_file, Q);
     fprintf(stderr, "done\n");
+    }
+#endif
   }
 
   gsl_matrix_free(A);
-  gsl_matrix_complex_free(Q);
-  gsl_vector_free(S);
-  gsl_matrix_complex_free(U);
-  gsl_matrix_complex_free(V);
   green_free(green_p);
 
   return 0;

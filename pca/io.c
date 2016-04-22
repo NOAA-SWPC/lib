@@ -15,6 +15,8 @@
 
 #include "io.h"
 
+static int matlab_dlmwrite_complex(FILE * fp, const gsl_matrix_complex * A);
+
 int
 pca_write_data(const char *filename, const size_t nmax, const size_t mmax)
 {
@@ -203,4 +205,123 @@ pca_read_matrix_complex(const char *filename)
   fclose(fp);
 
   return m;
+}
+
+int
+pca_write_S(const char *filename, const size_t nmax, const size_t mmax,
+            const double freq_cpd, const double window_size,
+            const double window_shift, const gsl_vector *S)
+{
+  int s = 0;
+  FILE *fp;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "pca_write_S: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  fprintf(fp, "%% Singular values\n");
+  fprintf(fp, "%% nmax: %zu\n", nmax);
+  fprintf(fp, "%% mmax: %zu\n", mmax);
+  fprintf(fp, "%% Frequency: %.6f [cpd]\n", freq_cpd);
+  fprintf(fp, "%% window size:  %g [days]\n", window_size);
+  fprintf(fp, "%% window slide: %g [days]\n", window_shift);
+  gsl_vector_fprintf(fp, S, "%.12e");
+
+  fclose(fp);
+
+  return s;
+}
+
+int
+pca_write_complex_U(const char *filename, const size_t nmax, const size_t mmax,
+                    const double freq_cpd, const double window_size,
+                    const double window_shift, const size_t nmodes, const gsl_matrix_complex *U)
+{
+  int s = 0;
+  FILE *fp;
+  gsl_matrix_complex_const_view m = gsl_matrix_complex_const_submatrix(U, 0, 0, U->size1, nmodes);
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "pca_write_complex_U: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  fprintf(fp, "%% Left singular vectors\n");
+  fprintf(fp, "%% nmax: %zu\n", nmax);
+  fprintf(fp, "%% mmax: %zu\n", mmax);
+  fprintf(fp, "%% number of modes (columns): %zu\n", nmodes);
+  fprintf(fp, "%% Frequency: %.6f [cpd]\n", freq_cpd);
+  fprintf(fp, "%% window size:  %g [days]\n", window_size);
+  fprintf(fp, "%% window slide: %g [days]\n", window_shift);
+  fprintf(fp, "%% Matlab read command: U = dlmread('%s',',',8,0);\n", filename);
+  matlab_dlmwrite_complex(fp, &m.matrix);
+
+  fclose(fp);
+
+  return s;
+}
+
+int
+pca_write_complex_V(const char *filename, const size_t nmax, const size_t mmax,
+                    const double freq_cpd, const double window_size,
+                    const double window_shift, const size_t nmodes, const gsl_matrix_complex *V)
+{
+  int s = 0;
+  FILE *fp;
+  gsl_matrix_complex_const_view m = gsl_matrix_complex_const_submatrix(V, 0, 0, nmodes, nmodes);
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "pca_write_complex_V: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  fprintf(fp, "%% Right singular vectors\n");
+  fprintf(fp, "%% nmax: %zu\n", nmax);
+  fprintf(fp, "%% mmax: %zu\n", mmax);
+  fprintf(fp, "%% number of modes (rows and columns): %zu\n", nmodes);
+  fprintf(fp, "%% Frequency: %.6f [cpd]\n", freq_cpd);
+  fprintf(fp, "%% window size:  %g [days]\n", window_size);
+  fprintf(fp, "%% window slide: %g [days]\n", window_shift);
+  fprintf(fp, "%% Matlab read command: V = dlmread('%s',',',8,0);\n", filename);
+  matlab_dlmwrite_complex(fp, &m.matrix);
+
+  fclose(fp);
+
+  return s;
+}
+
+static int
+matlab_dlmwrite_complex(FILE * fp, const gsl_matrix_complex * A)
+{
+  const size_t M = A->size1;
+  const size_t N = A->size2;
+  size_t i, j;
+
+  for (i = 0; i < M; ++i)
+    {
+      for (j = 0; j < N; ++j)
+        {
+          gsl_complex z = gsl_matrix_complex_get(A, i, j);
+          double zr = GSL_REAL(z);
+          double zi = GSL_IMAG(z);
+
+          fprintf(fp, "%.12e%s%.12ei%s",
+                  zr,
+                  (zi < 0.0) ? "" : "+",
+                  zi,
+                  (j < N - 1) ? "," : "\n");
+        }
+    }
+
+  return 0;
 }

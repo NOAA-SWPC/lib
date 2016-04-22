@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libpca.la
 
-libpca_la_SOURCES = io.c pca.c tiegcm_alloc.c tiegcm_read.c
+libpca_la_SOURCES = io.c pca.c tiegcm_alloc.c tiegcm_read.c window.c
 
 AM_CPPFLAGS = -I$(top_builddir)/apex -I$(top_builddir)/common -I$(top_builddir)/green -I$(top_builddir)/magdata -I$(top_builddir)/track -I$(top_builddir)/msynth -I$(top_builddir)/poltor -I$(top_builddir)/lls -I$(top_builddir)/lapack_wrapper
 
