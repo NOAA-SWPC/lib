@@ -7,6 +7,7 @@
 #include <math.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
@@ -19,26 +20,19 @@ green_alloc(const size_t nmax, const size_t mmax)
 {
   green_workspace *w;
   size_t plm_array_size = gsl_sf_legendre_array_n(nmax);
-  size_t n;
+
+  if (mmax > nmax)
+    {
+      fprintf(stderr, "green_alloc: error: mmax > nmax\n");
+      return 0;
+    }
 
   w = calloc(1, sizeof(green_workspace));
   if (!w)
     return 0;
 
-  w->base = calloc(1, (nmax + 1) * sizeof(size_t));
-
-  /*
-   * precompute base offsets for internal (n,m) indexing, and count total
-   * (n,m) coefficients
-   */
-  w->nnm = 0;
-  for (n = 1; n <= nmax; ++n)
-    {
-      int ns = (int) GSL_MIN(n, mmax);
-
-      w->base[n] = w->nnm;
-      w->nnm += 2*ns + 1;
-    }
+  /* total number of SH coefficients */
+  w->nnm = mmax * (mmax + 2) + (nmax - mmax) * (2*mmax + 1);
 
   w->nmax = nmax;
   w->mmax = mmax;
@@ -61,9 +55,6 @@ green_alloc(const size_t nmax, const size_t mmax)
 void
 green_free(green_workspace *w)
 {
-  if (w->base)
-    free(w->base);
-
   if (w->cosmphi)
     free(w->cosmphi);
 
@@ -256,7 +247,7 @@ offset = m + min(n,mmax)
 
 which defaults to the standard m + n for the case mmax = nmax
 
-Inputs: n - SH degree (> 0)
+Inputs: n - SH degree in [1,nmax]
         m - SH order (-n <= m <= n)
         w - workspace
 
@@ -267,10 +258,6 @@ size_t
 green_nmidx(const size_t n, const int m, const green_workspace *w)
 {
   const size_t mmax = w->mmax;
-  size_t *baseptr = w->base;
-  int ns = (int) GSL_MIN(n, mmax);
-  size_t base; /* index of block for this n */
-  int offset;  /* offset within block for this m */
   size_t nmidx;
 
   if (n == 0)
@@ -280,14 +267,27 @@ green_nmidx(const size_t n, const int m, const green_workspace *w)
     }
   else if (abs(m) > (int) mmax)
     {
-      fprintf(stderr, "green_nmidx: error: m = %d\n", m);
+      fprintf(stderr, "green_nmidx: error: m = %d [mmax = %zu]\n", m, mmax);
       return 0;
     }
 
-  base = baseptr[n]; /* precomputed */
-  offset = m + ns;
+  if (n <= mmax)
+    {
+      size_t base = n * n; /* index of block for this n */
+      int offset = m + n;  /* offset within block for this m */
 
-  nmidx = base + offset;
+      /* subtract 1 to exclude (0,0) coefficient */
+      nmidx = base + offset - 1;
+    }
+  else
+    {
+      size_t base1 = (mmax + 1) * (mmax + 1);
+      size_t base2 = (n - mmax - 1) * (2 * mmax + 1);
+      int offset = m + (int)mmax;
+
+      /* subtract 1 to exclude (0,0) coefficient */
+      nmidx = base1 + base2 + offset - 1;
+    }
 
   return nmidx;
 }
@@ -303,7 +303,6 @@ green_print_spectrum(const char *filename, const gsl_vector *c,
                      const green_workspace *w)
 {
   const size_t nmax = w->nmax;
-  const size_t mmax = w->mmax;
   size_t n;
   FILE *fp;
 

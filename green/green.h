@@ -14,7 +14,6 @@ typedef struct
   size_t mmax;     /* maximum spherical harmonic order */
   size_t nnm;      /* number of total Green's functions for nmax */
   double R;        /* reference radius (km) */
-  size_t *base;    /* base[n] gives offset of coefficient vector for all coefs of degree n */
   double *cosmphi; /* array of cos(m phi) values, size mmax + 1 */
   double *sinmphi; /* array of sin(m phi) values, size mmax + 1 */
   double *Plm;     /* associated Legendre functions */
