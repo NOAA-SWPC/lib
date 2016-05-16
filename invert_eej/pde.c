@@ -72,7 +72,7 @@ pde_alloc(pde_parameters *params)
   w->theta_max = params->theta_max;
 
   w->dr = (w->rmax - w->rmin) / w->nr;
-  w->dtheta = (w->theta_max - w->theta_min) / w->ntheta;
+  w->dtheta = (w->theta_max - w->theta_min) / (w->ntheta - 1.0);
 
   nrt = w->nr * w->ntheta;
 
@@ -218,6 +218,13 @@ pde_alloc(pde_parameters *params)
   w->b_copy = gsl_vector_alloc(nrt);
 #endif
 
+  /* store explicit theta grid points in array */
+
+  w->theta_grid = malloc(w->ntheta * sizeof(double));
+
+  for (i = 0; i < w->ntheta; ++i)
+    w->theta_grid[i] = pde_theta(i, w);
+
   return w;
 } /* pde_alloc() */
 
@@ -303,6 +310,9 @@ pde_free(pde_workspace *w)
 
   if (w->S)
     gsl_spmatrix_free(w->S);
+
+  if (w->theta_grid)
+    free(w->theta_grid);
 
   if (w->hwm_workspace_p)
     hwm_free(w->hwm_workspace_p);
@@ -500,7 +510,7 @@ pde_solve(int compute_winds, double E_phi0, pde_workspace *w)
 
   pde_debug(w, "pde_solve: computing psi solution...");
   s += pde_compute_psi(w);
-  pde_debug(w, "done (residual = %.12e)\n", w->residual);
+  pde_debug(w, "done (residual norm = %.12e, relative residual norm = %.12e)\n", w->residual, w->rrnorm);
 
 #if 0
   pde_debug(w, "pde_solve: checking psi solution...");
@@ -1360,10 +1370,11 @@ pde_compute_psi(pde_workspace *w)
    */
   {
     lis_workspace *lis_p = lis_alloc(w->S->size1, w->S->size2);
-    const double tol = 1.0e-8;
+    const double tol = 1.0e-6;
 
     s = lis_proc(w->S, w->b->data, tol, w->psi->data, lis_p);
-    w->residual = lis_p->residual;
+    w->residual = lis_p->rnorm;
+    w->rrnorm = lis_p->rrnorm;
 
     mylis_free(lis_p);
 

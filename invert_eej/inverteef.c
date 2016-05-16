@@ -1,5 +1,10 @@
 /*
  * inverteef.c
+ *
+ * Steps:
+ *
+ * 1. Interpolate PDE solutions J_lat_E and J_lat_u to the same grid
+ *    used for line currents
  */
 
 #include <stdio.h>
@@ -19,6 +24,7 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_statistics.h>
+#include <gsl/gsl_spline.h>
 
 #include <indices/indices.h>
 
@@ -27,11 +33,10 @@
 
 #include "inverteef.h"
 
-static inline double inverteef_newtheta(size_t idx);
 static inline size_t inverteef_thidx(double theta, inverteef_workspace *w);
-static int inverteef_convert_pdesol(gsl_vector *J_sat, gsl_vector *J_lat_E,
-                                    gsl_vector *J_lat_u,
-                                    inverteef_workspace *w);
+static int inverteef_interp_pdesol(const gsl_vector *J_sat, const double *theta_pde,
+                                   const gsl_vector *J_lat_E, const gsl_vector *J_lat_u,
+                                   inverteef_workspace *w);
 static int inverteef_design_matrix(inverteef_workspace *w);
 static int inverteef_invert_profile(gsl_vector *J_sat,
                                     inverteef_workspace *w);
@@ -39,6 +44,7 @@ static int inverteef_invert_profile(gsl_vector *J_sat,
 inverteef_workspace *
 inverteef_alloc(inverteef_parameters *params)
 {
+  const gsl_interp_type * T = gsl_interp_linear;
   inverteef_workspace *w;
   size_t ncoeffs = 0;
 
@@ -49,11 +55,11 @@ inverteef_alloc(inverteef_parameters *params)
       return 0;
     }
 
-  w->J_pde = gsl_vector_alloc(PROF_LAT_N);
-  w->J_rhs = gsl_vector_alloc(PROF_LAT_N);
-  w->J_pde_E = gsl_vector_alloc(PROF_LAT_N);
-  w->J_pde_u = gsl_vector_alloc(PROF_LAT_N);
-  w->J_diff = gsl_vector_alloc(PROF_LAT_N);
+  w->J_pde = gsl_vector_alloc(params->ncurr);
+  w->J_rhs = gsl_vector_alloc(params->ncurr);
+  w->J_pde_E = gsl_vector_alloc(params->ncurr);
+  w->J_pde_u = gsl_vector_alloc(params->ncurr);
+  w->J_diff = gsl_vector_alloc(params->ncurr);
   if (w->J_rhs == 0 || w->J_pde_E == 0 || w->J_pde_u == 0 || w->J_pde == 0 ||
       w->J_diff == 0)
     {
@@ -69,14 +75,14 @@ inverteef_alloc(inverteef_parameters *params)
   ++ncoeffs;
 #endif
 
-  w->X = gsl_matrix_alloc(PROF_LAT_N, ncoeffs);
+  w->X = gsl_matrix_alloc(params->ncurr, ncoeffs);
   w->coeffs = gsl_vector_alloc(ncoeffs);
   w->cov = gsl_matrix_alloc(ncoeffs, ncoeffs);
-  w->multifit_p = gsl_multifit_linear_alloc(PROF_LAT_N, ncoeffs);
+  w->multifit_p = gsl_multifit_linear_alloc(params->ncurr, ncoeffs);
 
   w->B = gsl_matrix_alloc(1, 2);
   w->d = gsl_vector_alloc(1);
-  w->r = gsl_vector_alloc(PROF_LAT_N);
+  w->r = gsl_vector_alloc(params->ncurr);
 
   w->ntheta = params->ntheta;
   w->theta_min = params->theta_min;
@@ -85,6 +91,12 @@ inverteef_alloc(inverteef_parameters *params)
   w->dtheta = (w->theta_max - w->theta_min) / w->ntheta;
 
   w->ncurr = params->ncurr;
+  w->qdlat_max = params->qdlat_max;
+  w->qdlat_step = 2.0 * params->qdlat_max / (params->ncurr - 1.0);
+
+  w->acc = gsl_interp_accel_alloc();
+  w->spline_E = gsl_spline_alloc(T, params->ntheta);
+  w->spline_u = gsl_spline_alloc(T, params->ntheta);
 
   return w;
 } /* inverteef_alloc() */
@@ -128,22 +140,17 @@ inverteef_free(inverteef_workspace *w)
   if (w->multifit_p)
     gsl_multifit_linear_free(w->multifit_p);
 
+  if (w->acc)
+    gsl_interp_accel_free(w->acc);
+
+  if (w->spline_E)
+    gsl_spline_free(w->spline_E);
+
+  if (w->spline_u)
+    gsl_spline_free(w->spline_u);
+
   free(w);
 } /* inverteef_free() */
-
-/*
-inverteef_newtheta()
-  In the inversion step, the satellite profile has a different
-theta grid spacing and number of grid points, so take an index
-idx \in [0, PROF_LAT_N] and convert it to the correct theta value
-*/
-static inline double
-inverteef_newtheta(size_t idx)
-{
-  double theta = (PROF_THETA_MIN + idx * PROF_LAT_STEP) * M_PI / 180.0;
-
-  return theta;
-}
 
 /*
 inverteef_thidx()
@@ -163,40 +170,50 @@ inverteef_thidx(double theta, inverteef_workspace *w)
 }
 
 /*
-inverteef_convert_pdesol()
-  Convert pde solution to have the same step size and length
-as the CHAMP profile
+inverteef_interp_pdesol()
+  Interpolate PDE solution to the grid used by the line current model
 
-J_lat_{E,u} is converted to J_pde_{E,u} which has length PROF_LAT_N
+Inputs: J_sat     - satellite line current profile, length ncurr
+        theta_pde - theta grid points for PDE solution (radians), length ntheta
+        J_lat_E   - PDE solution for E, length ntheta
+        J_lat_u   - PDE solution for u, length ntheta
+
+Notes:
+1) On output,
+w->J_pde_{E,u} contain J_lat_{E,u} interpolated to the line current grid
+
+2) On output,
+w->J_rhs contains J_sat - J_pde_u interpolated to line current grid
 */
 
 static int
-inverteef_convert_pdesol(gsl_vector *J_sat, gsl_vector *J_lat_E,
-                         gsl_vector *J_lat_u, inverteef_workspace *w)
+inverteef_interp_pdesol(const gsl_vector *J_sat, const double *theta_pde,
+                        const gsl_vector *J_lat_E, const gsl_vector *J_lat_u,
+                        inverteef_workspace *w)
 {
-  size_t j, n;
-  size_t idxstep;
+  const double qdlat_min = -w->qdlat_max;
+  size_t i;
 
-  j = inverteef_thidx((90.0 - PROF_LAT_MAX) * M_PI / 180.0, w);
-  n = 0;
-  idxstep = (size_t) (PROF_LAT_STEP / w->dtheta * M_PI / 180.0);
+  gsl_spline_init(w->spline_E, theta_pde, J_lat_E->data, w->ntheta);
+  gsl_spline_init(w->spline_u, theta_pde, J_lat_u->data, w->ntheta);
 
-  do
+  for (i = 0; i < w->ncurr; ++i)
     {
-      gsl_vector_set(w->J_pde_E, n, gsl_vector_get(J_lat_E, j));
-      gsl_vector_set(w->J_pde_u, n, gsl_vector_get(J_lat_u, j));
+      double qdlat = qdlat_min + i * w->qdlat_step; /* QD latitude on line current grid */
+      double theta = M_PI / 2.0 - qdlat * M_PI / 180.0;
+      double JE = gsl_spline_eval(w->spline_E, theta, w->acc);
+      double Ju = gsl_spline_eval(w->spline_u, theta, w->acc);
+      double Js = gsl_vector_get(J_sat, i);
 
-      /* RHS = J_champ_i - J_pde_u_i */
-      gsl_vector_set(w->J_rhs, n,
-                     gsl_vector_get(J_sat, n) -
-                     gsl_vector_get(w->J_pde_u, n));
+      gsl_vector_set(w->J_pde_E, i, JE);
+      gsl_vector_set(w->J_pde_u, i, Ju);
 
-      j += idxstep;
+      /* RHS = J_sat_i - J_pde_u_i */
+      gsl_vector_set(w->J_rhs, i, Js - Ju);
     }
-  while (++n < PROF_LAT_N);
 
   return GSL_SUCCESS;
-} /* inverteef_convert_pdesol() */
+}
 
 /*
 inverteef_design_matrix()
@@ -287,9 +304,9 @@ inverteef_invert_profile(gsl_vector *J_sat, inverteef_workspace *w)
   /* Constrain solution so that J_sol(90 deg) = J_champ(90 deg) */
 
   {
-    double J_E = gsl_vector_get(w->J_pde_E, PROF_LAT_N / 2);
-    double J_u = gsl_vector_get(w->J_pde_u, PROF_LAT_N / 2);
-    double J_champ = gsl_vector_get(J_sat, PROF_LAT_N / 2);
+    double J_E = gsl_vector_get(w->J_pde_E, w->ncurr / 2);
+    double J_u = gsl_vector_get(w->J_pde_u, w->ncurr / 2);
+    double J_champ = gsl_vector_get(J_sat, w->ncurr / 2);
 
     gsl_matrix_set(w->B, 0, 0, J_E);
     gsl_matrix_set(w->B, 0, 1, -1.0);
@@ -326,10 +343,11 @@ inverteef_invert_profile(gsl_vector *J_sat, inverteef_workspace *w)
 inverteef_calc()
   Invert satellite profile
 
-Inputs: J_sat   - satellite current vector profile (length ncurr)
-        J_lat_E - PDE solution (E_0, u = 0) (length ntheta = theta grid points)
-        J_lat_u - PDE solution (E_0 = 0, u) (length ntheta = theta grid points)
-        w       - workspace
+Inputs: J_sat     - satellite current vector profile (length ncurr)
+        qdlat_pde - QD latitude grid points for PDE solution
+        J_lat_E   - PDE solution (E_0, u = 0) (length ntheta = theta grid points)
+        J_lat_u   - PDE solution (E_0 = 0, u) (length ntheta = theta grid points)
+        w         - workspace
 
 Notes:
 1) On output, w->J_pde contains the modeled profile
@@ -338,12 +356,12 @@ satellite profile
 */
 
 int
-inverteef_calc(gsl_vector *J_sat, gsl_vector *J_lat_E,
-               gsl_vector *J_lat_u, inverteef_workspace *w)
+inverteef_calc(gsl_vector *J_sat, const double *qdlat_pde,
+               gsl_vector *J_lat_E, gsl_vector *J_lat_u, inverteef_workspace *w)
 {
   fprintf(stderr, "inverteef_calc: interpolating PDE solution...");
 
-  inverteef_convert_pdesol(J_sat, J_lat_E, J_lat_u, w);
+  inverteef_interp_pdesol(J_sat, qdlat_pde, J_lat_E, J_lat_u, w);
 
   fprintf(stderr, "done\n");
   fflush(stderr);
@@ -363,7 +381,7 @@ inverteef_calc(gsl_vector *J_sat, gsl_vector *J_lat_E,
     double x[2];
     gsl_vector_view xv = gsl_vector_view_array(x, 2);
 
-    for (j = 0; j < PROF_LAT_N; ++j)
+    for (j = 0; j < w->ncurr; ++j)
       {
         double J, Jerr;
 
@@ -382,9 +400,9 @@ inverteef_calc(gsl_vector *J_sat, gsl_vector *J_lat_E,
 
   w->R = gsl_stats_correlation(J_sat->data, 1,
                                w->J_pde->data, 1,
-                               PROF_LAT_N);
+                               w->ncurr);
 
-  /* comptue relative error between modeled and satellite profiles */
+  /* compute relative error between modeled and satellite profiles */
   w->RelErr = gsl_blas_dnrm2(w->J_diff) / gsl_blas_dnrm2(J_sat);
 
   fprintf(stderr, "done (chisq = %e, Rsq = %f, R = %f)\n",

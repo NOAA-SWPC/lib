@@ -96,11 +96,13 @@ typedef struct
   double theta_max;  /* maximum theta in radians */
   double dtheta;     /* theta step size in radians */
 
-  double longitude; /* current longitude */
-  double lat_eq;    /* magnetic equator latitude */
-  time_t t;         /* current time */
+  double longitude;  /* current longitude */
+  double lat_eq;     /* magnetic equator latitude */
+  time_t t;          /* current time */
 
-  double eej_angle; /* angle EEJ makes with geographic eastward */
+  double *theta_grid; /* array of theta grid values (radians) */
+
+  double eej_angle;  /* angle EEJ makes with geographic eastward */
 
   gsl_matrix **sigma;
 
@@ -122,6 +124,7 @@ typedef struct
   gsl_vector *b_copy; /* rhs vector */
   gsl_vector *psi; /* pde solution */
   double residual; /* residual ||A*psi - b|| */
+  double rrnorm;   /* relative residual ||b - A*psi|| / ||b|| */
 
   gsl_matrix *J_phi; /* eastward current solution (A/m^2) */
   gsl_vector *J_lat; /* height integrated current density profile (A/m) */
@@ -174,14 +177,6 @@ typedef struct
 
 /* index into 'psi' vector */
 #define PSI_GET(p, i, j, w)  (gsl_vector_get(p, PDE_IDX((i), (j), (w))))
-
-#define PROF_LAT_MIN         (-20.0)
-#define PROF_LAT_MAX         (20.0)
-#define PROF_LAT_STEP        (0.5)
-#define PROF_LAT_N           ((size_t) ((PROF_LAT_MAX - PROF_LAT_MIN) / PROF_LAT_STEP + 1))
-
-#define PROF_THETA_MIN       (90.0 - PROF_LAT_MAX)
-#define PROF_THETA_MAX       (90.0 - PROF_LAT_MIN)
 
 /*
  * Prototypes

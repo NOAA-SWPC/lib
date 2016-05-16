@@ -91,7 +91,7 @@ mag_alloc(mag_params *params)
     pde_params.nr = 200;
     pde_params.theta_min = 65.0 * M_PI / 180.0;
     pde_params.theta_max = 115.0 * M_PI / 180.0;
-    pde_params.ntheta = 100;
+    pde_params.ntheta = 101;
 
     w->pde_workspace_p = pde_alloc(&pde_params);
 
@@ -99,6 +99,7 @@ mag_alloc(mag_params *params)
     inverteef_params.theta_min = pde_params.theta_min;
     inverteef_params.theta_max = pde_params.theta_max;
     inverteef_params.ncurr = params->ncurr;
+    inverteef_params.qdlat_max = params->qdlat_max;
 
     w->inverteef_workspace_p = inverteef_alloc(&inverteef_params);
   }
@@ -464,6 +465,7 @@ mag_proc(const mag_params *params, track_workspace *track_p,
         gsl_vector_view J_sat = gsl_vector_view_array(w->EEJ, w->ncurr);
 
         s += inverteef_calc(&J_sat.vector,
+                            w->pde_workspace_p->theta_grid,
                             w->pde_workspace_p->J_lat_E,
                             w->pde_workspace_p->J_lat_u,
                             w->inverteef_workspace_p);

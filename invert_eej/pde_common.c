@@ -123,17 +123,3 @@ E_phi(size_t i, size_t j, pde_workspace *w)
 
   return Ep;
 }
-
-/*
-pde_newtheta()
-  In the inversion step, the satellite profile has a different
-theta grid spacing and number of grid points, so take an index
-idx \in [0, PROF_LAT_N] and convert it to the correct theta value
-*/
-static inline double
-pde_newtheta(size_t idx)
-{
-  double theta = (PROF_THETA_MIN + idx * PROF_LAT_STEP) * M_PI / 180.0;
-
-  return theta;
-}
