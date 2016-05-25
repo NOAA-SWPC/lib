@@ -44,6 +44,7 @@ AC_CONFIG_FILES([            \
   peak/Makefile              \
   poltor/Makefile            \
   pomme/Makefile             \
+  superlu/Makefile           \
   swarm/Makefile             \
   pca/Makefile               \
   pca/pca.h                  \

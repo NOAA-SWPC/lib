@@ -14,11 +14,6 @@
 #define PCA_STAGE1_KNM     "/data/palken/lib/pca/data/stage1_knm.dat"
 #define PCA_STAGE1_DATA    "/data/palken/lib/pca/data/stage1_data.dat"
 
-/* Stage2: singular values, left and right singular vectors data files */
-#define PCA_STAGE2_SVAL    "/data/palken/lib/pca/data/stage2_sval.dat"
-#define PCA_STAGE2_U       "/data/palken/lib/pca/data/stage2_U.dat"
-#define PCA_STAGE2_V       "/data/palken/lib/pca/data/stage2_V.dat"
-
 /* Stage2b: singular values, left and right singular vectors data files */
 #define PCA_STAGE2B_SVAL   "/data/palken/lib/pca/data/stage2b_sval.dat"
 #define PCA_STAGE2B_U      "/data/palken/lib/pca/data/stage2b_U.dat"

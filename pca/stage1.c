@@ -39,7 +39,6 @@
 #include "green.h"
 #include "lapack_wrapper.h"
 #include "magdata.h"
-#include "oct.h"
 #include "poltor.h"
 
 #include "io.h"
@@ -361,9 +360,6 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
       /* construct rhs vector for time t_k */
       main_build_rhs(k, data, &b.vector);
-
-      if (k == 0)
-        printv_octave(&b.vector, "b");
     }
 
   gettimeofday(&tv1, NULL);

@@ -20,8 +20,10 @@
 #include "pca.h"
 
 static int pca_calc_G(const double b, pca_workspace *w);
-static double pca_chi(const double b, const double theta, const double phi,
-                      const gsl_vector *k, pca_workspace *w);
+static double pca_pc_chi(const size_t pcidx, const double theta, const double phi,
+                         pca_workspace *w);
+static double pca_pc_calc_chi(const double b, const double theta, const double phi,
+                              const gsl_vector *k, pca_workspace *w);
 
 pca_workspace *
 pca_alloc()
@@ -160,7 +162,7 @@ pca_variance(const char *filename, const double thresh, size_t * nsing,
 }
 
 /*
-pca_print_map()
+pca_print_pc_map()
   Print lat/lon map of one PC
 
 Inputs: filename - output file
@@ -170,27 +172,25 @@ Inputs: filename - output file
 */
 
 int
-pca_print_map(const char *filename, const double r, const size_t pcidx,
-              pca_workspace *w)
+pca_print_pc_map(const char *filename, const double r, const size_t pcidx,
+                 pca_workspace *w)
 {
   int s = 0;
-  const double b = w->b; /* radius of current shell */
   FILE *fp;
   double lat, lon;
-  gsl_vector_const_view pc_knm = gsl_matrix_const_column(w->U, pcidx);
   size_t i;
 
   fp = fopen(filename, "w");
   if (!fp)
     {
-      fprintf(stderr, "pca_print_map: unable to open %s: %s\n",
+      fprintf(stderr, "pca_print_pc_map: unable to open %s: %s\n",
               filename, strerror(errno));
       return -1;
     }
 
   i = 1;
   fprintf(fp, "# Principal component %zu/%zu\n", pcidx + 1, w->nnm);
-  fprintf(fp, "# Current shell radius: %g km\n", b);
+  fprintf(fp, "# Current shell radius: %g km\n", w->b);
   fprintf(fp, "# Magnetic field shell radius: %g km\n", r);
   fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
@@ -210,7 +210,7 @@ pca_print_map(const char *filename, const double r, const size_t pcidx,
           double chi;
 
           /* compute current stream function for this PC */
-          chi = pca_chi(b, theta, phi, &pc_knm.vector, w);
+          chi = pca_pc_chi(pcidx, theta, phi, w);
 
           /* compute magnetic field vector for this PC */
           pca_pc_B(pcidx, r, theta, phi, B_pc, w);
@@ -228,6 +228,70 @@ pca_print_map(const char *filename, const double r, const size_t pcidx,
     }
 
   fclose(fp);
+
+  return s;
+}
+
+/*
+pca_print_map()
+  Print lat/lon map of linear combination of PCs
+
+Inputs: fp    - output file
+        r     - radius of shell for magnetic field maps
+        alpha - vector specifying linear combination of PCs
+        w     - workspace
+*/
+
+int
+pca_print_map(FILE *fp, const double r, const gsl_vector * alpha,
+              pca_workspace *w)
+{
+  int s = 0;
+  double lat, lon;
+  size_t i;
+
+  i = 1;
+  fprintf(fp, "# Number of principal components: %zu/%zu\n", alpha->size, w->nnm);
+  fprintf(fp, "# Current shell radius: %g km\n", w->b);
+  fprintf(fp, "# Magnetic field shell radius: %g km\n", r);
+  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: chi (kA / nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_y (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_z (nT)\n", i++);
+
+  for (lon = -180.0; lon <= 180.0; lon += 1.0)
+    {
+      double phi = lon * M_PI / 180.0;
+
+      for (lat = -89.9; lat <= 89.9; lat += 1.0)
+        {
+          double theta = M_PI / 2.0 - lat * M_PI / 180.0;
+          double B[3];
+          double chi;
+
+          /* compute current stream function */
+          chi = pca_chi(alpha, theta, phi, w);
+
+          /* compute magnetic field vector */
+          pca_B(alpha, r, theta, phi, B, w);
+
+          fprintf(fp, "%f %f %f %f %f %f\n",
+                  lon,
+                  lat,
+                  chi,
+                  B[0],
+                  B[1],
+                  B[2]);
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  fprintf(fp, "\n\n");
+
+  fflush(fp);
 
   return s;
 }
@@ -352,6 +416,46 @@ pca_B(const gsl_vector *alpha, const double r, const double theta, const double 
 }
 
 /*
+pca_chi()
+  Compute total current stream function at a given point, using
+a linear combination of principal components:
+
+chi(r) = sum_i alpha_i chi_i(r)
+
+where chi_i(r) is the unit stream function of the ith principal component:
+
+Inputs: alpha - coefficients of sum
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        w     - workspace
+
+Return: current stream function
+*/
+
+double
+pca_chi(const gsl_vector *alpha, const double theta, const double phi, pca_workspace *w)
+{
+  const size_t p = alpha->size; /* number of principal components to use to compute B */
+  size_t i;
+  double chi;
+
+  gsl_vector_set_zero(w->work);
+
+  /* compute: work = sum_i alpha_i U_i over largest p principal components */
+  for (i = 0; i < p; ++i)
+    {
+      double ai = gsl_vector_get(alpha, i);
+      gsl_vector_view Ui = gsl_matrix_column(w->U, i);
+
+      gsl_blas_daxpy(ai, &Ui.vector, w->work);
+    }
+
+  chi = pca_pc_calc_chi(w->b, theta, phi, w->work, w);
+
+  return chi;
+}
+
+/*
 pca_calc_G()
   Convert PCs in a basis of external Gauss coefficients representing
 a current shell at radius b into internal Gauss coefficients, suitable
@@ -391,13 +495,36 @@ pca_calc_G(const double b, pca_workspace *w)
 }
 
 /*
-pca_chi()
-  Compute current stream function
+pca_pc_chi()
+  Compute current stream function for a single PC
+
+Inputs: pcidx - index of PC
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        w     - workspace
 */
 
 static double
-pca_chi(const double b, const double theta, const double phi,
-        const gsl_vector *k, pca_workspace *w)
+pca_pc_chi(const size_t pcidx, const double theta, const double phi, pca_workspace *w)
+{
+  gsl_vector_const_view pc = gsl_matrix_const_column(w->U, pcidx);
+  return pca_pc_calc_chi(w->b, theta, phi, &pc.vector, w);
+}
+
+/*
+pca_pc_calc_chi()
+  Compute current stream function for a single PC
+
+Inputs: b     - radius of current shell (km)
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        k     - coefficient vector
+        w     - workspace
+*/
+
+static double
+pca_pc_calc_chi(const double b, const double theta, const double phi,
+                const gsl_vector *k, pca_workspace *w)
 {
   const double mu0 = 400.0 * M_PI; /* units of nT / (kA km^{-1}) */
   const size_t nmax = w->nmax;

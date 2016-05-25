@@ -12,9 +12,10 @@
 
 typedef struct
 {
-  int size1; /* number of rows */
-  int size2; /* number of columns */
-  double residual;
+  int size1;     /* number of rows */
+  int size2;     /* number of columns */
+  double rnorm;  /* || b - A*x || */
+  double rrnorm; /* || b - A*x || / || b || */
 } lis_workspace;
 
 /*

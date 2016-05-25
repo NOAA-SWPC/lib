@@ -63,7 +63,7 @@ main(int argc, char *argv[])
       fprintf(stderr, "main: printing principle component %zu map to %s...",
               i, buf);
 
-      pca_print_map(buf, r, i, pca_workspace_p);
+      pca_print_pc_map(buf, r, i, pca_workspace_p);
 
       fprintf(stderr, "done\n");
     }

@@ -5,8 +5,8 @@
 prog="./main"
 
 # set for profiles only
-flags="-p"
-#flags=""
+#flags="-p"
+flags=""
 
 for year in $(seq -w 00 05); do
   log_dir="log_champ_${year}"

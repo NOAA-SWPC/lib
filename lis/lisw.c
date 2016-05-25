@@ -58,6 +58,7 @@ lis_proc(const gsl_spmatrix *S, const double *rhs, const double tol,
   LIS_SOLVER solver;
   LIS_INT size1 = w->size1;
   LIS_INT size2 = w->size2;
+  LIS_REAL rrnorm; /* || b - Ax || / ||b|| */
   int argc = 0;
   char **argv = NULL;
   char str[2048];
@@ -76,7 +77,7 @@ lis_proc(const gsl_spmatrix *S, const double *rhs, const double tol,
 
   /* set solver parameters */
   lis_solver_set_option("-i fgmres -p ilut -f double", solver);
-  lis_solver_set_option("-maxiter 1000", solver);
+  lis_solver_set_option("-maxiter 2000", solver);
   lis_solver_set_option("-print 1", solver);
   sprintf(str, "-tol %e\n", tol);
   lis_solver_set_option(str, solver);
@@ -95,13 +96,18 @@ lis_proc(const gsl_spmatrix *S, const double *rhs, const double tol,
 
   s = lis_solve(A, b, x, solver);
   s = solver->retcode; /*XXX bug in lis_solve */
+
+  lis_solver_get_status(solver, &s);
   if (s != 0)
     fprintf(stderr, "lis_proc: error: status = %d\n", s);
 
   for (i = 0; i < w->size1; ++i)
     lis_vector_get_value(x, i, &sol[i]);
 
-  /* compute residual */
+  /* compute residual norm */
+  lis_solver_get_residualnorm(solver, &rrnorm);
+  w->rrnorm = rrnorm;
+
   {
     gsl_vector_const_view bv = gsl_vector_const_view_array(rhs, w->size1);
     gsl_vector_view xv = gsl_vector_view_array(sol, w->size2);
@@ -109,7 +115,7 @@ lis_proc(const gsl_spmatrix *S, const double *rhs, const double tol,
 
     gsl_vector_memcpy(r, &bv.vector);
     gsl_spblas_dgemv(CblasNoTrans, 1.0, S, &xv.vector, -1.0, r);
-    w->residual = gsl_blas_dnrm2(r);
+    w->rnorm = gsl_blas_dnrm2(r);
 
     gsl_vector_free(r);
   }

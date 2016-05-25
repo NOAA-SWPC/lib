@@ -1,7 +1,7 @@
 #!/bin/sh
 # Make CHAMP index files for EEF processing
 
-datadir="/nfs/satmag/CHAMP/Stage1"
+datadir="$DATAHOME/CHAMP/Stage1_CHAOS"
 
 for year in $(seq -w 00 10); do
   idxfile="champ${year}.idx"

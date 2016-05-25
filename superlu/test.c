@@ -1,7 +1,8 @@
 /*
  * test.c
+ * Patrick Alken
  *
- * Test lis module by creating random sparse matrices and rhs
+ * Test superlu module by creating random sparse matrices and rhs
  * vectors, solving the systems and comparing with GSL output
  */
 
@@ -16,7 +17,7 @@
 #include <gsl/gsl_linalg.h>
 #include <gsl/gsl_spmatrix.h>
 
-#include "lisw.h"
+#include "superlu.h"
 
 void
 test_vectors(double *x, double *x_exact, int n)
@@ -24,7 +25,7 @@ test_vectors(double *x, double *x_exact, int n)
   int i;
 
   for (i = 0; i < n; ++i)
-    gsl_test_rel(x[i], x_exact[i], 1.0e-9, "n = %d, i = %d", n, i);
+    gsl_test_rel(x[i], x_exact[i], 1.0e-7, "n = %d, i = %d", n, i);
 }
 
 void
@@ -36,6 +37,8 @@ create_random_sparse_matrix(gsl_matrix *m, gsl_rng *r, double lower,
   size_t i, j;
   int numel; /* number of non-zero elements in a row */
   double x;
+
+  gsl_matrix_set_zero(m);
 
   if (N == 1)
     {
@@ -50,7 +53,7 @@ create_random_sparse_matrix(gsl_matrix *m, gsl_rng *r, double lower,
        * nonzero elements are in this row
        */
       numel = (int) (gsl_rng_uniform(r) * (M / 2 - 1) + 1);
-      for (j = 0; j < numel; ++j)
+      for (j = 0; j < (size_t) numel; ++j)
         {
           int k = (int) (gsl_rng_uniform(r) * (M - 2));
           x = gsl_rng_uniform(r) * (upper - lower) + lower;
@@ -76,28 +79,27 @@ create_random_vector(gsl_vector *v, gsl_rng *r, double lower, double upper)
 }
 
 void
-test_lis()
+test_superlu()
 {
-#if 0
-  const int N_max = 50;
+  const int N_max = 100;
   int n, i;
   gsl_rng *r = gsl_rng_alloc(gsl_rng_default);
 
   for (n = 1; n <= N_max; ++n)
     {
+      gsl_spmatrix *S = gsl_spmatrix_alloc(n, n);
+      gsl_spmatrix *C;
       gsl_matrix *A = gsl_matrix_alloc(n, n);
       gsl_matrix *A_copy = gsl_matrix_alloc(n, n);
       gsl_vector *rhs = gsl_vector_alloc(n);
       gsl_permutation *p = gsl_permutation_alloc(n);
       gsl_vector *x_gsl = gsl_vector_alloc(n);
-      gsl_vector *x_lis = gsl_vector_alloc(n);
-      lis_workspace *w = lis_alloc(n, n);
+      gsl_vector *x_slu = gsl_vector_alloc(n);
+      slu_workspace *w = slu_alloc(n, n, 1);
       double scale = gsl_rng_uniform(r);
       int s;
 
-      gsl_matrix_set_zero(A);
-
-      for (i = 0; i < 1; ++i)
+      for (i = 0; i < 50; ++i)
         {
           create_random_sparse_matrix(A, r, -10.0, 10.0);
           create_random_vector(rhs, r, -10.0, 10.0);
@@ -109,40 +111,49 @@ test_lis()
 
           gsl_matrix_memcpy(A, A_copy);
 
-          lis_reinit(w);
-          test_cs_add(A, w);
-          /*lis_scale(scale, w);*/
-          lis_proc(rhs->data, x_lis->data, w);
-          /*gsl_vector_scale(x_lis, scale);*/
+          /* convert dense matrix to sparse (triplet) format */
+          gsl_spmatrix_d2sp(S, A);
 
-          test_vectors(x_lis->data, x_gsl->data, n);
+          /* convert to compressed column format */
+          C = gsl_spmatrix_compcol(S);
+
+          gsl_spmatrix_scale(C, scale);
+          slu_proc(C, rhs->data, x_slu->data, w);
+          gsl_vector_scale(x_slu, scale);
+
+          gsl_test_abs(w->residual, 0.0, 1.0e-8, "residual n = %zu, i = %zu", n, i);
+
+          test_vectors(x_slu->data, x_gsl->data, n);
+
+          gsl_spmatrix_free(C);
         }
 
+      gsl_spmatrix_free(S);
       gsl_matrix_free(A);
       gsl_matrix_free(A_copy);
       gsl_vector_free(rhs);
       gsl_vector_free(x_gsl);
-      gsl_vector_free(x_lis);
+      gsl_vector_free(x_slu);
       gsl_permutation_free(p);
-      lis_free(w);
+      slu_free(w);
     }
 
   gsl_rng_free(r);
-#endif
-} /* test_lis() */
+} /* test_superlu() */
 
 int
-main(int argc, char *argv[])
+main()
 {
-  lis_workspace *w;
+  slu_workspace *sw;
+  gsl_spmatrix *A, *C;
   size_t i;
   const int m = 5;
   const int n = 5;
-  gsl_spmatrix *A = gsl_spmatrix_alloc(m, n);
   double rhs[m];
   double sol[n];
   int nprocs;
   double s, u, p, e, r, l;
+  double min, max;
   double x[] = { -0.0312500000000000, 0.0654761904761905, 0.0133928571428571,
                   0.0625000000000000, 0.0327380952380952 };
 
@@ -154,10 +165,11 @@ main(int argc, char *argv[])
   r = 18.0;
   l = 12.0;
 
-  for (i = 0; i < n; ++i)
+  for (i = 0; i < (size_t) n; ++i)
     rhs[i] = 1.0;
 
-  w = lis_alloc(m, n);
+  sw = slu_alloc(m, n, nprocs);
+  A = gsl_spmatrix_alloc(m, n);
 
   gsl_spmatrix_set(A, 0, 0, s);
   gsl_spmatrix_set(A, 1, 0, l);
@@ -172,25 +184,29 @@ main(int argc, char *argv[])
   gsl_spmatrix_set(A, 3, 4, u);
   gsl_spmatrix_set(A, 4, 4, r);
 
-  lis_proc(A, rhs, 1.0e-12, sol, w);
+  gsl_spmatrix_minmax(A, &min, &max);
+  fprintf(stderr, "min = %f, max = %f\n", min, max);
+
+  C = gsl_spmatrix_ccs(A);
+
+  slu_proc(C, rhs, sol, sw);
 
   test_vectors(sol, x, n);
 
   printf("sol = [\n");
-  for (i = 0; i < n; ++i)
+  for (i = 0; i < (size_t) n; ++i)
     printf("%.12e\n", sol[i]);
   printf("]\n");
 
-  printf("residual norm = %.12e\n", w->rnorm);
-  printf("relative residual norm = %.12e\n", w->rrnorm);
+  printf("residual = %.12e\n", slu_residual(sw));
 
-  test_lis();
+  test_superlu();
 
-  mylis_free(w);
-
+  slu_free(sw);
   gsl_spmatrix_free(A);
+  gsl_spmatrix_free(C);
 
-  exit(gsl_test_summary());
+  exit (gsl_test_summary());
 
   return 0;
 }

@@ -18,6 +18,7 @@ SUBDIRS =         \
   msynth          \
 	mageq           \
 	peak            \
+	superlu         \
 	gd              \
 	hwm             \
 	cond            \

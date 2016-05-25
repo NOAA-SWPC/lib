@@ -325,7 +325,6 @@ track_residual(const size_t track_idx, const size_t data_idx, double B[3],
   size_t j;
   double B_obs[3], B_main[3], B_crust[3], B_ext[3];
   double B_ext_corr[3] = { 0.0, 0.0, 0.0 };
-  track_data *tptr = &(w->tracks[track_idx]);
 
   B_obs[0] = SATDATA_VEC_X(data->B, data_idx);
   B_obs[1] = SATDATA_VEC_Y(data->B, data_idx);
@@ -485,6 +484,48 @@ track_data_nflagged(const track_data *tptr, const satdata_mag *data)
 
   return nflagged;
 } /* track_data_nflagged() */
+
+/*
+track_find()
+  Find a track with an equator crossing within dt and dphi
+of specified values
+
+Inputs: t_eq   - timestamp of equator crossing (CDF_EPOCH)
+        phi    - longitude of equator crossing (degrees)
+        dt_min - allowed dt difference in minutes
+        dphi   - allowed longitude difference in degrees
+        idx    - (output) index of track if found
+        w      - track workspace
+
+Return: sucess if found, failure if not
+*/
+
+int
+track_find(const double t_eq, const double phi_eq, const double dt_min,
+           const double dphi, size_t *idx, const track_workspace *w)
+{
+  int s = GSL_FAILURE;
+  size_t i;
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      double t_diff = fabs(t_eq - tptr->t_eq) / 60000.0; /* convert to minutes */
+      double phi_diff = wrap180(phi_eq - tptr->lon_eq);
+
+      if (fabs(phi_diff) > dphi)
+        continue;
+
+      if (t_diff > dt_min)
+        continue;
+
+      *idx = i;
+      s = GSL_SUCCESS;
+      break;
+    }
+
+  return s;
+}
 
 int
 track_print(const char *filename, const size_t flags,
