@@ -11,6 +11,7 @@
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_spmatrix.h>
+#include <gsl/gsl_spblas.h>
 
 #include "superlu.h"
 
@@ -100,6 +101,7 @@ slu_proc(const gsl_spmatrix *A, const double *rhs, double *sol, slu_workspace *w
   const size_t nnz = gsl_spmatrix_nnz(A);
   int info = 0;
   gsl_vector_const_view vrhs = gsl_vector_const_view_array(rhs, w->size1);
+  gsl_vector_view vsol = gsl_vector_view_array(sol, w->size2);
   int *rind = malloc(nnz * sizeof(int));
   size_t i;
 
@@ -158,6 +160,11 @@ slu_proc(const gsl_spmatrix *A, const double *rhs, double *sol, slu_workspace *w
     for (i = 0; i < A->size2; ++i)
       sol[i] = dp[i];
   }
+
+  /* compute residual */
+  gsl_vector_memcpy(w->rhs_copy, &vrhs.vector);
+  gsl_spblas_dgemv(CblasNoTrans, 1.0, A, &vsol.vector, -1.0, w->rhs_copy);
+  w->residual = gsl_blas_dnrm2(w->rhs_copy);
 
   Destroy_SuperMatrix_Store(&(w->A));
   Destroy_SuperMatrix_Store(&(w->B));
