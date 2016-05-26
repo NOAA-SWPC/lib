@@ -48,11 +48,12 @@ pca_workspace *pca_alloc();
 void pca_free(pca_workspace *w);
 int pca_variance(const char *filename, const double thresh, size_t * nsing,
                  pca_workspace *w);
-int pca_print_map(const char *filename, const double r, const size_t pcidx,
+int pca_print_map(FILE *fp, const double r, const gsl_vector * alpha,
                   pca_workspace *w);
 int pca_pc_B(const size_t pcidx, const double r, const double theta, const double phi,
              double B[3], pca_workspace *w);
 int pca_B(const gsl_vector *alpha, const double r, const double theta, const double phi,
           double B[3], pca_workspace *w);
+double pca_chi(const gsl_vector *alpha, const double theta, const double phi, pca_workspace *w);
 
 #endif /* INCLUDED_pca_h */

@@ -64,6 +64,8 @@ typedef struct
  */
 
 msynth_workspace *msynth_alloc(const size_t nmax, const size_t nsnapshot, const double *epochs);
+msynth_workspace *msynth_alloc2(const size_t nmax_int, const size_t nmax_ext,
+                                const size_t nsnapshot, const double *epochs);
 void msynth_free(msynth_workspace *w);
 int msynth_set(const size_t nmin, const size_t nmax, msynth_workspace *w);
 int msynth_set_data_interval(const double data_start, const double data_end,
