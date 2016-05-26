@@ -30,6 +30,6 @@ SUBDIRS =         \
   estist          \
   poltor          \
   invert_eej      \
-  mfield          \
   swarm           \
 	pca
+#XXX  mfield          

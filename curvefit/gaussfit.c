@@ -41,7 +41,7 @@ gaussfit_workspace *
 gaussfit_alloc(const size_t n, const size_t p)
 {
   gaussfit_workspace *w;
-  const gsl_multifit_nlinear_type *T = gsl_multifit_nlinear_lm;
+  const gsl_multifit_nlinear_type *T = gsl_multifit_nlinear_trust;
   gsl_multifit_nlinear_parameters fdf_params =
     gsl_multifit_nlinear_default_parameters();
 
@@ -130,7 +130,7 @@ gaussfit(const double *t, const double *y,
   fdf.p = w->p;
   fdf.params = &data;
 
-  s = gsl_multifit_nlinear_init(&fdf, w->c, w->nlinear_workspace_p);
+  s = gsl_multifit_nlinear_init(w->c, &fdf, w->nlinear_workspace_p);
   if (s)
     return s;
 
