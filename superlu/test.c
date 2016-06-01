@@ -121,7 +121,7 @@ test_superlu()
           slu_proc(C, rhs->data, x_slu->data, w);
           gsl_vector_scale(x_slu, scale);
 
-          gsl_test_abs(w->residual, 0.0, 1.0e-8, "residual n = %zu, i = %zu cond = %.12e",
+          gsl_test_abs(w->rnorm, 0.0, 1.0e-8, "residual n = %zu, i = %zu cond = %.12e",
                        n, i, 1.0 / w->rcond);
 
           test_vectors(x_slu->data, x_gsl->data, n);

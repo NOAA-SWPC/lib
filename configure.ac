@@ -12,6 +12,8 @@ AC_PROG_FC
 AC_PROG_INSTALL
 AC_PROG_LIBTOOL
 
+AC_SUBST(DATAHOME)
+
 AC_CONFIG_FILES([            \
   Makefile                   \
   apex/Makefile              \
@@ -31,6 +33,7 @@ AC_CONFIG_FILES([            \
   invert_eej/Makefile        \
   iri/Makefile               \
   julia/Makefile             \
+  julia/julia.h              \
   lapack_wrapper/Makefile    \
   levmar/Makefile            \
   lis/Makefile               \

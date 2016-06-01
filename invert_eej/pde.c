@@ -31,11 +31,15 @@
 #include "mageq.h"
 #include "lisw.h"
 #include "oct.h"
+#include "superlu.h"
 
 #include "pde.h"
 #include "sigma.h"
 
 #include "pde_common.c"
+
+#define PDE_SOLVER_LIS          0
+#define PDE_SOLVER_SUPERLU      1
 
 static int pde_initialize(time_t t, double longitude, pde_workspace *w);
 static int pde_sigma_tensor(sigma_workspace *sigma_p, pde_workspace *w);
@@ -479,6 +483,7 @@ pde_solve(int compute_winds, double E_phi0, pde_workspace *w)
 {
   double min, max;
   int s = 0;
+  double normb;
 
   w->compute_winds = compute_winds;
   w->E_phi0 = E_phi0;
@@ -508,9 +513,11 @@ pde_solve(int compute_winds, double E_phi0, pde_workspace *w)
   gsl_vector_minmax(w->b, &min, &max);
   pde_debug(w, "pde_solve: rhs minimum element = %.4e, maximum element = %.4e\n", min, max);
 
+  normb = gsl_blas_dnrm2(w->b);
+
   pde_debug(w, "pde_solve: computing psi solution...");
   s += pde_compute_psi(w);
-  pde_debug(w, "done (residual norm = %.12e, relative residual norm = %.12e)\n", w->residual, w->rrnorm);
+  pde_debug(w, "done (residual norm = %.12e, relative residual norm = %.12e)\n", w->residual, w->residual / normb);
 
 #if 0
   pde_debug(w, "pde_solve: checking psi solution...");
@@ -1368,13 +1375,14 @@ pde_compute_psi(pde_workspace *w)
    *
    * does NOT work: superlu
    */
+#if PDE_SOLVER_LIS
+
   {
     lis_workspace *lis_p = lis_alloc(w->S->size1, w->S->size2);
     const double tol = 1.0e-6;
 
     s = lis_proc(w->S, w->b->data, tol, w->psi->data, lis_p);
     w->residual = lis_p->rnorm;
-    w->rrnorm = lis_p->rrnorm;
 
     mylis_free(lis_p);
 
@@ -1383,6 +1391,26 @@ pde_compute_psi(pde_workspace *w)
     if (s)
       fprintf(stderr, "pde_compute_psi: lis_proc failed: s = %d\n", s);
   }
+
+#elif PDE_SOLVER_SUPERLU
+
+  {
+    slu_workspace *superlu_p = slu_alloc(w->S->size1, w->S->size2, 1);
+    gsl_spmatrix *C = gsl_spmatrix_compcol(w->S);
+
+    s = slu_proc(C, w->b->data, w->psi->data, superlu_p);
+    w->residual = superlu_p->rnorm;
+
+    slu_free(superlu_p);
+    gsl_spmatrix_free(C);
+
+    printv_octave(w->psi, "psi_superlu");
+
+    if (s)
+      fprintf(stderr, "pde_compute_psi: slu_proc failed: s = %d\n", s);
+  }
+
+#endif
 
 #else
 

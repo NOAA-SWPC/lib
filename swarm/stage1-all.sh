@@ -11,5 +11,5 @@ if test -n "$1"; then
 fi
 
 for year in $(seq 2013 2016); do
-  screen -d -m -S pSwarm${sat}_${year} sh stage1.sh ${sat} ${year}
+  screen -d -m -S pSwarm${sat}_${year} sh stage1_luhr.sh ${sat} ${year}
 done

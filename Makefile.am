@@ -19,7 +19,6 @@ SUBDIRS =         \
 	mageq           \
 	peak            \
 	superlu         \
-	gd              \
 	hwm             \
 	cond            \
   pomme           \
@@ -30,6 +29,7 @@ SUBDIRS =         \
   estist          \
   poltor          \
   invert_eej      \
+	pca             \
   swarm           \
-	pca
+	gd
 #XXX  mfield          

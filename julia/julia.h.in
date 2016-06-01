@@ -17,8 +17,8 @@
 
 #define JULIA_LON_RAD          (JULIA_LON * M_PI / 180.0)
 
-#define JULIA_AVG_IDX_FILE "/nfs/satmag/palken/JULIA/julia_avg.idx"
-#define JULIA_IDX_FILE     "/nfs/satmag/palken/JULIA/julia.idx"
+#define JULIA_AVG_IDX_FILE     "@DATAHOME@/palken/JULIA/julia_avg.idx"
+#define JULIA_IDX_FILE         "@DATAHOME@/palken/JULIA/julia.idx"
 
 typedef struct
 {

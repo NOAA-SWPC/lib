@@ -58,7 +58,7 @@ slu_alloc(int size1, int size2, int nprocs)
 
   w->nprocs = nprocs;
   w->nrhs = 1;
-  w->residual = 0.0;
+  w->rnorm = 0.0;
   w->rcond = 0.0;
 
   w->options.nprocs = nprocs;
@@ -120,7 +120,7 @@ slu_free(slu_workspace *w)
 double
 slu_residual(slu_workspace *w)
 {
-  return w->residual;
+  return w->rnorm;
 }
 
 #if 0
@@ -206,7 +206,7 @@ slu_proc(const gsl_spmatrix *A, const double *rhs, double *sol, slu_workspace *w
   /* compute residual */
   gsl_vector_memcpy(w->rhs_copy, &vrhs.vector);
   gsl_spblas_dgemv(CblasNoTrans, 1.0, A, &vsol.vector, -1.0, w->rhs_copy);
-  w->residual = gsl_blas_dnrm2(w->rhs_copy);
+  w->rnorm = gsl_blas_dnrm2(w->rhs_copy);
 
   Destroy_SuperMatrix_Store(&(w->A));
   Destroy_SuperMatrix_Store(&(w->B));
@@ -242,6 +242,12 @@ slu_proc(const gsl_spmatrix *A, const double *rhs, double *sol, slu_workspace *w
   int *rind = malloc(nnz * sizeof(int));
   double *data = malloc(nnz * sizeof(double));
   size_t i;
+
+  if (!GSL_SPMATRIX_ISCCS(A))
+    {
+      fprintf(stderr, "slu_proc: error: matrix must be in CCS format\n");
+      return -1;
+    }
 
   /* make copy of rhs vector */
   gsl_vector_memcpy(w->rhs_copy, &vrhs.vector);
@@ -308,7 +314,7 @@ slu_proc(const gsl_spmatrix *A, const double *rhs, double *sol, slu_workspace *w
   /* compute residual */
   gsl_vector_memcpy(w->rhs_copy, &vrhs.vector);
   gsl_spblas_dgemv(CblasNoTrans, 1.0, A, &vsol.vector, -1.0, w->rhs_copy);
-  w->residual = gsl_blas_dnrm2(w->rhs_copy);
+  w->rnorm = gsl_blas_dnrm2(w->rhs_copy);
 
   Destroy_SuperMatrix_Store(&(w->A));
   Destroy_SuperMatrix_Store(&(w->B));
