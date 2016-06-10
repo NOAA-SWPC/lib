@@ -1,6 +1,7 @@
 lib_LTLIBRARIES = libmag.la
 
 libmag_la_SOURCES =        \
+  cfg.c                    \
 	coord.c                  \
 	geod2geoc.c              \
 	green.c                  \
@@ -27,7 +28,7 @@ AM_CFLAGS = -Wall -W
 
 AM_CPPFLAGS = -I/home/palken/usr/include -I$(top_builddir)/common -I$(top_builddir)/mageq -I$(top_builddir)/pomme -I$(top_builddir)/cond -I$(top_builddir)/apex -I$(top_builddir)/hwm -I$(top_builddir)/iri -I$(top_builddir)/msis -I$(top_builddir)/lis -I$(top_builddir)/msynth -I$(top_builddir)/julia -I$(top_builddir)/curvefit -I$(top_builddir)/efi -I$(top_builddir)/track -I$(top_builddir)/superlu
 
-main_LDADD = libmag.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/hwm/libhwm.la $(top_builddir)/mageq/libmageq.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/cond/libcond.la $(top_builddir)/iri/libiri.la $(top_builddir)/msis/libmsis.la $(top_builddir)/lis/libmylis.la $(top_builddir)/superlu/libsuperlu.la $(top_builddir)/track/libtrack.la -lm -lsatdata -lcdf -llapack -lsuperlu_mt_OPENMP -lindices -llis -lgsl -lptcblas -lptf77blas -latlas -lgfortran -lpthread
+main_LDADD = libmag.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/hwm/libhwm.la $(top_builddir)/mageq/libmageq.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/cond/libcond.la $(top_builddir)/iri/libiri.la $(top_builddir)/msis/libmsis.la $(top_builddir)/lis/libmylis.la $(top_builddir)/superlu/libsuperlu.la $(top_builddir)/track/libtrack.la -lm -lsatdata -lcdf -llapack -lsuperlu_mt_OPENMP -lindices -llis -lgsl -lptcblas -lptf77blas -latlas -lgfortran -lpthread -lconfig
 
 swarmeef_print_LDADD = libmag.la $(top_builddir)/common/libcommon.la -lsatdata -lcdf -lindices -lgsl -lgslcblas -lm
 

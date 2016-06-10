@@ -25,8 +25,8 @@
 #include "mag.h"
 #include "pde.h"
 
-static int mag_track_datagap(const size_t sidx, const size_t eidx,
-                             const satdata_mag *data);
+static int mag_track_datagap(const double dlat_max, const size_t sidx,
+                             const size_t eidx, const satdata_mag *data);
 static int mag_compute_F1(const double t_eq, const double phi_eq,
                           const size_t sidx, const size_t eidx,
                           const satdata_mag *data, mag_workspace *w);
@@ -104,7 +104,7 @@ mag_alloc(mag_params *params)
     w->inverteef_workspace_p = inverteef_alloc(&inverteef_params);
   }
 
-  w->kp_workspace_p = kp_alloc(KP_IDX_FILE);
+  w->kp_workspace_p = kp_alloc(params->kp_file);
 
   w->log_general = log_alloc(LOG_APPEND|LOG_TIMESTAMP, "%s/invert.log", params->log_dir);
   w->log_profile = log_alloc(LOG_WRITE, "%s/profile.dat", params->log_dir);
@@ -272,7 +272,7 @@ mag_preproc(const mag_params *params, track_workspace *track_p,
   /* flag high kp data */
   {
     const double kp_min = 0.0;
-    const double kp_max = MAG_MAX_KP;
+    const double kp_max = params->kp_max;
     size_t nkp = track_flag_kp(kp_min, kp_max, data, track_p);
 
     log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) data due to kp [%g,%g]\n",
@@ -376,7 +376,7 @@ mag_proc(const mag_params *params, track_workspace *track_p,
         }
 
       /* check for data gaps */
-      s = mag_track_datagap(sidx, eidx, data);
+      s = mag_track_datagap(params->dlat_max, sidx, eidx, data);
       if (s)
         {
           ++nrejgap;
@@ -520,7 +520,8 @@ mag_track_datagap()
 */
 
 static int
-mag_track_datagap(const size_t sidx, const size_t eidx,
+mag_track_datagap(const double dlat_max,
+                  const size_t sidx, const size_t eidx,
                   const satdata_mag *data)
 {
   size_t i;
@@ -530,7 +531,7 @@ mag_track_datagap(const size_t sidx, const size_t eidx,
       double prevlat = data->latitude[i - 1];
       double lat = data->latitude[i];
 
-      if (fabs(lat - prevlat) > MAG_DLAT)
+      if (fabs(lat - prevlat) > dlat_max)
         return -1;
     }
 

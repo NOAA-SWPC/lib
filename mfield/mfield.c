@@ -384,7 +384,7 @@ mfield_free(mfield_workspace *w)
     fclose(w->fp_dZ);
 
   if (w->nlinear_workspace_p)
-    gsl_multilarge_regnlinear_free(w->nlinear_workspace_p);
+    gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
 
   if (w->eigen_workspace_p)
     gsl_eigen_symm_free(w->eigen_workspace_p);
@@ -565,6 +565,7 @@ int
 mfield_calc_uncertainties(mfield_workspace *w)
 {
   int s = GSL_SUCCESS;
+#if 0 /* XXX */
   /*
    * compute uncertainties only for internal field coefficients; the
    * external field coefficients could be zero for many days (if no
@@ -601,13 +602,16 @@ mfield_calc_uncertainties(mfield_workspace *w)
   /* scale by sigma^2 */
   gsl_matrix_scale(w->covar, sigmasq);
 
+#endif
+
   return s;
 } /* mfield_calc_uncertainties() */
 
 int
 mfield_calc_evals(gsl_vector *evals, mfield_workspace *w)
 {
-  int s;
+  int s = GSL_SUCCESS;
+#if 0 /* XXX */
   gsl_matrix * JTJ = gsl_multilarge_regnlinear_JTJ(w->nlinear_workspace_p);
   gsl_matrix * A = gsl_matrix_alloc(w->p, w->p);
 
@@ -618,6 +622,7 @@ mfield_calc_evals(gsl_vector *evals, mfield_workspace *w)
   gsl_sort_vector(evals);
 
   gsl_matrix_free(A);
+#endif
 
   return s;
 }

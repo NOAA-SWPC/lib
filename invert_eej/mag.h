@@ -20,16 +20,6 @@
 #include "pde.h"
 #include "track.h"
 
-/* local time window for equator crossings */
-#define MAG_LT_MIN             (6.0)
-#define MAG_LT_MAX             (18.0)
-
-/* maximum latitude spacing to allow for data gaps */
-#define MAG_DLAT               (2.0)
-
-/* maximum kp index for track processing */
-#define MAG_MAX_KP             (20.0)
-
 /* maximum QD latitude for track processing */
 #define MAG_MAX_QD_LATITUDE    (65.0)
 
@@ -41,6 +31,7 @@ typedef struct
   int year;                       /* year of measurements for QD transforms */
   char *log_dir;                  /* log directory */
   char *output_file;              /* output file */
+  double kp_max;                  /* maximum allowed kp */
   double lt_min;                  /* minimum local time (hours) */
   double lt_max;                  /* maximum local time (hours) */
   double lon_min;                 /* minimum longitude (degrees) */
@@ -56,8 +47,12 @@ typedef struct
   double curr_altitude;           /* altitude of line currents (km) */
   size_t ncurr;                   /* number of line currents */
   double qdlat_max;               /* maximum QD latitude for line currents (deg) */
+  double dlat_max;                /* maximum latitude data gap allowed (deg) */
   int profiles_only;              /* compute profiles only (no EEF) */
   int use_vector;                 /* use vector data instead of scalar */
+  double r_earth;                 /* Earth radius (km) */
+
+  char *kp_file;                  /* KP data file */
 } mag_params;
 
 /* store 1 satellite track */

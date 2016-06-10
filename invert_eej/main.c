@@ -7,14 +7,85 @@
 #include <math.h>
 #include <getopt.h>
 #include <time.h>
+#include <libconfig.h>
 
 #include <satdata/satdata.h>
 
+#include "cfg.h"
 #include "common.h"
 #include "mag.h"
 #include "track.h"
 
-void
+static int
+fill_parameters(mag_params *params)
+{
+  int s = 0;
+
+  if (cfg_params.kp_data_file != NULL)
+    params->kp_file = (char *) cfg_params.kp_data_file;
+  if (cfg_params.log_dir != NULL)
+    params->log_dir = (char *) cfg_params.log_dir;
+  if (cfg_params.lt_min >= 0.0)
+    params->lt_min = cfg_params.lt_min;
+  if (cfg_params.lt_max >= 0.0)
+    params->lt_max = cfg_params.lt_max;
+  if (cfg_params.max_lat_gap >= 0.0)
+    params->dlat_max = cfg_params.max_lat_gap;
+  if (cfg_params.r_earth >= 0.0)
+    params->r_earth = cfg_params.r_earth;
+  if (cfg_params.curr_altitude >= 0.0)
+    params->curr_altitude = cfg_params.curr_altitude;
+  if (cfg_params.kp_max >= 0.0)
+    params->kp_max = cfg_params.kp_max;
+  if (cfg_params.lon_min >= -1000.0)
+    params->lon_min = cfg_params.lon_min;
+  if (cfg_params.lon_max >= -1000.0)
+    params->lon_max = cfg_params.lon_max;
+  if (cfg_params.ncurr >= 0)
+    params->ncurr = (size_t) cfg_params.ncurr;
+  if (cfg_params.sq_nmax_int >= 0)
+    params->sq_nmax_int = (size_t) cfg_params.sq_nmax_int;
+  if (cfg_params.sq_mmax_int >= 0)
+    params->sq_mmax_int = (size_t) cfg_params.sq_mmax_int;
+  if (cfg_params.sq_nmax_ext >= 0)
+    params->sq_nmax_ext = (size_t) cfg_params.sq_nmax_ext;
+  if (cfg_params.sq_mmax_ext >= 0)
+    params->sq_mmax_ext = (size_t) cfg_params.sq_mmax_ext;
+
+  return s;
+}
+
+static int
+parse_config_file(const char *filename, mag_params *params)
+{
+  int s;
+  config_t cfg;
+  config_setting_t *setting;
+  double fval;
+  char *strptr;
+
+  config_init(&cfg);
+
+  s = config_read_file(&cfg, filename);
+  if (!s)
+    {
+      fprintf(stderr, "parse_config_file: %s:%d - %s\n",
+              config_error_file(&cfg),
+              config_error_line(&cfg),
+              config_error_text(&cfg));
+      config_destroy(&cfg);
+      return -1;
+    }
+
+  if (config_lookup_float(&cfg, "qdlat_max", &fval))
+    params->qdlat_max = fval;
+
+  config_destroy(&cfg);
+
+  return 0;
+}
+
+static void
 print_help(char *argv[])
 {
   fprintf(stderr, "Usage: %s [options]\n", argv[0]);
@@ -48,16 +119,18 @@ main(int argc, char *argv[])
   struct timeval tv0, tv1;
   mag_workspace *mag_workspace_p;
   track_workspace *track_workspace_p;
+  cfg_workspace *config_workspace_p = NULL;
   mag_params params;
 
+  params.kp_max = 20.0;
   params.year = -1; /* filled in below */
   params.log_dir = "log";
   params.output_file = NULL;
   params.curr_altitude = 110.0;
   params.ncurr = 161;
   params.qdlat_max = 20.0;
-  params.lt_min = MAG_LT_MIN;
-  params.lt_max = MAG_LT_MAX;
+  params.lt_min = 6.0;
+  params.lt_max = 18.0;
   params.lon_min = -200.0;
   params.lon_max = 200.0;
   params.season_min = 0.0;
@@ -66,12 +139,16 @@ main(int argc, char *argv[])
   params.season_max2 = -1.0;
   params.profiles_only = 0;
   params.use_vector = 0;
+  params.dlat_max = 2.0;
+  params.r_earth = 6371.2;
 
   /* spherical harmonic degrees for Sq filter */
   params.sq_nmax_int = 12;
   params.sq_mmax_int = 0;
   params.sq_nmax_ext = 1;
   params.sq_mmax_ext = 1;
+
+  params.kp_file = KP_IDX_FILE;
 
   while (1)
     {
@@ -99,10 +176,11 @@ main(int argc, char *argv[])
           { "sq_nmax_ext", required_argument, NULL, 'v' },
           { "sq_mmax_ext", required_argument, NULL, 'w' },
           { "vector", required_argument, NULL, 'z' },
+          { "kp_max", required_argument, NULL, 'A' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:s:t:u:v:w:z", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:s:t:u:v:w:zA:C:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -226,6 +304,16 @@ main(int argc, char *argv[])
             params.use_vector = 1;
             break;
 
+          case 'A':
+            params.kp_max = atof(optarg);
+            break;
+
+          case 'C':
+            fprintf(stderr, "main: reading config file %s...", optarg);
+            config_workspace_p = cfg_alloc(optarg);
+            fprintf(stderr, "done\n");
+            break;
+
           default:
             print_help(argv);
             exit(1);
@@ -239,7 +327,10 @@ main(int argc, char *argv[])
       exit(1);
     }
 
-  fprintf(stderr, "main: maximum allowed kp:      %.1f\n", MAG_MAX_KP);
+  if (config_workspace_p)
+    fill_parameters(&params);
+
+  fprintf(stderr, "main: maximum allowed kp:      %.1f\n", params.kp_max);
   fprintf(stderr, "main: line current shell:      %.1f [km]\n", params.curr_altitude);
   fprintf(stderr, "main: number of line currents: %zu\n", params.ncurr);
   fprintf(stderr, "main: LT min:                  %.1f [h]\n", params.lt_min);
@@ -267,6 +358,9 @@ main(int argc, char *argv[])
   mag_free(mag_workspace_p);
   satdata_mag_free(data);
   track_free(track_workspace_p);
+
+  if (config_workspace_p)
+    cfg_free(config_workspace_p);
 
   return 0;
 } /* main() */

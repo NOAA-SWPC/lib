@@ -21,7 +21,7 @@
 
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      0
+#define MFIELD_SYNTH_DATA      1
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
@@ -34,10 +34,10 @@
 #endif
 
 /* fit Euler angles to data */
-#define MFIELD_FIT_EULER       1
+#define MFIELD_FIT_EULER       0
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    1
+#define MFIELD_FIT_EXTFIELD    0
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)
@@ -138,7 +138,7 @@ typedef struct
   gsl_matrix *mat_dY;      /* dY/dg ndata-by-nnm */
   gsl_matrix *mat_dZ;      /* dZ/dg ndata-by-nnm */
   gsl_multifit_nlinear_workspace *multifit_nlinear_p;
-  gsl_multilarge_regnlinear_workspace *nlinear_workspace_p;
+  gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
   gsl_matrix *block_J;     /* Jacobian matrix block, 4*data_block-by-p */
   gsl_vector *block_f;     /* residual vector block, 4*data_block-by-1 */
   gsl_vector *wts;         /* weights vector, 4*data_block-by-1 */
