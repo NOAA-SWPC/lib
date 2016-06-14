@@ -49,8 +49,8 @@ pde_sighandler(int sig)
 } /* pde_sighandler() */
 
 sigma_workspace *
-sigma_alloc(size_t nr, size_t ntheta, double rmin, double rmax,
-            double theta_min, double theta_max)
+sigma_alloc(const char *f107_file, size_t nr, size_t ntheta,
+            double rmin, double rmax, double theta_min, double theta_max)
 {
   sigma_workspace *w;
 
@@ -70,7 +70,7 @@ sigma_alloc(size_t nr, size_t ntheta, double rmin, double rmax,
       return 0;
     }
 
-  w->cond_workspace_p = cond_alloc(nr, F107_IDX_FILE);
+  w->cond_workspace_p = cond_alloc(nr, f107_file);
   if (!w->cond_workspace_p)
     {
       sigma_free(w);

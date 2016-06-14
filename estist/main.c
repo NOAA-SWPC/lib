@@ -68,7 +68,7 @@ main(int argc, char *argv[])
     }
 
   dst_p = dst_alloc(DST_IDX_FILE);
-  estist_calc_p = estist_calc_alloc();
+  estist_calc_p = estist_calc_alloc(DST_IDX_FILE);
 
   gmtime_r(&t0, &tmp);
   asctime_r(&tmp, buf);

@@ -80,7 +80,7 @@ pde_alloc(pde_parameters *params)
 
   nrt = w->nr * w->ntheta;
 
-  w->hwm_workspace_p = hwm_alloc(F107_IDX_FILE);
+  w->hwm_workspace_p = hwm_alloc(params->f107_file);
   if (!w->hwm_workspace_p)
     {
       pde_free(w);
@@ -204,7 +204,7 @@ pde_alloc(pde_parameters *params)
         }
     }
 
-  w->sigma_workspace_p = sigma_alloc(w->nr, w->ntheta,
+  w->sigma_workspace_p = sigma_alloc(params->f107_file, w->nr, w->ntheta,
                                      w->rmin, w->rmax,
                                      w->theta_min, w->theta_max);
 

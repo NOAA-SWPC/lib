@@ -81,6 +81,7 @@ typedef struct
   double rmax;       /* maximum radius in m */
   double theta_min;  /* minimum theta in radians */
   double theta_max;  /* maximum theta in radians */
+  char *f107_file;   /* f10.7 data file */
 } pde_parameters;
 
 typedef struct

@@ -34,12 +34,6 @@ static cfg_struct cfg_dirs[] = {
   { "lith_cof_file", &(cfg_params.lith_cof_file), CFG_STRING|CFG_OPTIONAL },
   { "core_cof_file", &(cfg_params.core_cof_file), CFG_STRING|CFG_OPTIONAL },
 
-  { "pmf_cof_file", &(cfg_params.pmf_cof_file), CFG_STRING|CFG_OPTIONAL },
-  { "pmf_sm_file", &(cfg_params.pmf_sm_file), CFG_STRING|CFG_OPTIONAL },
-  { "pmf_gsm_file", &(cfg_params.pmf_gsm_file), CFG_STRING|CFG_OPTIONAL },
-  { "pomme_residual_deg", &(cfg_params.pomme_residual_deg), CFG_INT|CFG_OPTIONAL },
-  { "pde_int_deg", &(cfg_params.pde_int_deg), CFG_INT|CFG_OPTIONAL },
-
   { "min_local_time", &(cfg_params.lt_min), CFG_DOUBLE|CFG_OPTIONAL },
   { "max_local_time", &(cfg_params.lt_max), CFG_DOUBLE|CFG_OPTIONAL },
   { "max_latitude_gap", &(cfg_params.max_lat_gap), CFG_DOUBLE|CFG_OPTIONAL },
@@ -69,6 +63,9 @@ static cfg_struct cfg_dirs[] = {
   { "sq_mmax_int", &(cfg_params.sq_mmax_int), CFG_INT|CFG_OPTIONAL },
   { "sq_nmax_ext", &(cfg_params.sq_nmax_ext), CFG_INT|CFG_OPTIONAL },
   { "sq_mmax_ext", &(cfg_params.sq_mmax_ext), CFG_INT|CFG_OPTIONAL },
+
+  { "calc_field_models", &(cfg_params.calc_field_models), CFG_INT|CFG_OPTIONAL },
+  { "main_nmax_int", &(cfg_params.main_nmax_int), CFG_INT|CFG_OPTIONAL },
 
   { 0, 0, 0 }
 };

@@ -21,8 +21,16 @@ fill_parameters(mag_params *params)
 {
   int s = 0;
 
+  if (cfg_params.core_cof_file != NULL)
+    params->core_file = (char *) cfg_params.core_cof_file;
+  if (cfg_params.lith_cof_file != NULL)
+    params->lith_file = (char *) cfg_params.lith_cof_file;
   if (cfg_params.kp_data_file != NULL)
     params->kp_file = (char *) cfg_params.kp_data_file;
+  if (cfg_params.f107_data_file != NULL)
+    params->f107_file = (char *) cfg_params.f107_data_file;
+  if (cfg_params.dst_data_file != NULL)
+    params->dst_file = (char *) cfg_params.dst_data_file;
   if (cfg_params.log_dir != NULL)
     params->log_dir = (char *) cfg_params.log_dir;
   if (cfg_params.lt_min >= 0.0)
@@ -51,6 +59,10 @@ fill_parameters(mag_params *params)
     params->sq_nmax_ext = (size_t) cfg_params.sq_nmax_ext;
   if (cfg_params.sq_mmax_ext >= 0)
     params->sq_mmax_ext = (size_t) cfg_params.sq_mmax_ext;
+  if (cfg_params.calc_field_models >= 0)
+    params->calc_field_models = cfg_params.calc_field_models;
+  if (cfg_params.main_nmax_int >= 0)
+    params->main_nmax_int = cfg_params.main_nmax_int;
 
   return s;
 }
@@ -149,6 +161,13 @@ main(int argc, char *argv[])
   params.sq_mmax_ext = 1;
 
   params.kp_file = KP_IDX_FILE;
+  params.f107_file = F107_IDX_FILE;
+  params.dst_file = DST_IDX_FILE;
+
+  params.calc_field_models = 0;
+  params.core_file = NULL;
+  params.lith_file = NULL;
+  params.main_nmax_int = 15;
 
   while (1)
     {

@@ -25,7 +25,7 @@ main()
   int s = 0;
 
   dst_p = dst_alloc(DST_IDX_FILE);
-  estist_calc_p = estist_calc_alloc();
+  estist_calc_p = estist_calc_alloc(DST_IDX_FILE);
 
   /* start/end dates */
   t0 = 1112076000; /* Mar 29 06:00:00 2005 */

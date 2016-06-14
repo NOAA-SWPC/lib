@@ -41,7 +41,7 @@ typedef struct
  * Prototypes
  */
 
-sigma_workspace *sigma_alloc(size_t nr, size_t ntheta, double rmin,
+sigma_workspace *sigma_alloc(const char *f107_file, size_t nr, size_t ntheta, double rmin,
                              double rmax, double theta_min,
                              double theta_max);
 void sigma_free(sigma_workspace *w);

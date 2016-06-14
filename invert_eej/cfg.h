@@ -27,11 +27,6 @@ typedef struct
   const char *igrf_cof_file;   /* IGRF coefficient file */
   const char *lith_cof_file;   /* Lithospheric field coef file */
   const char *core_cof_file;   /* Core field coefficient file */
-  const char *pmf_cof_file;    /* location of PMF coefficient file */
-  const char *pmf_sm_file;     /* location of POMME SM file */
-  const char *pmf_gsm_file;    /* location of POMME GSM file */
-  int pomme_residual_deg;      /* POMME main field degree for residuals */
-  int pde_int_deg;             /* POMME main field degree for PDE solver */
   double lt_min;               /* minimum allowed local time */
   double lt_max;               /* maximum allowed local time */
   double max_lat_gap;          /* maximum allowed latitude gap (degrees) */
@@ -55,6 +50,8 @@ typedef struct
   int sq_mmax_int;             /* internal spherical harmonic order for Sq filter */
   int sq_nmax_ext;             /* external spherical harmonic degree for Sq filter */
   int sq_mmax_ext;             /* external spherical harmonic order for Sq filter */
+  int calc_field_models;       /* calculate along-track field models */
+  int main_nmax_int;           /* spherical harmonic degree for core field model */
 } cfg_parameters;
 
 typedef struct

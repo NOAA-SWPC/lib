@@ -27,6 +27,8 @@
 
 static int mag_track_datagap(const double dlat_max, const size_t sidx,
                              const size_t eidx, const satdata_mag *data);
+static int mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
+                                 satdata_mag *data, mag_workspace *w);
 static int mag_compute_F1(const double t_eq, const double phi_eq,
                           const size_t sidx, const size_t eidx,
                           const satdata_mag *data, mag_workspace *w);
@@ -92,6 +94,7 @@ mag_alloc(mag_params *params)
     pde_params.theta_min = 65.0 * M_PI / 180.0;
     pde_params.theta_max = 115.0 * M_PI / 180.0;
     pde_params.ntheta = 101;
+    pde_params.f107_file = params->f107_file;
 
     w->pde_workspace_p = pde_alloc(&pde_params);
 
@@ -105,6 +108,32 @@ mag_alloc(mag_params *params)
   }
 
   w->kp_workspace_p = kp_alloc(params->kp_file);
+
+  {
+    pomme_parameters pomme_params;
+
+    pomme_params.r_earth = params->r_earth;
+    pomme_params.dst_file = params->dst_file;
+    pomme_params.f107_file = params->f107_file;
+    pomme_params.ace_file = NULL;
+    pomme_params.ndeg = 15;
+
+    w->pomme_workspace_p = pomme_alloc(&pomme_params);
+  }
+
+  if (params->core_file)
+    {
+      w->core_workspace_p = msynth_chaos_read(params->core_file);
+      msynth_set(1, params->main_nmax_int, w->core_workspace_p);
+    }
+
+  if (params->lith_file)
+    w->lith_workspace_p = msynth_chaos_read(params->lith_file);
+
+  if (params->calc_field_models)
+    {
+      w->estist_calc_workspace_p = estist_calc_alloc(params->dst_file);
+    }
 
   w->log_general = log_alloc(LOG_APPEND|LOG_TIMESTAMP, "%s/invert.log", params->log_dir);
   w->log_profile = log_alloc(LOG_WRITE, "%s/profile.dat", params->log_dir);
@@ -165,6 +194,18 @@ mag_free(mag_workspace *w)
 
   if (w->kp_workspace_p)
     kp_free(w->kp_workspace_p);
+
+  if (w->pomme_workspace_p)
+    pomme_free(w->pomme_workspace_p);
+
+  if (w->core_workspace_p)
+    msynth_free(w->core_workspace_p);
+
+  if (w->lith_workspace_p)
+    msynth_free(w->lith_workspace_p);
+
+  if (w->estist_calc_workspace_p)
+    estist_calc_free(w->estist_calc_workspace_p);
 
   if (w->log_general)
     log_free(w->log_general);
@@ -392,6 +433,19 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       fprintf(stderr, "mag_proc: found track %zu, %s, lon = %g, lt = %g, kp = %g, dir = %d\n",
               ntrack, buf, lon_eq, lt_eq, kp, dir);
 
+      if (params->calc_field_models)
+        {
+          /* compute along-track main, crustal, external field model values */
+
+          fprintf(stderr, "mag_proc: computing along-track field models...");
+
+          s = mag_calc_field_models(tptr->t_eq, sidx, eidx, data, w);
+          if (s)
+            return s;
+
+          fprintf(stderr, "done\n");
+        }
+
       /*
        * store track in workspace, compute magnetic coordinates, and
        * F^(1) residuals
@@ -537,6 +591,65 @@ mag_track_datagap(const double dlat_max,
 
   return 0;
 } /* mag_track_datagap() */
+
+/*
+mag_calc_field_models()
+  Compute along-track main, crustal and external field model values
+
+Inputs: t_eq - time of equator crossing (CDF_EPOCH)
+        sidx - start index
+        eidx - end idx
+        data - satellite data
+        w    - workspace
+*/
+
+static int
+mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
+                      satdata_mag *data, mag_workspace *w)
+{
+  int s = 0;
+  size_t i;
+  double Est, Ist;
+  time_t unixtime_eq = satdata_epoch2timet(t_eq);
+
+  /* compute Est/Ist for this track; only need to retrieve once per track */
+  s = estist_calc_get(unixtime_eq, &Est, &Ist, w->estist_calc_workspace_p);
+  if (s)
+    return s;
+
+  for (i = sidx; i <= eidx; ++i)
+    {
+      time_t t = satdata_epoch2timet(data->t[i]);
+      double tyr = satdata_epoch2year(data->t[i]);
+      double alt = data->altitude[i];
+      double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
+      double phi = data->longitude[i] * M_PI / 180.0;
+      double B_main[4], B_crust[4], B_ext[4];
+
+      /* compute core field */
+      msynth_eval(tyr, alt + w->params->r_earth, theta, phi, B_main, w->core_workspace_p);
+
+      SATDATA_VEC_X(data->B_main, i) = B_main[0];
+      SATDATA_VEC_Y(data->B_main, i) = B_main[1];
+      SATDATA_VEC_Z(data->B_main, i) = B_main[2];
+
+      /* compute crustal field */
+      msynth_eval(tyr, alt + w->params->r_earth, theta, phi, B_crust, w->lith_workspace_p);
+
+      SATDATA_VEC_X(data->B_crust, i) = B_crust[0];
+      SATDATA_VEC_Y(data->B_crust, i) = B_crust[1];
+      SATDATA_VEC_Z(data->B_crust, i) = B_crust[2];
+
+      /* compute external field */
+      pomme_calc_ext2(theta, phi, t, alt, Est, Ist, B_ext, w->pomme_workspace_p);
+
+      SATDATA_VEC_X(data->B_ext, i) = B_ext[0];
+      SATDATA_VEC_Y(data->B_ext, i) = B_ext[1];
+      SATDATA_VEC_Z(data->B_ext, i) = B_ext[2];
+    }
+
+  return s;
+}
 
 /*
 mag_compute_F1()

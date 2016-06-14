@@ -13,13 +13,13 @@
 #include "estist_calc.h"
 
 estist_calc_workspace *
-estist_calc_alloc()
+estist_calc_alloc(const char *dst_file)
 {
   estist_calc_workspace *w;
 
   w = calloc(1, sizeof(estist_calc_workspace));
 
-  w->dst_workspace_p = dst_alloc(DST_IDX_FILE);
+  w->dst_workspace_p = dst_alloc(dst_file);
 
   w->model = 1;
 

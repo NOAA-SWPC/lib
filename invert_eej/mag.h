@@ -13,11 +13,14 @@
 #include <gsl/gsl_multifit.h>
 
 #include "apex.h"
+#include "estist_calc.h"
 #include "green.h"
 #include "log.h"
 #include "inverteef.h"
 #include "mageq.h"
+#include "msynth.h"
 #include "pde.h"
+#include "pomme.h"
 #include "track.h"
 
 /* maximum QD latitude for track processing */
@@ -51,8 +54,15 @@ typedef struct
   int profiles_only;              /* compute profiles only (no EEF) */
   int use_vector;                 /* use vector data instead of scalar */
   double r_earth;                 /* Earth radius (km) */
+  int calc_field_models;          /* compute along-track field models? */
+  int main_nmax_int;              /* spherical harmonic degree for core field model */
 
   char *kp_file;                  /* KP data file */
+  char *f107_file;                /* F10.7 data file */
+  char *dst_file;                 /* DST data file */
+
+  char *core_file;                /* Core field file */
+  char *lith_file;                /* lithospheric field file */
 } mag_params;
 
 /* store 1 satellite track */
@@ -253,6 +263,10 @@ typedef struct
 
   green_workspace *green_workspace_p;
   kp_workspace *kp_workspace_p;
+  pomme_workspace *pomme_workspace_p;
+  estist_calc_workspace *estist_calc_workspace_p;
+  msynth_workspace *core_workspace_p;
+  msynth_workspace *lith_workspace_p;
 } mag_workspace;
 
 /*

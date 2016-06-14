@@ -29,7 +29,7 @@ typedef struct
 void weidelt_dst_(int *model, int *ndst, double *dstvec, double *est,
                   double *ist);
 
-estist_calc_workspace *estist_calc_alloc(void);
+estist_calc_workspace *estist_calc_alloc(const char *dst_file);
 void estist_calc_free(estist_calc_workspace *w);
 int estist_calc(int ndst, double dst[], double est[], double ist[],
                 estist_calc_workspace *w);

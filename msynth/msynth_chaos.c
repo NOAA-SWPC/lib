@@ -22,6 +22,7 @@ msynth_workspace *
 msynth_chaos_read(const char *filename)
 {
   FILE *fp;
+  size_t nmin = 0;
   size_t nmax = 0;
   size_t num_epochs = 0;
   int gotheader = 0;
@@ -45,9 +46,12 @@ msynth_chaos_read(const char *filename)
       int offset = 0;
       char *str;
 
+      if (*buffer == '#')
+        continue;
+
       if (!gotheader)
         {
-          size_t nmin, dummy;
+          size_t dummy;
 
           c = sscanf(buffer, "%zu %zu %zu %zu %zu",
                      &nmin,
@@ -92,6 +96,7 @@ msynth_chaos_read(const char *filename)
 
           /* allocate workspace */
           w = msynth_alloc(nmax, num_epochs, epochs);
+          msynth_set(nmin, nmax, w);
 
           gotepochs = 1;
         }
