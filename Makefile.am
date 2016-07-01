@@ -5,22 +5,22 @@ SUBDIRS =         \
   apex            \
   chaos           \
   curvefit        \
-	efi             \
-	green           \
+  efi             \
+  green           \
   grid            \
-	iri             \
-	julia           \
-	lapack_wrapper  \
+  iri             \
+  julia           \
+  lapack_wrapper  \
   levmar          \
-	lis             \
+  lis             \
   lls             \
-	msis            \
+  msis            \
   msynth          \
-	mageq           \
-	peak            \
-	superlu         \
-	hwm             \
-	cond            \
+  mageq           \
+  peak            \
+  superlu         \
+  hwm             \
+  cond            \
   pomme           \
   track           \
   magdata         \
@@ -29,7 +29,7 @@ SUBDIRS =         \
   estist          \
   poltor          \
   invert_eej      \
-	pca             \
+  pca             \
   swarm           \
-	gd
+  gd
 #XXX  mfield          

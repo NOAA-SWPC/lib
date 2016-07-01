@@ -63,6 +63,8 @@ fill_parameters(mag_params *params)
     params->calc_field_models = cfg_params.calc_field_models;
   if (cfg_params.main_nmax_int >= 0)
     params->main_nmax_int = cfg_params.main_nmax_int;
+  if (cfg_params.crust_nmax_int >= 0)
+    params->crust_nmax_int = cfg_params.crust_nmax_int;
 
   return s;
 }

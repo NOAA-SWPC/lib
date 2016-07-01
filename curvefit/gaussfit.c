@@ -52,7 +52,7 @@ gaussfit_alloc(const size_t n, const size_t p)
   w->n = n;
   w->p = p;
 
-  fdf_params.accel = 1;
+  fdf_params.trs = gsl_multifit_nlinear_trs_lmaccel;
   w->nlinear_workspace_p = gsl_multifit_nlinear_alloc(T, &fdf_params, n, p);
 
   w->c = gsl_vector_calloc(p);

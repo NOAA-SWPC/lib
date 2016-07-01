@@ -128,7 +128,10 @@ mag_alloc(mag_params *params)
     }
 
   if (params->lith_file)
-    w->lith_workspace_p = msynth_chaos_read(params->lith_file);
+    {
+      w->lith_workspace_p = msynth_chaos_read(params->lith_file);
+      msynth_set(16, params->crust_nmax_int, w->lith_workspace_p);
+    }
 
   if (params->calc_field_models)
     {

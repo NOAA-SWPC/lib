@@ -66,6 +66,7 @@ static cfg_struct cfg_dirs[] = {
 
   { "calc_field_models", &(cfg_params.calc_field_models), CFG_INT|CFG_OPTIONAL },
   { "main_nmax_int", &(cfg_params.main_nmax_int), CFG_INT|CFG_OPTIONAL },
+  { "crust_nmax_int", &(cfg_params.crust_nmax_int), CFG_INT|CFG_OPTIONAL },
 
   { 0, 0, 0 }
 };

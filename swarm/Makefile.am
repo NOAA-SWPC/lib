@@ -4,7 +4,7 @@ bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust p
 commonlibs = -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas
 
 stage1_SOURCES = stage1.c
-stage1_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lmwmclmcrrt $(abs_top_builddir)/chaos/libchaosext.so
+stage1_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lmwmclmcrrt $(abs_top_builddir)/chaos/libchaosext.so
 
 plotsep_SOURCES = plotsep.c
 plotsep_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs}
@@ -64,4 +64,4 @@ residuals_LDADD = $(top_builddir)/pomme/libpomme.la $(top_builddir)/common/libco
 swarmcdf2fday_SOURCES = swarmcdf2fday.c
 swarmcdf2fday_LDADD = $(top_builddir)/common/libcommon.la -lm ${commonlibs}
 
-AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos -I$(top_builddir)/magdata -I$(top_builddir)/pca -I$(top_builddir)/green
+AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos -I$(top_builddir)/magdata -I$(top_builddir)/pca -I$(top_builddir)/green -I$(top_builddir)/estist

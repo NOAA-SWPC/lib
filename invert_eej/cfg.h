@@ -51,7 +51,8 @@ typedef struct
   int sq_nmax_ext;             /* external spherical harmonic degree for Sq filter */
   int sq_mmax_ext;             /* external spherical harmonic order for Sq filter */
   int calc_field_models;       /* calculate along-track field models */
-  int main_nmax_int;           /* spherical harmonic degree for core field model */
+  int main_nmax_int;           /* spherical harmonic nmax for core field model */
+  int crust_nmax_int;          /* spherical harmonic nmax for crustal field model */
 } cfg_parameters;
 
 typedef struct

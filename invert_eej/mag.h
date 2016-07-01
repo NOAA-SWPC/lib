@@ -55,7 +55,8 @@ typedef struct
   int use_vector;                 /* use vector data instead of scalar */
   double r_earth;                 /* Earth radius (km) */
   int calc_field_models;          /* compute along-track field models? */
-  int main_nmax_int;              /* spherical harmonic degree for core field model */
+  int main_nmax_int;              /* spherical harmonic nmax for core field model */
+  int crust_nmax_int;             /* spherical harmonic nmax for crustal field model */
 
   char *kp_file;                  /* KP data file */
   char *f107_file;                /* F10.7 data file */

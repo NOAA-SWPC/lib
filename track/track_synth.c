@@ -75,7 +75,7 @@ track_synth(const int down_sample, const satdata_mag *data_in,
            * indices for this track; this helps ensure POMME external
            * model is smooth/continuous over each track
            */
-          s = pomme_get_indices(t, &E_st, &I_st, &IMF_By, &Em, &f107, pomme_p);
+          s = pomme_get_indices(0, t, &E_st, &I_st, &IMF_By, &Em, &f107, pomme_p);
           if (s)
             return s;
 
