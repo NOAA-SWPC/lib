@@ -15,8 +15,17 @@
 
 #include "green.h"
 
+/*
+green_alloc()
+  Allocate Green's function workspace
+
+Inputs: nmax - maximum spherical harmonic degree
+        mmax - maximum spherical harmonic order
+        R    - reference radius (km)
+*/
+
 green_workspace *
-green_alloc(const size_t nmax, const size_t mmax)
+green_alloc(const size_t nmax, const size_t mmax, const double R)
 {
   green_workspace *w;
   size_t plm_array_size = gsl_sf_legendre_array_n(nmax);
@@ -36,7 +45,7 @@ green_alloc(const size_t nmax, const size_t mmax)
 
   w->nmax = nmax;
   w->mmax = mmax;
-  w->R = 6371.2;
+  w->R = R;
 
   w->cosmphi = malloc((mmax + 1) * sizeof(double));
   w->sinmphi = malloc((mmax + 1) * sizeof(double));

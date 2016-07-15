@@ -51,7 +51,7 @@
 /* maximum spherical harmonic degree (internal) */
 #define NMAX_MF              35
 #define NMAX_SV              15
-#define NMAX_SA              15
+#define NMAX_SA              12
 
 #define MAX_BUFFER           2048
 

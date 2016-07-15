@@ -6,7 +6,6 @@ libmag_la_SOURCES =        \
 	geod2geoc.c              \
 	green.c                  \
 	inverteef.c              \
-	lls.c                    \
   log.c                    \
 	mag.c                    \
 	mag_eej.c                \

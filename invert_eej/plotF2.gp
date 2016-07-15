@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'log_C'
-outdir = 'log_C/plots'
+logdir = 'log_B'
+outdir = 'log_B/plots'
 
 cmd = sprintf('mkdir -p %s', outdir)
 tstr = system(cmd)

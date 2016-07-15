@@ -269,22 +269,6 @@ mag_preproc(const mag_params *params, track_workspace *track_p,
 {
   int status = 0;
 
-  /* flag tracks with high rms */
-  {
-    /*
-     * rms thresholds; set threshold high to process data
-     * during strong storms: 17 March 2015 storm has scalar rms of up to 120 nT.
-     *
-     * The 22-23 June 2015 storm has scalar rms up to 140 nT
-     */
-    /*const double thresh[] = { -1.0, -1.0, -1.0, 150.0 };*/
-    const double thresh[] = { 210.0, 170.0, 150.0, 160.0 };
-    size_t nrms = track_flag_rms("rms.dat", thresh, NULL, data, track_p);
-
-    log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) tracks due to high rms\n",
-            nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
-  }
-
   /* flag data outside [lt_min,lt_max] */
   {
     size_t nlt = track_flag_lt(params->lt_min, params->lt_max, NULL, data, track_p);
@@ -322,6 +306,52 @@ mag_preproc(const mag_params *params, track_workspace *track_p,
     log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) data due to kp [%g,%g]\n",
             nkp, data->n, (double)nkp / (double)data->n * 100.0,
             kp_min, kp_max);
+  }
+
+  if (params->calc_field_models)
+    {
+      size_t i;
+
+      fprintf(stderr, "mag_preproc: computing along-track field models...\n");
+
+      for (i = 0; i < track_p->n; ++i)
+        {
+          track_data *tptr = &(track_p->tracks[i]);
+          size_t sidx = tptr->start_idx;
+          size_t eidx = tptr->end_idx;
+
+          if (tptr->flags)
+            continue;
+
+          fprintf(stderr, "\t Track %zu/%zu...", i + 1, track_p->n);
+
+          status = mag_calc_field_models(tptr->t_eq, sidx, eidx, data, w);
+          if (status)
+            return status;
+
+          fprintf(stderr, "done\n");
+
+          /* recompute track residuals */
+          track_calc_residuals(tptr, data);
+        }
+
+      fprintf(stderr, "done\n");
+    }
+
+  /* flag tracks with high rms */
+  {
+    /*
+     * rms thresholds; set threshold high to process data
+     * during strong storms: 17 March 2015 storm has scalar rms of up to 120 nT.
+     *
+     * The 22-23 June 2015 storm has scalar rms up to 140 nT
+     */
+    /*const double thresh[] = { -1.0, -1.0, -1.0, 150.0 };*/
+    const double thresh[] = { 210.0, 170.0, 150.0, 160.0 };
+    size_t nrms = track_flag_rms("rms.dat", thresh, NULL, data, track_p);
+
+    log_proc(w->log_general, "mag_preproc: flagged %zu/%zu (%.1f%%) tracks due to high rms\n",
+            nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
   }
 
   /* last check: flag tracks with very few good data points left */
@@ -435,19 +465,6 @@ mag_proc(const mag_params *params, track_workspace *track_p,
 
       fprintf(stderr, "mag_proc: found track %zu, %s, lon = %g, lt = %g, kp = %g, dir = %d\n",
               ntrack, buf, lon_eq, lt_eq, kp, dir);
-
-      if (params->calc_field_models)
-        {
-          /* compute along-track main, crustal, external field model values */
-
-          fprintf(stderr, "mag_proc: computing along-track field models...");
-
-          s = mag_calc_field_models(tptr->t_eq, sidx, eidx, data, w);
-          if (s)
-            return s;
-
-          fprintf(stderr, "done\n");
-        }
 
       /*
        * store track in workspace, compute magnetic coordinates, and
@@ -597,7 +614,8 @@ mag_track_datagap(const double dlat_max,
 
 /*
 mag_calc_field_models()
-  Compute along-track main, crustal and external field model values
+  Compute along-track main, crustal and external field model values. Also
+compute QD latitudes for each data point
 
 Inputs: t_eq - time of equator crossing (CDF_EPOCH)
         sidx - start index
@@ -611,9 +629,10 @@ mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
                       satdata_mag *data, mag_workspace *w)
 {
   int s = 0;
-  size_t i;
+  size_t i, j;
   double Est, Ist;
   time_t unixtime_eq = satdata_epoch2timet(t_eq);
+  apex_workspace *apex_p = w->eej_workspace_p->apex_workspace_p;
 
   /* compute Est/Ist for this track; only need to retrieve once per track */
   s = estist_calc_get(unixtime_eq, &Est, &Ist, w->estist_calc_workspace_p);
@@ -627,10 +646,12 @@ mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
       double alt = data->altitude[i];
       double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
       double phi = data->longitude[i] * M_PI / 180.0;
-      double B_main[4], B_crust[4], B_ext[4];
+      double r = w->params->r_earth + alt;
+      double B_main[4], B_crust[4], B_ext[4], B_tot[3];
+      double alat, alon, qdlat;
 
       /* compute core field */
-      msynth_eval(tyr, alt + w->params->r_earth, theta, phi, B_main, w->core_workspace_p);
+      msynth_eval(tyr, r, theta, phi, B_main, w->core_workspace_p);
 
       SATDATA_VEC_X(data->B_main, i) = B_main[0];
       SATDATA_VEC_Y(data->B_main, i) = B_main[1];
@@ -649,6 +670,15 @@ mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
       SATDATA_VEC_X(data->B_ext, i) = B_ext[0];
       SATDATA_VEC_Y(data->B_ext, i) = B_ext[1];
       SATDATA_VEC_Z(data->B_ext, i) = B_ext[2];
+
+      for (j = 0; j < 3; ++j)
+        B_tot[j] = B_main[j] + B_crust[j] + B_ext[j];
+
+      data->F_main[i] = gsl_hypot3(B_tot[0], B_tot[1], B_tot[2]);
+
+      apex_transform(theta, phi, r * 1.0e3, &alon, &alat, &qdlat,
+                     NULL, NULL, NULL, apex_p);
+      data->qdlat[i] = qdlat;
     }
 
   return s;

@@ -122,12 +122,13 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   data->F_ns = realloc(data->F_ns, n * sizeof(double));
 
   data->flags = realloc(data->flags, n * sizeof(size_t));
+  data->index = realloc(data->index, n * sizeof(size_t));
   data->weights = realloc(data->weights, n * sizeof(double));
 
   if (!data->t || !data->ts || !data->r || !data->theta || !data->phi || !data->qdlat || !data->flags ||
       !data->Bx_nec || !data->By_nec || !data->Bz_nec || !data->Bx_vfm || !data->By_vfm ||
       !data->Bz_vfm || !data->Bx_model || !data->By_model || !data->Bz_model ||
-      !data->F || !data->q || !data->weights || !data->r_ns ||
+      !data->F || !data->q || !data->weights || !data->r_ns || !data->index ||
       !data->theta_ns || !data->phi_ns || !data->qdlat_ns || !data->satdir || !data->ne ||
       !data->Bx_nec_ns || !data->By_nec_ns || !data->Bz_nec_ns ||
       !data->Bx_model_ns || !data->By_model_ns || !data->Bz_model_ns || !data->F_ns)
@@ -238,6 +239,9 @@ magdata_free(magdata *data)
   if (data->flags)
     free(data->flags);
 
+  if (data->index)
+    free(data->index);
+
   if (data->satdir)
     free(data->satdir);
 
@@ -317,6 +321,7 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->phi[n] = wrappi(datum->phi);
   data->qdlat[n] = datum->qdlat;
   data->flags[n] = datum->flags;
+  data->index[n] = 0; /* filled in later */
   data->Bx_nec[n] = datum->B_nec[0];
   data->By_nec[n] = datum->B_nec[1];
   data->Bz_nec[n] = datum->B_nec[2];

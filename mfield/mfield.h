@@ -19,9 +19,10 @@
 #include "mfield_data.h"
 #include "mfield_green.h"
 
+#include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      1
+#define MFIELD_SYNTH_DATA      0
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
@@ -34,7 +35,7 @@
 #endif
 
 /* fit Euler angles to data */
-#define MFIELD_FIT_EULER       0
+#define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
 #define MFIELD_FIT_EXTFIELD    0
@@ -134,9 +135,6 @@ typedef struct
   /* nonlinear least squares parameters */
   gsl_vector *wts_spatial; /* spatial weights, nres-by-1 */
   gsl_vector *wts_final;   /* final weights (robust x spatial), nres-by-1 */
-  gsl_matrix *mat_dX;      /* dX/dg ndata-by-nnm */
-  gsl_matrix *mat_dY;      /* dY/dg ndata-by-nnm */
-  gsl_matrix *mat_dZ;      /* dZ/dg ndata-by-nnm */
   gsl_multifit_nlinear_workspace *multifit_nlinear_p;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
   gsl_matrix *block_J;     /* Jacobian matrix block, 4*data_block-by-p */
@@ -185,6 +183,12 @@ typedef struct
   FILE *fp_dY;             /* file containing dX block matrices */
   FILE *fp_dZ;             /* file containing dX block matrices */
 
+  size_t max_threads;      /* maximum number of threads/processors available */
+  gsl_matrix *omp_dX;      /* dX/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dY;      /* dY/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dZ;      /* dZ/dg max_threads-by-nnm_mf */
+  green_workspace **green_array_p; /* array of green workspaces, size max_threads */
+
   gsl_vector *fvec;        /* residual vector for robust weights */
   gsl_vector *wfvec;       /* weighted residual vector */
   gsl_multifit_robust_workspace *robust_workspace_p;
@@ -192,6 +196,7 @@ typedef struct
   mfield_green_workspace *green_workspace_p;
   mfield_data_workspace *data_workspace_p;
   track_weight_workspace *weight_workspace_p;
+  green_workspace *green_workspace_p2;
   gsl_eigen_symm_workspace *eigen_workspace_p;
 } mfield_workspace;
 

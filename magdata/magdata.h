@@ -120,6 +120,8 @@ typedef struct
 
   size_t *flags;       /* MAGDATA_FLG_xxx flags */
 
+  size_t *index;       /* indexing of residuals, skipping flagged data */
+
   size_t n;            /* total number of data */
   size_t ntot;         /* total array allocation */
   double R;            /* Earth radius (km) */

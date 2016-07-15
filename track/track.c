@@ -35,7 +35,6 @@
 
 static int track_calc_mf(const size_t start_idx, const size_t end_idx,
                          satdata_mag *data, msynth_workspace *w);
-static int track_calc_residuals(track_data *tptr, const satdata_mag *data);
 static int track_ema(const double alpha, const size_t flags[], double y[], const size_t n);
 static int track_ema_reverse(const double alpha, const size_t flags[], double y[], const size_t n);
 
@@ -720,7 +719,7 @@ track_print_stats(const char *filename, track_workspace *w)
   return track_print_stats_flag(filename, 0xffffffff, w);
 }
 
-static int
+int
 track_calc_residuals(track_data *tptr, const satdata_mag *data)
 {
   size_t i;

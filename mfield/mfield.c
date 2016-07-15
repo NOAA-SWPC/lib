@@ -29,6 +29,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include <omp.h>
+
 #include <satdata/satdata.h>
 
 #include <gsl/gsl_math.h>
@@ -220,6 +222,7 @@ mfield_alloc(const mfield_parameters *params)
   w->dZ = malloc(w->nnm_mf * sizeof(double));
 
   w->green_workspace_p = mfield_green_alloc(w->nmax_mf, w->R);
+  w->green_workspace_p2 = green_alloc(w->nmax_mf, w->nmax_mf, w->R);
 
   w->diag = gsl_vector_alloc(w->p_int);
 
@@ -262,6 +265,21 @@ mfield_alloc(const mfield_parameters *params)
   w->fp_dX = fopen("mat/dX.dat", "w+");
   w->fp_dY = fopen("mat/dY.dat", "w+");
   w->fp_dZ = fopen("mat/dZ.dat", "w+");
+
+  w->max_threads = (size_t) omp_get_max_threads();
+  w->omp_dX = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dY = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dZ = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+
+  /* initialize green workspaces */
+  {
+    size_t i;
+
+    w->green_array_p = malloc(w->max_threads * sizeof(green_workspace *));
+
+    for (i = 0; i < w->max_threads; ++i)
+      w->green_array_p[i] = green_alloc(w->nmax_mf, w->nmax_mf, w->R);
+  }
 
   return w;
 } /* mfield_alloc() */
@@ -308,15 +326,6 @@ mfield_free(mfield_workspace *w)
   if (w->hz)
     gsl_histogram_free(w->hz);
 
-  if (w->mat_dX)
-    gsl_matrix_free(w->mat_dX);
-
-  if (w->mat_dY)
-    gsl_matrix_free(w->mat_dY);
-
-  if (w->mat_dZ)
-    gsl_matrix_free(w->mat_dZ);
-
   if (w->lambda_diag)
     gsl_vector_free(w->lambda_diag);
 
@@ -350,6 +359,9 @@ mfield_free(mfield_workspace *w)
   if (w->green_workspace_p)
     mfield_green_free(w->green_workspace_p);
 
+  if (w->green_workspace_p2)
+    green_free(w->green_workspace_p2);
+
   if (w->weight_workspace_p)
     track_weight_free(w->weight_workspace_p);
 
@@ -374,6 +386,15 @@ mfield_free(mfield_workspace *w)
   if (w->block_dZ)
     gsl_matrix_free(w->block_dZ);
 
+  if (w->omp_dX)
+    gsl_matrix_free(w->omp_dX);
+
+  if (w->omp_dY)
+    gsl_matrix_free(w->omp_dY);
+
+  if (w->omp_dZ)
+    gsl_matrix_free(w->omp_dZ);
+
   if (w->fp_dX)
     fclose(w->fp_dX);
 
@@ -388,6 +409,15 @@ mfield_free(mfield_workspace *w)
 
   if (w->eigen_workspace_p)
     gsl_eigen_symm_free(w->eigen_workspace_p);
+
+  {
+    size_t i;
+
+    for (i = 0; i < w->max_threads; ++i)
+      green_free(w->green_array_p[i]);
+
+    free(w->green_array_p);
+  }
 
   free(w);
 } /* mfield_free() */

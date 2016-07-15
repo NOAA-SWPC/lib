@@ -87,6 +87,7 @@ int track_print(const char *filename, const size_t flags,
 int track_print_stats_flag(const char *filename, const size_t flag,
                            track_workspace *w);
 int track_print_stats(const char *filename, track_workspace *w);
+int track_calc_residuals(track_data *tptr, const satdata_mag *data);
 
 /* track_filter.c */
 int track_filter(const char *filename, track_workspace *w);

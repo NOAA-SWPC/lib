@@ -24,7 +24,7 @@ typedef struct
  * Prototypes
  */
 
-green_workspace *green_alloc(const size_t nmax, const size_t mmax);
+green_workspace *green_alloc(const size_t nmax, const size_t mmax, const double R);
 void green_free(green_workspace *w);
 int green_calc_int(const double r, const double theta, const double phi,
                    double *X, double *Y, double *Z, green_workspace *w);

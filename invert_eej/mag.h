@@ -58,6 +58,8 @@ typedef struct
   int main_nmax_int;              /* spherical harmonic nmax for core field model */
   int crust_nmax_int;             /* spherical harmonic nmax for crustal field model */
 
+  char *prev_day_file;            /* previous day MAGx_LR file */
+  char *curr_day_file;            /* current day MAGx_LR file */
   char *kp_file;                  /* KP data file */
   char *f107_file;                /* F10.7 data file */
   char *dst_file;                 /* DST data file */

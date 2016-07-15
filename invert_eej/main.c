@@ -21,6 +21,10 @@ fill_parameters(mag_params *params)
 {
   int s = 0;
 
+  if (cfg_params.prev_input_filename != NULL)
+    params->prev_day_file = (char *) cfg_params.prev_input_filename;
+  if (cfg_params.input_filename != NULL)
+    params->curr_day_file = (char *) cfg_params.input_filename;
   if (cfg_params.core_cof_file != NULL)
     params->core_file = (char *) cfg_params.core_cof_file;
   if (cfg_params.lith_cof_file != NULL)
@@ -162,6 +166,8 @@ main(int argc, char *argv[])
   params.sq_nmax_ext = 1;
   params.sq_mmax_ext = 1;
 
+  params.prev_day_file = NULL;
+  params.curr_day_file = NULL;
   params.kp_file = KP_IDX_FILE;
   params.f107_file = F107_IDX_FILE;
   params.dst_file = DST_IDX_FILE;
@@ -342,14 +348,49 @@ main(int argc, char *argv[])
         }
     }
 
-  if (!data)
-    {
-      print_help(argv);
-      exit(1);
-    }
-
   if (config_workspace_p)
     fill_parameters(&params);
+
+  if (!data)
+    {
+      if (params.prev_day_file)
+        {
+          fprintf(stderr, "main: reading previous day file %s...", params.prev_day_file);
+          gettimeofday(&tv0, NULL);
+          data = satdata_swarm_read(params.prev_day_file, NULL);
+          gettimeofday(&tv1, NULL);
+          if (!data)
+            exit(1);
+          fprintf(stderr, "done (%zu points read, %g seconds)\n",
+                  data->n, time_diff(tv0, tv1));
+        }
+
+      if (params.curr_day_file)
+        {
+          fprintf(stderr, "main: reading current day file %s...", params.curr_day_file);
+          gettimeofday(&tv0, NULL);
+          data = satdata_swarm_read(params.curr_day_file, data);
+          gettimeofday(&tv1, NULL);
+          if (!data)
+            exit(1);
+          fprintf(stderr, "done (%zu points read, %g seconds)\n",
+                  data->n, time_diff(tv0, tv1));
+        }
+
+      if (data != NULL)
+        {
+          size_t nflag;
+
+          fprintf(stderr, "main: filtering instrument flags...");
+          nflag = satdata_swarm_filter_instrument(1, data);
+          fprintf(stderr, "done (%zu data flagged)\n", nflag);
+        }
+      else
+        {
+          print_help(argv);
+          exit(1);
+        }
+    }
 
   fprintf(stderr, "main: maximum allowed kp:      %.1f\n", params.kp_max);
   fprintf(stderr, "main: line current shell:      %.1f [km]\n", params.curr_altitude);

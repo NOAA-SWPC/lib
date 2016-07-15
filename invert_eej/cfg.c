@@ -21,9 +21,9 @@ cfg_parameters cfg_params;
 
 /* configuration directives and their locations in cfg_params */
 static cfg_struct cfg_dirs[] = {
-  { "eef_input_prevday", &(cfg_params.prev_input_filename), CFG_STRING|CFG_OPTIONAL },
-  { "eef_input", &(cfg_params.input_filename), CFG_STRING|CFG_OPTIONAL },
-  { "eef_output", &(cfg_params.output_filename), CFG_STRING|CFG_OPTIONAL },
+  { "input_file_prev", &(cfg_params.prev_input_filename), CFG_STRING|CFG_OPTIONAL },
+  { "input_file", &(cfg_params.input_filename), CFG_STRING|CFG_OPTIONAL },
+  { "output_file", &(cfg_params.output_filename), CFG_STRING|CFG_OPTIONAL },
   { "log_dir", &(cfg_params.log_dir), CFG_STRING|CFG_OPTIONAL },
   { "test_output_dir", &(cfg_params.test_output_dir), CFG_STRING|CFG_OPTIONAL },
 
