@@ -16,6 +16,7 @@
 
 #include "green.h"
 
+#include "common.h"
 #include "io.h"
 #include "pca.h"
 
@@ -50,10 +51,11 @@ pca_alloc()
   w->U = pca_read_matrix(PCA_STAGE2B_U);
   fprintf(stderr, "done (%zu-by-%zu matrix read)\n", w->U->size1, w->U->size2);
 
-  w->green_workspace_p = green_alloc(w->nmax, w->mmax);
+  w->R = R_EARTH_KM;
+
+  w->green_workspace_p = green_alloc(w->nmax, w->mmax, w->R);
 
   w->nnm = green_nnm(w->green_workspace_p);
-  w->R = w->green_workspace_p->R;
   w->b = w->R + 110.0;
 
   w->X = malloc(w->nnm * sizeof(double));

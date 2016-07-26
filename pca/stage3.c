@@ -145,7 +145,8 @@ main(int argc, char *argv[])
 {
   const size_t nmax = 60;
   const size_t mmax = GSL_MIN(nmax, 30);
-  green_workspace *green_p = green_alloc(nmax, mmax);
+  const double R = R_EARTH_KM;
+  green_workspace *green_p = green_alloc(nmax, mmax, R);
   char *knm_file = "data/stage1_knm.dat";
   char *eval_file = "data/stage2_eval.dat";
   char *evec_file = "data/stage2_evec.dat";

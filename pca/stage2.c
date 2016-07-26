@@ -176,6 +176,7 @@ count_windows(const size_t nsamples, const double fs,
 int
 main(int argc, char *argv[])
 {
+  const double R = R_EARTH_KM;
   const double fs = 24.0;         /* sample frequency in 1/days */
   size_t nmax, mmax;
   green_workspace *green_p;
@@ -243,7 +244,7 @@ main(int argc, char *argv[])
   pca_read_data(PCA_STAGE1_DATA, &nmax, &mmax);
   fprintf(stderr, "done (nmax = %zu mmax = %zu)\n", nmax, mmax);
 
-  green_p = green_alloc(nmax, mmax);
+  green_p = green_alloc(nmax, mmax, R);
   nnm = green_nnm(green_p);
 
   fprintf(stderr, "main: reading %s...", infile);

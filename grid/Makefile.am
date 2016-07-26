@@ -1,4 +1,4 @@
-bin_PROGRAMS = gridgeo
+check_PROGRAMS = gridgeo
 
 gridgeo_SOURCES = gridgeo.c
 gridgeo_LDADD = $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas

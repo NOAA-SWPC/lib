@@ -2,7 +2,7 @@ lib_LTLIBRARIES = libmsynth.la
 
 libmsynth_la_SOURCES = msynth.c msynth_green.c msynth_arnaud.c msynth_chaos.c msynth_crust.c msynth_emm.c msynth_igrf.c msynth_pomme.c msynth_wmm.c
 
-bin_PROGRAMS = calc_point extrapolate_epoch model_avg print_map print_spectrum print_test_values write_wmm
+check_PROGRAMS = test calc_point extrapolate_epoch model_avg print_map print_spectrum print_test_values write_wmm
 
 calc_point_SOURCES = calc_point.c
 calc_point_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas
@@ -24,8 +24,6 @@ print_test_values_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~
 
 write_wmm_SOURCES = write_wmm.c
 write_wmm_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas
-
-check_PROGRAMS = test
 
 test_SOURCES = test.c
 test_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas

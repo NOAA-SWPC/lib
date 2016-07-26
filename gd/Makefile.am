@@ -1,4 +1,4 @@
-bin_PROGRAMS = necorr necorrJ
+check_PROGRAMS = necorr necorrJ
 
 necorr_SOURCES = necorr.c
 necorr_LDADD = $(top_builddir)/peak/libpeak.la $(top_builddir)/track/libtrack.la $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas

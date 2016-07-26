@@ -1,4 +1,6 @@
-bin_PROGRAMS = mfield mfield_emag mfield_preproc mfield_ascii mfield_covar mfield_eval_main mfield_residuals mfield_compare mfield_plot
+bin_PROGRAMS = mfield mfield_preproc
+
+check_PROGRAMS = mfield_emag mfield_ascii mfield_covar mfield_eval_main mfield_residuals mfield_compare mfield_plot
 
 mfield_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_main.c
 mfield_CFLAGS = -fopenmp

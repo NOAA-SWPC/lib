@@ -312,7 +312,8 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   const char *datamap_file = "datamap.dat";
   const size_t nmax = 60;
   const size_t mmax = GSL_MIN(nmax, 30);
-  green_workspace *green_p = green_alloc(nmax, mmax);
+  const double R = R_EARTH_KM;
+  green_workspace *green_p = green_alloc(nmax, mmax, R);
   const size_t n = 3 * data->nlon * data->nlat; /* number of residuals */
   const size_t p = green_p->nnm;                /* number of external coefficients */
   const size_t nrhs = data->nt;                 /* number of right hand sides */

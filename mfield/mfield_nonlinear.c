@@ -383,7 +383,7 @@ mfield_init_nonlinear(mfield_workspace *w)
 
     fdf_params.solver = gsl_multifit_nlinear_solver_cholesky;
     fdf_params.scale = gsl_multifit_nlinear_scale_levenberg;
-    fdf_params.trs = gsl_multifit_nlinear_trs_dogleg;
+    fdf_params.trs = gsl_multifit_nlinear_trs_subspace2D;
     fdf_params.h_fvv = 0.5;
     w->multifit_nlinear_p = gsl_multifit_nlinear_alloc(T, &fdf_params, nres, p);
   }

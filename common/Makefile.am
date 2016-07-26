@@ -1,4 +1,4 @@
-bin_PROGRAMS = test test_zenith test_sunrise time2fday test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_ut1 doy2md
+check_PROGRAMS = test test_zenith test_sunrise time2fday test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_ut1 doy2md
 
 doy2md_SOURCES = doy2md.c
 test_SOURCES = test.c

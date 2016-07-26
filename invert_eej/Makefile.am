@@ -16,7 +16,7 @@ libmag_la_SOURCES =        \
 	sigma.c                  \
 	swarmeef.c
 
-bin_PROGRAMS = corr main swarmeef_print compare
+check_PROGRAMS = corr main swarmeef_print compare
 
 main_SOURCES = main.c
 swarmeef_print_SOURCES = swarmeef_print.c
