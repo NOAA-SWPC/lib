@@ -260,33 +260,57 @@ int
 lapack_complex_svd(const gsl_matrix_complex * A, gsl_vector * S,
                    gsl_matrix_complex * U, gsl_matrix_complex * V)
 {
-  int s;
-  lapack_int M = A->size1;
-  lapack_int N = A->size2;
-  lapack_int lda = A->size1;
-  lapack_int ldu = U->size1;
-  lapack_int ldvt = V->size1;
-  gsl_matrix_complex *work_A = gsl_matrix_complex_alloc(A->size2, A->size1);
+  size_t M = A->size1;
+  size_t N = A->size2;
 
-  gsl_matrix_complex_transpose_memcpy(work_A, A);
+  if (U->size1 != U->size2)
+    {
+      GSL_ERROR ("U matrix must be square", GSL_ENOTSQR);
+    }
+  else if (U->size1 != M)
+    {
+      GSL_ERROR ("U matrix must be M-by-M", GSL_EBADLEN);
+    }
+  else if (S->size != GSL_MIN(M, N))
+    {
+      GSL_ERROR ("S must have length MIN(M,N)", GSL_EBADLEN);
+    }
+  else if (V->size1 != V->size2)
+    {
+      GSL_ERROR ("V matrix must be square", GSL_ENOTSQR);
+    }
+  else if (V->size1 != N)
+    {
+      GSL_ERROR ("V matrix must be N-by-N", GSL_EBADLEN);
+    }
+  else
+    {
+      int s;
+      lapack_int lda = A->size1;
+      lapack_int ldu = U->size1;
+      lapack_int ldvt = V->size1;
+      gsl_matrix_complex *work_A = gsl_matrix_complex_alloc(N, M);
 
-  s = LAPACKE_zgesdd(LAPACK_COL_MAJOR,
-                     'A',
-                     M,
-                     N,
-                     (lapack_complex_double *) work_A->data,
-                     lda,
-                     S->data,
-                     (lapack_complex_double *) U->data,
-                     ldu,
-                     (lapack_complex_double *) V->data,
-                     ldvt);
+      gsl_matrix_complex_transpose_memcpy(work_A, A);
 
-  /* no need to transpose V since V^H is computed already by
-   * lapack routine */
-  gsl_matrix_complex_transpose(U);
+      s = LAPACKE_zgesdd(LAPACK_COL_MAJOR,
+                         'A',
+                         (lapack_int) M,
+                         (lapack_int) N,
+                         (lapack_complex_double *) work_A->data,
+                         lda,
+                         S->data,
+                         (lapack_complex_double *) U->data,
+                         ldu,
+                         (lapack_complex_double *) V->data,
+                         ldvt);
 
-  gsl_matrix_complex_free(work_A);
+      /* no need to transpose V since V^H is computed already by
+       * lapack routine */
+      gsl_matrix_complex_transpose(U);
 
-  return s;
+      gsl_matrix_complex_free(work_A);
+
+      return s;
+    }
 }

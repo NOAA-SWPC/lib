@@ -5,6 +5,8 @@
  * 2. Divide each time series into T smaller segments and perform
  *    windowed Fourier transform of each segment
  * 3. Build Q(omega) matrix, nnm-by-T
+ * 4. Calculate SVD of Q for each omega, and write singular values/vectors to
+ *    output files
  */
 
 #include <stdio.h>
@@ -173,6 +175,62 @@ count_windows(const size_t nsamples, const double fs,
   return T;
 }
 
+void
+print_potential(const gsl_matrix_complex * U, green_workspace *green_p)
+{
+  const size_t nnm = U->size1;
+  const size_t nmax = green_p->nmax;
+  const size_t mmax = green_p->mmax;
+  gsl_vector_complex_const_view U1 = gsl_matrix_complex_const_column(U, 0);
+  gsl_vector_complex_const_view U2 = gsl_matrix_complex_const_column(U, 1);
+  gsl_vector_complex_const_view U3 = gsl_matrix_complex_const_column(U, 2);
+  double *phinm = malloc(nnm * sizeof(double));
+  gsl_vector_complex *phinmz = gsl_vector_complex_calloc(nnm);
+  const double r = R_EARTH_KM;
+  double lat, lon;
+  size_t n;
+
+  for (lon = -180.0; lon <= 180.0; lon += 1.0)
+    {
+      double phi = lon * M_PI / 180.0;
+      for (lat = -89.0; lat <= 89.0; lat += 0.5)
+        {
+          double theta = M_PI / 2.0 - lat * M_PI / 180.0;
+          gsl_complex z1, z2, z3;
+
+          green_potential_calc_ext(r, theta, phi, phinm, green_p);
+
+          for (n = 1; n <= nmax; ++n)
+            {
+              int M = (int) GSL_MIN(mmax, n);
+              int m;
+        
+              for (m = -M; m <= M; ++m)
+                {
+                  size_t cidx = green_nmidx(n, m, green_p);
+                  gsl_complex z = gsl_complex_rect(phinm[cidx], 0.0);
+                  gsl_vector_complex_set(phinmz, cidx, z);
+                }
+            }
+
+          gsl_blas_zdotu(phinmz, &U1.vector, &z1);
+          gsl_blas_zdotu(phinmz, &U2.vector, &z2);
+          gsl_blas_zdotu(phinmz, &U3.vector, &z3);
+
+          printf("%f %f %f %f %f\n",
+                 lon,
+                 lat,
+                 GSL_REAL(z1),
+                 GSL_REAL(z2),
+                 GSL_REAL(z3));
+        }
+      printf("\n");
+    }
+
+  free(phinm);
+  gsl_vector_complex_free(phinmz);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -265,7 +323,7 @@ main(int argc, char *argv[])
   for (i = 0; i < nfreq; ++i)
     {
       Q[i] = gsl_matrix_complex_alloc(nnm, T);
-      S[i] = gsl_vector_alloc(nnm);
+      S[i] = gsl_vector_alloc(GSL_MIN(nnm, T));
       U[i] = gsl_matrix_complex_alloc(nnm, nnm);
       V[i] = gsl_matrix_complex_alloc(T, T);
     }
@@ -312,7 +370,7 @@ main(int argc, char *argv[])
   }
 
   {
-    const size_t nmodes = 25; /* number of left singular vectors to output */
+    const size_t nmodes = GSL_MIN(500, T); /* number of left singular vectors to output */
     int status;
     char buf[2048];
 
@@ -326,6 +384,14 @@ main(int argc, char *argv[])
         gettimeofday(&tv1, NULL);
         fprintf(stderr, "done (%g seconds, status = %d)\n",
                 time_diff(tv0, tv1), status);
+
+#if 0
+        if (i == 2) /* 1 cpd */
+          {
+            print_potential(U[i], green_p);
+            exit(1);
+          }
+#endif
 
         sprintf(buf, "modes/S_%zu", i);
         fprintf(stderr, "main: writing singular values for frequency %g [cpd] in text format to %s...",
@@ -345,35 +411,6 @@ main(int argc, char *argv[])
         pca_write_complex_V(buf, nmax, mmax, freq, window_size, window_shift, nmodes, V[i]);
         fprintf(stderr, "done\n");
       }
-
-#if 0
-    {
-    const char *sval_file = PCA_STAGE2_SVAL;
-    const char *U_file = PCA_STAGE2_U;
-    const char *V_file = PCA_STAGE2_V;
-    const char *Q_file = "data/stage2_Q.dat";
-
-    fprintf(stderr, "main: writing singular values in binary format to %s...",
-            sval_file);
-    pca_write_vector(sval_file, S);
-    fprintf(stderr, "done\n");
-
-    fprintf(stderr, "main: writing left singular vectors in binary format to %s...",
-            U_file);
-    pca_write_matrix_complex(U_file, U);
-    fprintf(stderr, "done\n");
-
-    fprintf(stderr, "main: writing right singular vectors in binary format to %s...",
-            V_file);
-    pca_write_matrix_complex(V_file, V);
-    fprintf(stderr, "done\n");
-
-    fprintf(stderr, "main: writing Q matrix in binary format to %s...",
-            Q_file);
-    pca_write_matrix_complex(Q_file, Q);
-    fprintf(stderr, "done\n");
-    }
-#endif
   }
 
   gsl_matrix_free(A);

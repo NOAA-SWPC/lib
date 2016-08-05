@@ -239,6 +239,78 @@ green_calc_ext(const double r, const double theta, const double phi,
 } /* green_calc_ext() */
 
 /*
+green_potential_calc_ext()
+  Compute Green's functions for potential spherical harmonic expansion due to
+external current source:
+
+V(r,theta,phi) = R sum_{nm} (r/R)^n [ q_{nm} cos(m phi) + k_{nm} sin(m phi) ] P_{nm}
+
+Inputs: r     - radius (km)
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        V     - (output) array of Green's functions (coefficients of qnm and knm), size nnm
+        w     - workspace
+
+Notes:
+1) On output, the following arrays are initialized
+w->Plm
+w->sinmphi
+w->cosmphi
+*/
+
+int
+green_potential_calc_ext(const double r, const double theta, const double phi,
+                         double *V, green_workspace *w)
+{
+  int s = 0;
+  const size_t nmax = w->nmax;
+  const size_t mmax = w->mmax;
+  size_t n;
+  int m;
+  const double cost = cos(theta);
+  double ratio = r / w->R;
+  double term = w->R * ratio; /* R (r/R)^n */
+
+  /* precompute cos(m phi) and sin(m phi) */
+  for (m = 0; m <= (int) mmax; ++m)
+    {
+      w->cosmphi[m] = cos(m * phi);
+      w->sinmphi[m] = sin(m * phi);
+    }
+
+  /* compute associated legendres (XXX: don't need to compute dPlm) */
+  gsl_sf_legendre_array(GSL_SF_LEGENDRE_SCHMIDT, nmax, cost, w->Plm);
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int M = (int) GSL_MIN(mmax, n);
+
+      for (m = -M; m <= M; ++m)
+        {
+          int mabs = abs(m);
+          size_t cidx = green_nmidx(n, m, w);
+          size_t pidx = gsl_sf_legendre_array_index(n, mabs);
+
+          if (m < 0)
+            {
+              /* k_{nm} */
+              V[cidx] = term * w->sinmphi[mabs] * w->Plm[pidx];
+            }
+          else
+            {
+              /* q_{nm} */
+              V[cidx] = term * w->cosmphi[mabs] * w->Plm[pidx];
+            }
+        }
+
+      /* R (r/R)^n */
+      term *= ratio;
+    }
+
+  return s;
+}
+
+/*
 green_nmidx()
   This function returns a unique index in [0,p-1] corresponding
 to a given (n,m) pair. The array will look like:

@@ -274,8 +274,8 @@ pca_write_complex_V(const char *filename, const size_t nmax, const size_t mmax,
                     const double window_shift, const size_t nmodes, const gsl_matrix_complex *V)
 {
   int s = 0;
+  const size_t N = V->size1;
   FILE *fp;
-  gsl_matrix_complex_const_view m = gsl_matrix_complex_const_submatrix(V, 0, 0, nmodes, nmodes);
 
   fp = fopen(filename, "w");
   if (!fp)
@@ -288,12 +288,12 @@ pca_write_complex_V(const char *filename, const size_t nmax, const size_t mmax,
   fprintf(fp, "%% Right singular vectors\n");
   fprintf(fp, "%% nmax: %zu\n", nmax);
   fprintf(fp, "%% mmax: %zu\n", mmax);
-  fprintf(fp, "%% number of modes (rows and columns): %zu\n", nmodes);
+  fprintf(fp, "%% number of time segments (rows and columns): %zu\n", N);
   fprintf(fp, "%% Frequency: %.6f [cpd]\n", freq_cpd);
   fprintf(fp, "%% window size:  %g [days]\n", window_size);
   fprintf(fp, "%% window slide: %g [days]\n", window_shift);
   fprintf(fp, "%% Matlab read command: V = dlmread('%s',',',8,0);\n", filename);
-  matlab_dlmwrite_complex(fp, &m.matrix);
+  matlab_dlmwrite_complex(fp, V);
 
   fclose(fp);
 
