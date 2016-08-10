@@ -311,6 +311,72 @@ green_potential_calc_ext(const double r, const double theta, const double phi,
 }
 
 /*
+green_Y_calc()
+  Compute Green's functions for spherical harmonic expansion using
+Schmidt-normalized harmonics
+
+f(theta,phi) = sum_{nm} [ g_{nm} cos(m phi) + h_{nm} sin(m phi) ] P_{nm}
+
+Inputs: theta - colatitude (radians)
+        phi   - longitude (radians)
+        Y     - (output) array of Green's functions (coefficients of gnm and hnm), size nnm
+        w     - workspace
+
+Notes:
+1) On output, the following arrays are initialized
+w->Plm
+w->sinmphi
+w->cosmphi
+*/
+
+int
+green_Y_calc(const double theta, const double phi,
+             double *Y, green_workspace *w)
+{
+  int s = 0;
+  const size_t nmax = w->nmax;
+  const size_t mmax = w->mmax;
+  size_t n;
+  int m;
+  const double cost = cos(theta);
+
+  /* precompute cos(m phi) and sin(m phi) */
+  for (m = 0; m <= (int) mmax; ++m)
+    {
+      w->cosmphi[m] = cos(m * phi);
+      w->sinmphi[m] = sin(m * phi);
+    }
+
+  /* compute associated legendres */
+  gsl_sf_legendre_array(GSL_SF_LEGENDRE_SCHMIDT, nmax, cost, w->Plm);
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int M = (int) GSL_MIN(mmax, n);
+
+      for (m = -M; m <= M; ++m)
+        {
+          int mabs = abs(m);
+          size_t cidx = green_nmidx(n, m, w);
+          size_t pidx = gsl_sf_legendre_array_index(n, mabs);
+
+          if (m < 0)
+            {
+              /* h_{nm} */
+              Y[cidx] = w->sinmphi[mabs] * w->Plm[pidx];
+            }
+          else
+            {
+              /* g_{nm} */
+              Y[cidx] = w->cosmphi[mabs] * w->Plm[pidx];
+            }
+        }
+    }
+
+  return s;
+}
+
+/*
 green_nmidx()
   This function returns a unique index in [0,p-1] corresponding
 to a given (n,m) pair. The array will look like:

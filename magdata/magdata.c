@@ -1064,6 +1064,27 @@ magdata_flag_t(const double t0, const double t1,
 }
 
 /*
+magdata_flag_scalar()
+  Flag all scalar data points with MAGDATA_FLG_DISCARD
+
+Inputs: data - data
+*/
+
+int
+magdata_flag_scalar(magdata *data)
+{
+  size_t i;
+
+  for (i = 0; i < data->n; ++i)
+    {
+      if (MAGDATA_ExistScalar(data->flags[i]))
+        data->flags[i] |= MAGDATA_FLG_DISCARD;
+    }
+
+  return 0;
+}
+
+/*
 magdata_copy_track()
   Copy a single satellite track into magdata structure, discarding
 bad data, and flagging when scalar/vector measurements are

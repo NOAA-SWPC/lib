@@ -177,6 +177,7 @@ size_t magdata_ndiscard(const magdata *data);
 size_t magdata_neuler(const magdata *data);
 int magdata_clear(magdata *data);
 int magdata_flag_t(const double t0, const double t1, magdata *data);
+int magdata_flag_scalar(magdata *data);
 int magdata_copy_track(const magdata_params *params, const size_t track_idx,
                        const satdata_mag *data, const track_workspace *track_p,
                        magdata *mdata, size_t ntype[4]);

@@ -231,6 +231,65 @@ print_potential(const gsl_matrix_complex * U, green_workspace *green_p)
   gsl_vector_complex_free(phinmz);
 }
 
+void
+print_chi(const gsl_matrix_complex * U, green_workspace *green_p)
+{
+  const size_t nnm = U->size1;
+  const size_t nmax = green_p->nmax;
+  const size_t mmax = green_p->mmax;
+  const double b = R_EARTH_KM + 110.0;
+  const double ratio = b / R_EARTH_KM;
+  gsl_vector_complex_const_view U1 = gsl_matrix_complex_const_column(U, 0);
+  gsl_vector_complex_const_view U2 = gsl_matrix_complex_const_column(U, 1);
+  gsl_vector_complex_const_view U3 = gsl_matrix_complex_const_column(U, 2);
+  double *Ynm = malloc(nnm * sizeof(double));
+  gsl_vector_complex *Ynmz = gsl_vector_complex_calloc(nnm);
+  double lat, lon;
+  size_t n;
+
+  for (lon = -180.0; lon <= 180.0; lon += 1.0)
+    {
+      double phi = lon * M_PI / 180.0;
+      for (lat = -89.0; lat <= 89.0; lat += 0.5)
+        {
+          double theta = M_PI / 2.0 - lat * M_PI / 180.0;
+          gsl_complex z1, z2, z3;
+
+          green_Y_calc(theta, phi, Ynm, green_p);
+
+          for (n = 1; n <= nmax; ++n)
+            {
+              int M = (int) GSL_MIN(mmax, n);
+              int m;
+              double term1 = pow(ratio, (double)n - 2.0);
+              double term2 = (2.0*n + 1.0) / (n + 1.0);
+        
+              for (m = -M; m <= M; ++m)
+                {
+                  size_t cidx = green_nmidx(n, m, green_p);
+                  gsl_complex z = gsl_complex_rect(term1 * term2 * Ynm[cidx], 0.0);
+                  gsl_vector_complex_set(Ynmz, cidx, z);
+                }
+            }
+
+          gsl_blas_zdotu(Ynmz, &U1.vector, &z1);
+          gsl_blas_zdotu(Ynmz, &U2.vector, &z2);
+          gsl_blas_zdotu(Ynmz, &U3.vector, &z3);
+
+          printf("%f %f %f %f %f\n",
+                 lon,
+                 lat,
+                 GSL_REAL(z1),
+                 GSL_REAL(z2),
+                 GSL_REAL(z3));
+        }
+      printf("\n");
+    }
+
+  free(Ynm);
+  gsl_vector_complex_free(Ynmz);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -389,6 +448,12 @@ main(int argc, char *argv[])
         if (i == 2) /* 1 cpd */
           {
             print_potential(U[i], green_p);
+            exit(1);
+          }
+#elif 0
+        if (i == 2) /* 1 cpd */
+          {
+            print_chi(U[i], green_p);
             exit(1);
           }
 #endif

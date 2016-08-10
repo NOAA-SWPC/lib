@@ -38,7 +38,7 @@
 #define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    0
+#define MFIELD_FIT_EXTFIELD    1
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2014.0)
@@ -47,7 +47,7 @@
 
 /* number of observations to accumulate at once in LS system;
  * this includes the (X,Y,Z,F) 4-plet */
-#define MFIELD_BLOCK_SIZE     50000
+#define MFIELD_BLOCK_SIZE     10000
 
 /* define if fitting to the EMAG2 grid */
 #define MFIELD_EMAG2          0
@@ -187,6 +187,10 @@ typedef struct
   gsl_matrix *omp_dX;      /* dX/dg max_threads-by-nnm_mf */
   gsl_matrix *omp_dY;      /* dY/dg max_threads-by-nnm_mf */
   gsl_matrix *omp_dZ;      /* dZ/dg max_threads-by-nnm_mf */
+  gsl_matrix **omp_J;      /* max_threads matrices, each 4*data_block-by-p_int */
+  size_t *omp_rowidx;      /* row indices for omp_J */
+  gsl_matrix **omp_GTG;    /* max_threads matrices, each nnm_mf-by-nnm_mf */
+  gsl_matrix **omp_JTJ;    /* max_threads matrices, each p_int-by-p_int */
   green_workspace **green_array_p; /* array of green workspaces, size max_threads */
 
   gsl_vector *fvec;        /* residual vector for robust weights */

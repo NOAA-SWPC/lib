@@ -27,6 +27,7 @@
 #include <sys/time.h>
 #include <math.h>
 #include <assert.h>
+#include <omp.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_errno.h>
@@ -822,6 +823,7 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: tmax = %g\n", tmax);
   fprintf(stderr, "main: number of robust iterations = %zu\n", maxit);
   fprintf(stderr, "main: number of satellites = %d\n", nsat);
+  fprintf(stderr, "main: number of threads = %d\n", omp_get_max_threads());
   if (outfile)
     fprintf(stderr, "main: output coefficient file = %s\n", outfile);
   if (resfile)
