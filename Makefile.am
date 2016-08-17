@@ -25,11 +25,11 @@ SUBDIRS =         \
   track           \
   magdata         \
   euler           \
-  champ           \
   estist          \
+  champ           \
   poltor          \
   invert_eej      \
   pca             \
   swarm           \
-  gd
-#XXX  mfield          
+  gd              \
+  mfield          
