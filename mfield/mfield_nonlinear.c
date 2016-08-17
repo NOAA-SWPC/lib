@@ -487,8 +487,8 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
           double B_obs[3];              /* observation vector NEC frame */
 
 #if MFIELD_FIT_EXTFIELD
-          size_t extidx = mfield_extidx(mptr->t[j], w);
-          double extcoeff = gsl_vector_get(x, extidx);
+          size_t extidx = 0;
+          double extcoeff = 0.0;
           double dB_ext[3];
 #endif
 
@@ -513,8 +513,17 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
           B_model[2] = mptr->Bz_model[j];
 
 #if MFIELD_FIT_EXTFIELD
-          /* compute external field model correction */
-          mfield_nonlinear_model_ext(r, theta, phi, x, dB_ext, w);
+          /* external field is fitted only to data points used for main field modeling */
+          if ((MAGDATA_ExistX(mptr->flags[j]) || MAGDATA_ExistY(mptr->flags[j]) ||
+               MAGDATA_ExistZ(mptr->flags[j]) || MAGDATA_ExistScalar(mptr->flags[j])) &&
+              (MAGDATA_FitMF(mptr->flags[j])))
+            {
+              extidx = mfield_extidx(mptr->t[j], w);
+              extcoeff = gsl_vector_get(x, extidx);
+
+              /* compute external field model correction */
+              mfield_nonlinear_model_ext(r, theta, phi, x, dB_ext, w);
+            }
 
           /* add correction to POMME field */
           B_extcorr[0] = extcoeff * dB_ext[0];
@@ -703,8 +712,8 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 #endif
 
 #if MFIELD_FIT_EXTFIELD
-          size_t extidx = mfield_extidx(mptr->t[j], w);
-          double extcoeff = gsl_vector_get(x, extidx);
+          size_t extidx = 0;
+          double extcoeff = 0.0;
           double dB_ext[3];
 #endif
 
@@ -719,9 +728,18 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
                          w->green_array_p[thread_id]);
 
 #if MFIELD_FIT_EXTFIELD
-          /* compute external field model */
-          mfield_nonlinear_model_ext(mptr->r[j], mptr->theta[j], mptr->phi[j],
-                                     x, dB_ext, w);
+          /* external field is fitted only to data points used for main field modeling */
+          if ((MAGDATA_ExistX(mptr->flags[j]) || MAGDATA_ExistY(mptr->flags[j]) ||
+               MAGDATA_ExistZ(mptr->flags[j]) || MAGDATA_ExistScalar(mptr->flags[j])) &&
+              (MAGDATA_FitMF(mptr->flags[j])))
+            {
+              extidx = mfield_extidx(mptr->t[j], w);
+              extcoeff = gsl_vector_get(x, extidx);
+
+              /* compute external field model */
+              mfield_nonlinear_model_ext(mptr->r[j], mptr->theta[j], mptr->phi[j],
+                                         x, dB_ext, w);
+            }
 #endif
 
 #if MFIELD_FIT_EULER
@@ -1010,7 +1028,7 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
           size_t extidx = 0;
           size_t euler_idx = 0;
 #if MFIELD_FIT_EXTFIELD
-          double extcoeff;
+          double extcoeff = 0.0;
 #endif
 #if MFIELD_FIT_EULER
           double B_vfm[3];        /* observation vector VFM frame */
@@ -1037,16 +1055,22 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
           B_model[2] = mptr->Bz_model[j];
 
 #if MFIELD_FIT_EXTFIELD
-          extidx = mfield_extidx(mptr->t[j], w);
-          extcoeff = gsl_vector_get(x, extidx);
+          /* external field is fitted only to data points used for main field modeling */
+          if ((MAGDATA_ExistX(mptr->flags[j]) || MAGDATA_ExistY(mptr->flags[j]) ||
+               MAGDATA_ExistZ(mptr->flags[j]) || MAGDATA_ExistScalar(mptr->flags[j])) &&
+              (MAGDATA_FitMF(mptr->flags[j])))
+            {
+              extidx = mfield_extidx(mptr->t[j], w);
+              extcoeff = gsl_vector_get(x, extidx);
 
-          /* compute external field model */
-          mfield_nonlinear_model_ext(mptr->r[j], mptr->theta[j], mptr->phi[j],
-                                     x, dB_ext, w);
+              /* compute external field model */
+              mfield_nonlinear_model_ext(mptr->r[j], mptr->theta[j], mptr->phi[j],
+                                         x, dB_ext, w);
 
-          /* add correction to external field model */
-          for (k = 0; k < 3; ++k)
-            B_extcorr[k] = extcoeff * dB_ext[k];
+              /* add correction to external field model */
+              for (k = 0; k < 3; ++k)
+                B_extcorr[k] = extcoeff * dB_ext[k];
+            }
 #endif
 
           /* compute total modeled field (internal + external) */

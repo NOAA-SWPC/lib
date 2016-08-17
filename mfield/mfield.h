@@ -86,6 +86,8 @@ typedef struct
   size_t *nbins_euler;  /* number of Euler bins for each satellite */
   size_t *offset_euler; /* start index of each satellite's Euler angles in coefficient vector */
 
+  int ext_fdayi[3 * 366 + 30]; /* sorted array of daily timestamps with data for that day */
+
   size_t p;         /* number of model coefficients */
   size_t p_int;     /* number of model coefficients for internal field only */
 

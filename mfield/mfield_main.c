@@ -1022,11 +1022,17 @@ main(int argc, char *argv[])
 #if MFIELD_FIT_EXTFIELD
     char *ext_file = "coeffs.ext";
     FILE *fp = fopen(ext_file, "w");
-    gsl_vector_view ev = gsl_vector_subvector(coeffs, mfield_workspace_p->ext_offset,
-                                              mfield_workspace_p->next);
 
     fprintf(stderr, "main: printing external coefficients to %s...", ext_file);
-    gsl_vector_fprintf(fp, &ev.vector, "%g");
+    
+    for (n = 0; n < mfield_workspace_p->next; ++n)
+      {
+        size_t idx = mfield_workspace_p->ext_offset + n;
+        double k = gsl_vector_get(coeffs, idx);
+
+        fprintf(fp, "%d %g\n", mfield_workspace_p->ext_fdayi[n], k);
+      }
+
     fprintf(stderr, "done\n");
 
     fclose(fp);

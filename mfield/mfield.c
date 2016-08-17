@@ -80,6 +80,7 @@ static int mfield_print_residuals(const int header, FILE *fp,
                                   const gsl_vector *w_spatial);
 static int mfield_update_histogram(const gsl_vector *r, gsl_histogram *h);
 static int mfield_print_histogram(FILE *fp, gsl_histogram *h);
+static int mfield_compare_int(const void *a, const void *b);
 
 #include "mfield_euler.c"
 #include "mfield_nonlinear.c"
@@ -186,12 +187,75 @@ mfield_alloc(const mfield_parameters *params)
   w->neuler = 0;
 #endif
 
-#if MFIELD_FIT_EXTFIELD
-  /* allow for 3 years of data plus 1 month of spill */
-  w->next = 3 * 366 + 30;
-#else
   w->next = 0;
-#endif
+
+#if MFIELD_FIT_EXTFIELD
+
+  /* count the number of external field correction coefficients k(t) -
+   * there is one coefficient per day of data, so first count the number
+   * of days where we have data
+   */
+  if (w->data_workspace_p)
+    {
+      int *all_t;
+      size_t nall = 0;
+      size_t next = 0;
+      size_t i, j, k = 0;
+
+      /* count total number of data points */
+      for (i = 0; i < w->nsat; ++i)
+        {
+          magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+          nall += mptr->n;
+        }
+
+      all_t = malloc(nall * sizeof(int));
+
+      /* store all daily timestamps in array all_t */
+      for (i = 0; i < w->nsat; ++i)
+        {
+          magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+
+          for (j = 0; j < mptr->n; ++j)
+            {
+              double fday = satdata_epoch2fday(mptr->t[j]);
+              int fdayi = (int) fday;
+
+              if (MAGDATA_Discarded(mptr->flags[j]))
+                continue;
+
+              if (!((MAGDATA_ExistX(mptr->flags[j]) || MAGDATA_ExistY(mptr->flags[j]) ||
+                     MAGDATA_ExistZ(mptr->flags[j]) || MAGDATA_ExistScalar(mptr->flags[j])) &&
+                    (MAGDATA_FitMF(mptr->flags[j]))))
+                continue;
+
+              all_t[k++] = fdayi;
+            }
+        }
+
+      /* sort timestamp array */
+      qsort(all_t, k, sizeof(int), mfield_compare_int);
+
+      /* now loop through again and remove duplicates, final daily
+       * timestamps stored in w->ext_fdayi */
+      for (i = 0; i < k; ++i)
+        {
+          int fdayi = all_t[i];
+          void *ptr = bsearch(&fdayi, w->ext_fdayi, next, sizeof(int), mfield_compare_int);
+
+          if (ptr == NULL)
+            {
+              /* this day not yet recorded in array, add it now */
+              w->ext_fdayi[next++] = fdayi;
+            }
+        }
+
+      free(all_t);
+
+      w->next = next;
+    }
+
+#endif /* MFIELD_FIT_EXTFIELD */
 
   w->p += w->neuler + w->next;
 
@@ -1542,11 +1606,29 @@ Return: external coefficient corresponding to doy
 size_t
 mfield_extidx(const double t, const mfield_workspace *w)
 {
+#if 0
   double fday = satdata_epoch2fday(t);
   double fday0 = satdata_epoch2fday(w->t0_data);
   int daynum = (int) (fday - fday0);
 
   return (w->ext_offset + daynum);
+#else
+  /* search for this day in our sorted array of daily timestamps */
+  int fdayi = (int) satdata_epoch2fday(t);
+  void *ptr = bsearch(&fdayi, w->ext_fdayi, w->next, sizeof(int), mfield_compare_int);
+
+  if (ptr != NULL)
+    {
+      int idx = (int *) ptr - w->ext_fdayi;
+      assert(fdayi == w->ext_fdayi[idx]);
+      return (w->ext_offset + idx);
+    }
+  else
+    {
+      fprintf(stderr, "mfield_extidx: ERROR: day not found: %d\n", fdayi);
+      return 0;
+    }
+#endif
 }
 
 /*
@@ -1726,3 +1808,17 @@ mfield_print_histogram(FILE *fp, gsl_histogram *h)
 
   return GSL_SUCCESS;
 } /* mfield_print_histogram() */
+
+static int
+mfield_compare_int(const void *a, const void *b)
+{
+  int ai = *(int *) a;
+  int bi = *(int *) b;
+
+  if (ai < bi)
+    return -1;
+  else if (ai == bi)
+    return 0;
+  else
+    return 1;
+}
