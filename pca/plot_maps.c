@@ -58,7 +58,7 @@ main(int argc, char *argv[])
   
   for (i = 0; i < 40; ++i)
     {
-      sprintf(buf, "maps/map%zu.dat", i);
+      sprintf(buf, "maps/map%02zu.dat", i);
 
       fprintf(stderr, "main: printing principle component %zu map to %s...",
               i, buf);

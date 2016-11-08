@@ -144,8 +144,10 @@ mag_alloc(mag_params *params)
   w->log_B2 = log_alloc(LOG_WRITE, "%s/B2.dat", params->log_dir);
   w->log_Sq_Lcurve = log_alloc(LOG_WRITE, "%s/Sq_lcurve.dat", params->log_dir);
   w->log_Sq_Lcorner = log_alloc(LOG_WRITE, "%s/Sq_lcorner.dat", params->log_dir);
+  w->log_Sq_svd = log_alloc(LOG_WRITE, "%s/Sq_svd.dat", params->log_dir);
   w->log_EEJ_Lcurve = log_alloc(LOG_WRITE, "%s/EEJ_lcurve.dat", params->log_dir);
   w->log_EEJ_Lcorner = log_alloc(LOG_WRITE, "%s/EEJ_lcorner.dat", params->log_dir);
+  w->log_EEJ_svd = log_alloc(LOG_WRITE, "%s/EEJ_svd.dat", params->log_dir);
   w->log_EEJ = log_alloc(LOG_WRITE, "%s/EEJ.dat", params->log_dir);
   w->log_LC = log_alloc(LOG_WRITE, "%s/LC.dat", params->log_dir);
   w->log_PDE = log_alloc(LOG_WRITE, "%s/PDE.dat", params->log_dir);
@@ -158,10 +160,12 @@ mag_alloc(mag_params *params)
   mag_log_B2(1, w);
   mag_log_Sq_Lcurve(1, w);
   mag_log_Sq_Lcorner(1, w);
+  mag_log_Sq_svd(1, w);
   mag_log_LC(1, w);
   mag_log_EEJ(1, w);
   mag_log_EEJ_Lcurve(1, w);
   mag_log_EEJ_Lcorner(1, w);
+  mag_log_EEJ_svd(1, w);
   mag_log_PDE(1, w);
   mag_log_model(1, w);
   mag_log_EEF(1, 0, 0.0, 0.0, w);
@@ -228,6 +232,9 @@ mag_free(mag_workspace *w)
   if (w->log_Sq_Lcorner)
     log_free(w->log_Sq_Lcorner);
 
+  if (w->log_Sq_svd)
+    log_free(w->log_Sq_svd);
+
   if (w->log_LC)
     log_free(w->log_LC);
 
@@ -239,6 +246,9 @@ mag_free(mag_workspace *w)
 
   if (w->log_EEJ_Lcorner)
     log_free(w->log_EEJ_Lcorner);
+
+  if (w->log_EEJ_svd)
+    log_free(w->log_EEJ_svd);
 
   if (w->log_PDE)
     log_free(w->log_PDE);
@@ -497,9 +507,10 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       else
         mag_log_F2(0, w);
 
-      /* output Sq L-curve and corners */
+      /* output Sq SVD, L-curve and corners */
       mag_log_Sq_Lcurve(0, w);
       mag_log_Sq_Lcorner(0, w);
+      mag_log_Sq_svd(0, w);
 
       /* print line current profiles to log file */
       mag_log_LC(0, w);
@@ -507,9 +518,10 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       /* print EEJ current density to log file */
       mag_log_EEJ(0, w);
 
-      /* output EEJ L-curve and corners */
+      /* output EEJ SVD, L-curve and corners */
       mag_log_EEJ_Lcurve(0, w);
       mag_log_EEJ_Lcorner(0, w);
+      mag_log_EEJ_svd(0, w);
 
       /* output EEJ current density to output directory */
       mag_output(0, w);

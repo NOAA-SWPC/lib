@@ -223,7 +223,9 @@ mag_sqfilt_scalar(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
     return s;
 
   smax = gsl_vector_get(w->multifit_workspace_p->S, 0);
+
   lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 0.05*smax);
+
   w->reg_idx = bsearch_desc_double(w->reg_param->data, lambda, 0, w->nreg - 1);
   lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 

@@ -247,10 +247,12 @@ typedef struct
   log_workspace *log_B2;
   log_workspace *log_Sq_Lcurve;
   log_workspace *log_Sq_Lcorner;
+  log_workspace *log_Sq_svd;
   log_workspace *log_LC;
   log_workspace *log_EEJ;
   log_workspace *log_EEJ_Lcurve;
   log_workspace *log_EEJ_Lcorner;
+  log_workspace *log_EEJ_svd;
   log_workspace *log_PDE;
   log_workspace *log_model;
   log_workspace *log_EEF;
@@ -291,10 +293,12 @@ int mag_log_F2(const int header, const mag_workspace *w);
 int mag_log_B2(const int header, const mag_workspace *w);
 int mag_log_Sq_Lcurve(const int header, const mag_workspace *w);
 int mag_log_Sq_Lcorner(const int header, const mag_workspace *w);
+int mag_log_Sq_svd(const int header, const mag_workspace *w);
 int mag_log_LC(const int header, const mag_workspace *w);
 int mag_log_EEJ(const int header, const mag_workspace *w);
 int mag_log_EEJ_Lcurve(const int header, const mag_workspace *w);
 int mag_log_EEJ_Lcorner(const int header, const mag_workspace *w);
+int mag_log_EEJ_svd(const int header, const mag_workspace *w);
 int mag_log_PDE(const int header, const mag_workspace *w);
 int mag_log_model(const int header, const mag_workspace *w);
 int mag_log_EEF(const int header, const time_t t, const double phi,

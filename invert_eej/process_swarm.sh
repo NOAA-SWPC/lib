@@ -3,14 +3,17 @@
 # Run EEF chain on Swarm data
 
 sats="A B C"
+if test -n "$1"; then
+  sats="$1"
+fi
 
 prog="./main"
 
 prefix="log"
 
 # set for profiles only
-flags="-p"
-#flags=""
+#flags="-p"
+flags=""
 
 for sat in ${sats}; do
   log_dir="${prefix}_${sat}"

@@ -23,9 +23,9 @@ tfile = 'test.dat'
 cfile = 'cont.dat'
 
 do for [pcidx=1:40] {
-  file = sprintf('maps/map%d.dat', pcidx - 1)
+  file = sprintf('maps/map%02d.dat', pcidx - 1)
 
-  outfile = sprintf('maps/current%d.png', pcidx - 1)
+  outfile = sprintf('maps/current%02d.png', pcidx - 1)
   set output outfile
 
   str = sprintf('Generating %s...', outfile)

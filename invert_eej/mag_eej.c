@@ -533,7 +533,9 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
    * therefore set a lower bound on lambda
    */
   smax = gsl_vector_get(w->multifit_p->S, 0);
+
   lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 1.0e-3*smax);
+
   w->reg_idx = bsearch_desc_double(w->reg_param->data, lambda, 0, w->nreg - 1);
   lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 

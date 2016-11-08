@@ -282,6 +282,40 @@ mag_log_Sq_Lcorner(const int header, const mag_workspace *w)
 } /* mag_log_Sq_Lcorner() */
 
 /*
+mag_log_Sq_svd()
+  Log Sq filter singular values to a file
+
+Inputs: header - 1 = print header, 0 = don't
+        w      - workspace
+*/
+
+int
+mag_log_Sq_svd(const int header, const mag_workspace *w)
+{
+  int s = 0;
+  size_t i;
+  mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
+
+  if (header)
+    {
+      /* print header information */
+      i = 1;
+      log_proc(w->log_Sq_svd, "# Field %zu: singular values\n", i++);
+      return s;
+    }
+
+  for (i = 0; i < sqfilt_p->p; ++i)
+    {
+      log_proc(w->log_Sq_svd, "%.12e\n",
+               gsl_vector_get(sqfilt_p->multifit_workspace_p->S, i));
+    }
+
+  log_proc(w->log_Sq_svd, "\n\n");
+
+  return s;
+} /* mag_log_Sq_svd() */
+
+/*
 mag_log_LC()
   Log computed line currents to a file, 1 row per profile
 
@@ -433,6 +467,40 @@ mag_log_EEJ_Lcorner(const int header, const mag_workspace *w)
 
   return s;
 } /* mag_log_EEJ_Lcorner() */
+
+/*
+mag_log_EEJ_svd()
+  Log EEJ inversion singular values to a file
+
+Inputs: header - 1 = print header, 0 = don't
+        w      - workspace
+*/
+
+int
+mag_log_EEJ_svd(const int header, const mag_workspace *w)
+{
+  int s = 0;
+  size_t i;
+  mag_eej_workspace *eej_p = w->eej_workspace_p;
+
+  if (header)
+    {
+      /* print header information */
+      i = 1;
+      log_proc(w->log_EEJ_svd, "# Field %zu: singular values\n", i++);
+      return s;
+    }
+
+  for (i = 0; i < eej_p->p; ++i)
+    {
+      log_proc(w->log_EEJ_svd, "%.12e\n",
+               gsl_vector_get(eej_p->multifit_p->S, i));
+    }
+
+  log_proc(w->log_EEJ_svd, "\n\n");
+
+  return s;
+} /* mag_log_EEJ_svd() */
 
 /*
 mag_log_PDE()

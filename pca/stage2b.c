@@ -22,10 +22,46 @@
 #include <lapacke/lapacke.h>
 
 #include "common.h"
+#include "green.h"
 #include "lapack_wrapper.h"
 
 #include "io.h"
 #include "pca.h"
+
+/*
+taper_knm()
+  Taper high degree knm coefficients to try to reduce ringing.
+We use a cosine taper set to 1 at nmin = 30, and going to 0 at
+nmax = 60
+*/
+static int
+taper_knm(gsl_matrix * K, green_workspace * green_p)
+{
+  const size_t nmin = 30;
+  const size_t nmax = green_p->nmax;
+  size_t n;
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int M = (int) GSL_MIN(n, green_p->mmax);
+      int m;
+      double wn = 1.0;
+
+      /* compute taper weight */
+      if (n > nmin)
+        wn = cos((n - nmin) * M_PI / (double)nmax);
+
+      for (m = -M; m <= M; ++m)
+        {
+          size_t cidx = green_nmidx(n, m, green_p);
+          gsl_vector_view row = gsl_matrix_row(K, cidx);
+
+          gsl_vector_scale(&row.vector, wn);
+        }
+    }
+
+  return GSL_SUCCESS;
+}
 
 int
 main(int argc, char *argv[])
@@ -75,6 +111,24 @@ main(int argc, char *argv[])
 
   nnm = K->size1;
   nt = K->size2;
+
+#if 1
+  {
+    green_workspace *green_p = green_alloc(60, 30, R_EARTH_KM);
+    char *spectrum_file = "spectrum_taper.s";
+    gsl_vector_view x = gsl_matrix_column(K, 0);
+
+    fprintf(stderr, "main: tapering knm coefficients...");
+    taper_knm(K, green_p);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "main: writing tapered spectrum to %s...", spectrum_file);
+    green_print_spectrum(spectrum_file, &x.vector, green_p);
+    fprintf(stderr, "done\n");
+
+    green_free(green_p);
+  }
+#endif
 
   /* compute 1/sqrt(nt) K for SVD computation */
   gsl_matrix_scale(K, 1.0 / sqrt((double) nt));

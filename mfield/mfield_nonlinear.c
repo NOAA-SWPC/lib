@@ -1,4 +1,5 @@
 #define OLD_FDF     0
+#define DEBUG       0
 
 typedef struct
 {
@@ -384,7 +385,7 @@ mfield_init_nonlinear(mfield_workspace *w)
     gsl_multilarge_nlinear_parameters fdf_params =
       gsl_multilarge_nlinear_default_parameters();
 
-    fdf_params.trs = gsl_multilarge_nlinear_trs_dogleg;
+    fdf_params.trs = gsl_multilarge_nlinear_trs_ddogleg;
     fdf_params.h_fvv = 0.5;
     w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, nres, p);
   }
@@ -462,7 +463,9 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
   size_t i, j;
   struct timeval tv0, tv1;
 
+#if DEBUG
   fprintf(stderr, "mfield_calc_f: entering function...\n");
+#endif
   gettimeofday(&tv0, NULL);
 
   for (i = 0; i < w->nsat; ++i)
@@ -623,7 +626,9 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
     }
 
   gettimeofday(&tv1, NULL);
+#if DEBUG
   fprintf(stderr, "mfield_calc_f: leaving function (%g seconds)\n", time_diff(tv0, tv1));
+#endif
 
   return s;
 }
@@ -647,7 +652,9 @@ mfield_calc_Wf(const gsl_vector *x, void *params, gsl_vector *f)
   size_t i;
   struct timeval tv0, tv1;
 
+#if DEBUG
   fprintf(stderr, "mfield_calc_Wf: entering function...\n");
+#endif
   gettimeofday(&tv0, NULL);
 
   s = mfield_calc_f(x, params, f);
@@ -663,7 +670,9 @@ mfield_calc_Wf(const gsl_vector *x, void *params, gsl_vector *f)
     }
 
   gettimeofday(&tv1, NULL);
+#if DEBUG
   fprintf(stderr, "mfield_calc_Wf: leaving function (%g seconds)\n", time_diff(tv0, tv1));
+#endif
 
   return GSL_SUCCESS;
 }
@@ -686,7 +695,9 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
   size_t i, j;
   struct timeval tv0, tv1;
 
+#if DEBUG
   fprintf(stderr, "mfield_calc_df: entering function...\n");
+#endif
   gettimeofday(&tv0, NULL);
 
   gsl_matrix_set_zero(J);
@@ -949,7 +960,9 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
     }
 
   gettimeofday(&tv1, NULL);
+#if DEBUG
   fprintf(stderr, "mfield_calc_df: leaving function (%g seconds)\n", time_diff(tv0, tv1));
+#endif
 
 #if 0
   print_octave(J, "J");
@@ -974,11 +987,13 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
   gsl_matrix_view JTJ_int; /* internal field portion of J^T J */
   struct timeval tv0, tv1;
 
-  fprintf(stderr, "mfield_calc_df2: entering function...\n");
   gettimeofday(&tv0, NULL);
+#if DEBUG
+  fprintf(stderr, "mfield_calc_df2: entering function...\n");
 
   fprintf(stderr, "mfield_calc_df2: TransJ = %s...\n",
           TransJ == CblasTrans ? "trans" : "notrans");
+#endif
 
   /* initialize outputs to 0 */
   if (v)
@@ -1262,7 +1277,9 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
 #endif
 
   gettimeofday(&tv1, NULL);
+#if DEBUG
   fprintf(stderr, "mfield_calc_df2: leaving function... (%g seconds)\n", time_diff(tv0, tv1));
+#endif
 
   return GSL_SUCCESS;
 }

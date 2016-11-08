@@ -7,7 +7,7 @@ end_epoch="2014.0"
 numit="5"
 
 prog="./mfield"
-coef_dir="/nfs/satmag_work/palken/corr/mfield/coef_new"
+coef_dir="$MYLIBHOME/mfield/coef_new"
 
 lambda_sv="0.006"
 lambda_sa="0.006"

@@ -3,14 +3,12 @@
  *
  * 1. Read tiegcm data file(s)
  * 2. For each time step t_k, invert B(t_k) grid for SH coefficients k_{nm}(t_k)
- * 3. Determine spherical harmonic coefficients of current stream function
- *    on a shell at radius b, q_{nm}(t_k)
- * 4. Store q_{nm}(t) SH coefficients in a nnm-by-nt matrix:
+ * 3. Store k_{nm}(t) SH coefficients in a nnm-by-nt matrix:
  *
- *      X_{ij} = q_i(t_j) where i = shidx(n,m)
+ *      X_{ij} = k_i(t_j) where i = shidx(n,m)
  * 5. X matrix is output to a binary file
  *
- * ./stage1 <-i tiegcm_nc_file> [-o output_matrix_file]
+ * ./stage1 [-o binary_output_matrix_file] tiegcm1.nc tiegcm2.nc ...
  */
 
 #include <stdio.h>
@@ -416,11 +414,11 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
   k = 1;
   fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", k++);
-  fprintf(fp, "# Field %zu: q(1,0) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(1,1) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(2,0) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(2,1) (nT)\n", k++);
-  fprintf(fp, "# Field %zu: q(2,2) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: k(1,0) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: k(1,1) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: k(2,0) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: k(2,1) (nT)\n", k++);
+  fprintf(fp, "# Field %zu: k(2,2) (nT)\n", k++);
 
   for (k = 0; k < data->nt; ++k)
     {

@@ -437,10 +437,11 @@ main(int argc, char *argv[])
             break;
 
           case 'j':
-            fprintf(stderr, "main: reading JULIA data...");
-#if 0
+#if 1
+            fprintf(stderr, "main: reading JULIA 5-minute average data...");
             data_julia = julia_read_avg_idx(JULIA_AVG_IDX_FILE, NULL);
 #else
+            fprintf(stderr, "main: reading JULIA data...");
             data_julia = julia_read_idx(JULIA_IDX_FILE, NULL);
 #endif
             fprintf(stderr, "done (%zu data read)\n", data_julia->n);

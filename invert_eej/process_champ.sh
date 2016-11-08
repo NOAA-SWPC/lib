@@ -8,7 +8,7 @@ prog="./main"
 #flags="-p"
 flags=""
 
-for year in $(seq -w 00 05); do
+for year in $(seq -w 07 10); do
   log_dir="log_champ_${year}"
   idx_file="champ${year}.idx"
 

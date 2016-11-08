@@ -7,7 +7,7 @@ libmagdata_la_SOURCES = magdata.c
 check_PROGRAMS = test print
 
 print_SOURCES = print.c
-print_LDADD = libmagdata.la $(top_builddir)/common/libcommon.la $(top_builddir)/track/libtrack.la -lm -lgsl -lgslcblas -lsatdata -lindices -lcdf -L/home/palken/usr/lib
+print_LDADD = libmagdata.la $(top_builddir)/common/libcommon.la $(top_builddir)/track/libtrack.la $(top_builddir)/msynth/libmsynth.la -lm -lgsl -lgslcblas -lsatdata -lindices -lcdf -L/home/palken/usr/lib
 
 test_SOURCES = test.c
 test_LDADD = libmagdata.la $(top_builddir)/common/libcommon.la $(top_builddir)/track/libtrack.la -lm -lgsl -lgslcblas -lsatdata -lindices -lcdf -L/home/palken/usr/lib
