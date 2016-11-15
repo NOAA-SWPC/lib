@@ -8,6 +8,9 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
 
+/* mu_0 in units of: nT / (kA km^{-1}) */
+#define GREEN_MU_0                  (400.0 * M_PI)
+
 typedef struct
 {
   size_t nmax;     /* maximum spherical harmonic degree */
@@ -40,5 +43,9 @@ int green_print_spectrum(const char *filename, const gsl_vector *c,
                          const green_workspace *w);
 int green_print_spectrum_azim(const char *filename, const gsl_vector * c,
                               const green_workspace *w);
+
+/* current.c */
+int green_eval_sheet_int(const double b, const double theta, const double phi,
+                         const double *gnm, double K[3], green_workspace *w);
 
 #endif /* INCLUDED_green_h */

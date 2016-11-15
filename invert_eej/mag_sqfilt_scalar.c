@@ -30,6 +30,10 @@ static int sqfilt_linear_matrix_row(const double r, const double thetaq,
                                     const double b_int[3],
                                     gsl_vector *v, mag_workspace *w);
 static int sqfilt_calc_F2(const gsl_vector *c, mag_workspace *w);
+static int sqfilt_model_int(const gsl_vector *c, double *X, double *Y, double *Z,
+                            mag_workspace *w);
+static int sqfilt_model_ext(const gsl_vector *c, double *X, double *Y, double *Z,
+                            mag_workspace *w);
 static size_t sqfilt_nmidx(const size_t type, const size_t n, const int m,
                            const mag_sqfilt_scalar_workspace *w);
 
@@ -368,6 +372,10 @@ Inputs: r      - radius (km)
         b_int  - unit vector for internal field
         v      - row of LS matrix
         w      - workspace
+
+Notes:
+1) On output, w->green_workspace contains the internal and
+external Green's functions
 */
 
 static int
@@ -483,35 +491,126 @@ sqfilt_calc_F2(const gsl_vector *c, mag_workspace *w)
       /* compute basis functions */
       sqfilt_linear_matrix_row(r, thetaq, phi, b_int, v, w);
 
-      /* compute internal model = b . M */
       if (sqfilt_p->p_int > 0)
         {
           gsl_vector_const_view c_int = gsl_vector_const_subvector(c, sqfilt_p->int_offset, sqfilt_p->p_int);
           gsl_vector_const_view v_int = gsl_vector_const_subvector(v, sqfilt_p->int_offset, sqfilt_p->p_int);
+          double X, Y, Z;
 
+          /* compute internal scalar model = b . M */
           gsl_blas_ddot(&v_int.vector, &c_int.vector, &val);
           track->Sq_int[i] = val;
+
+          /* compute internal vector model M */
+          sqfilt_model_int(c, &X, &Y, &Z, w);
+          track->X_Sq_int[i] = X;
+          track->Y_Sq_int[i] = Y;
+          track->Z_Sq_int[i] = Z;
         }
       else
+        {
           track->Sq_int[i] = 0.0;
+          track->X_Sq_int[i] = 0.0;
+          track->Y_Sq_int[i] = 0.0;
+          track->Z_Sq_int[i] = 0.0;
+        }
 
-      /* compute external model = b . K */
       if (sqfilt_p->p_ext > 0)
         {
           gsl_vector_const_view c_ext = gsl_vector_const_subvector(c, sqfilt_p->ext_offset, sqfilt_p->p_ext);
           gsl_vector_const_view v_ext = gsl_vector_const_subvector(v, sqfilt_p->ext_offset, sqfilt_p->p_ext);
+          double X, Y, Z;
 
+          /* compute external scalar model = b . K */
           gsl_blas_ddot(&v_ext.vector, &c_ext.vector, &val);
           track->Sq_ext[i] = val;
+
+          /* compute external vector model K */
+          sqfilt_model_ext(c, &X, &Y, &Z, w);
+          track->X_Sq_ext[i] = X;
+          track->Y_Sq_ext[i] = Y;
+          track->Z_Sq_ext[i] = Z;
         }
       else
+        {
           track->Sq_ext[i] = 0.0;
+          track->X_Sq_ext[i] = 0.0;
+          track->Y_Sq_ext[i] = 0.0;
+          track->Z_Sq_ext[i] = 0.0;
+        }
 
       track->F2[i] = track->F1[i] - (track->Sq_int[i] + track->Sq_ext[i]);
+      track->X2[i] = track->X1[i] - (track->X_Sq_int[i] + track->X_Sq_ext[i]);
+      track->Y2[i] = track->Y1[i] - (track->Y_Sq_int[i] + track->Y_Sq_ext[i]);
+      track->Z2[i] = track->Z1[i] - (track->Z_Sq_int[i] + track->Z_Sq_ext[i]);
     }
 
   return GSL_SUCCESS;
 } /* sqfilt_calc_F2() */
+
+static int
+sqfilt_model_int(const gsl_vector *c, double *X, double *Y, double *Z,
+                 mag_workspace *w)
+{
+  green_workspace *green_p = w->green_workspace_p;
+  mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
+  size_t n;
+
+  *X = 0.0;
+  *Y = 0.0;
+  *Z = 0.0;
+
+  for (n = 1; n <= sqfilt_p->nmax_int; ++n)
+    {
+      int M = (int) GSL_MIN(n, sqfilt_p->mmax_int);
+      int m;
+
+      for (m = -M; m <= M; ++m)
+        {
+          size_t idx = sqfilt_nmidx(0, n, m, sqfilt_p);
+          size_t gidx = green_nmidx(n, m);
+          double cnm = gsl_vector_get(c, idx);
+
+          *X += cnm * green_p->dX[gidx];
+          *Y += cnm * green_p->dY[gidx];
+          *Z += cnm * green_p->dZ[gidx];
+        }
+    }
+
+  return GSL_SUCCESS;
+}
+
+static int
+sqfilt_model_ext(const gsl_vector *c, double *X, double *Y, double *Z,
+                 mag_workspace *w)
+{
+  green_workspace *green_p = w->green_workspace_p;
+  mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
+  size_t n;
+
+  *X = 0.0;
+  *Y = 0.0;
+  *Z = 0.0;
+
+  for (n = 1; n <= sqfilt_p->nmax_ext; ++n)
+    {
+      int M = (int) GSL_MIN(n, sqfilt_p->mmax_ext);
+      int m;
+
+      for (m = -M; m <= M; ++m)
+        {
+          size_t idx = sqfilt_nmidx(1, n, m, sqfilt_p);
+          size_t gidx = green_nmidx(n, m);
+          double cnm = gsl_vector_get(c, idx);
+
+          *X += cnm * green_p->dX_ext[gidx];
+          *Y += cnm * green_p->dY_ext[gidx];
+          *Z += cnm * green_p->dZ_ext[gidx];
+        }
+    }
+
+  return GSL_SUCCESS;
+}
 
 /*
 sqfilt_nmidx()

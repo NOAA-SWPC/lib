@@ -97,6 +97,12 @@ typedef struct
   double Z2[MAG_MAX_TRACK];       /* Z^(1) - (M + K)_Z (nT) */
   double Sq_int[MAG_MAX_TRACK];   /* internal Sq model b . M (nT) */
   double Sq_ext[MAG_MAX_TRACK];   /* external Sq model b . K (nT) */
+  double X_Sq_int[MAG_MAX_TRACK]; /* internal Sq model M_x (nT) */
+  double Y_Sq_int[MAG_MAX_TRACK]; /* internal Sq model M_y (nT) */
+  double Z_Sq_int[MAG_MAX_TRACK]; /* internal Sq model M_z (nT) */
+  double X_Sq_ext[MAG_MAX_TRACK]; /* external Sq model K_x (nT) */
+  double Y_Sq_ext[MAG_MAX_TRACK]; /* external Sq model K_y (nT) */
+  double Z_Sq_ext[MAG_MAX_TRACK]; /* external Sq model K_z (nT) */
   double F2_fit[MAG_MAX_TRACK];   /* fit to F^(2) from line current model */
   double phi_eq;                  /* longitude of equator crossing (rad) */
   double t_eq;                    /* time of equator crossing (CDF_EPOCH) */

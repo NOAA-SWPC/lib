@@ -10,6 +10,7 @@
 
 #include "lapack_wrapper.h"
 
+/* minimize || A X - B || */
 int
 lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
            int *rank)
@@ -51,6 +52,53 @@ lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
 
   gsl_matrix_free(work_A);
   gsl_matrix_free(work_B);
+  free(jpvt);
+
+  return s;
+}
+
+/* minimize || A x - b || */
+int
+lapack_lls2(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x,
+            int *rank)
+{
+  int s;
+  lapack_int m = A->size1;
+  lapack_int n = A->size2;
+  lapack_int nrhs = 1;
+  lapack_int lda = A->size1;
+  lapack_int ldb = b->size;
+  lapack_int lrank;
+  lapack_int *jpvt = malloc(n * sizeof(lapack_int));
+  gsl_matrix *work_A = gsl_matrix_alloc(A->size2, A->size1);
+  gsl_vector *work_b = gsl_vector_alloc(b->size);
+  double rcond = 1.0e-6;
+
+  gsl_matrix_transpose_memcpy(work_A, A);
+  gsl_vector_memcpy(work_b, b);
+
+  s = LAPACKE_dgelsy(LAPACK_COL_MAJOR,
+                     m,
+                     n,
+                     nrhs,
+                     work_A->data,
+                     lda,
+                     work_b->data,
+                     ldb,
+                     jpvt,
+                     rcond,
+                     &lrank);
+
+  /* store solution in X */
+  {
+    gsl_vector_view v = gsl_vector_subvector(work_b, 0, x->size);
+    gsl_vector_memcpy(x, &v.vector);
+  }
+
+  *rank = lrank;
+
+  gsl_matrix_free(work_A);
+  gsl_vector_free(work_b);
   free(jpvt);
 
   return s;

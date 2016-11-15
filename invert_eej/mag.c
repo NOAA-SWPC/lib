@@ -505,7 +505,10 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       if (params->use_vector)
         mag_log_B2(0, w);
       else
-        mag_log_F2(0, w);
+        {
+          mag_log_B2(0, w);
+          mag_log_F2(0, w);
+        }
 
       /* output Sq SVD, L-curve and corners */
       mag_log_Sq_Lcurve(0, w);

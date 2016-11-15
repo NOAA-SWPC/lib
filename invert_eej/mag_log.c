@@ -178,6 +178,12 @@ mag_log_B2(const int header, const mag_workspace *w)
       log_proc(w->log_B2, "# Field %zu: X^(1) (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: Y^(1) (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: Z^(1) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: internal Sq model X (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: internal Sq model Y (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: internal Sq model Z (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: external Sq model X (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: external Sq model Y (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: external Sq model Z (nT)\n", i++);
       return s;
     }
 
@@ -186,7 +192,7 @@ mag_log_B2(const int header, const mag_workspace *w)
       time_t unix_time = satdata_epoch2timet(track->t[i]);
       double lt = get_localtime(unix_time, track->phi[i]);
 
-      log_proc(w->log_B2, "%ld %6.3f %6.2f %9.4f %9.4f %8.4f %8.4f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n",
+      log_proc(w->log_B2, "%ld %6.3f %6.2f %9.4f %9.4f %8.4f %8.4f %8.2f %8.2f %8.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n",
                unix_time,
                lt,
                get_season(unix_time),
@@ -199,7 +205,13 @@ mag_log_B2(const int header, const mag_workspace *w)
                track->Z[i],
                track->X1[i],
                track->Y1[i],
-               track->Z1[i]);
+               track->Z1[i],
+               track->X_Sq_int[i],
+               track->Y_Sq_int[i],
+               track->Z_Sq_int[i],
+               track->X_Sq_ext[i],
+               track->Y_Sq_ext[i],
+               track->Z_Sq_ext[i]);
     }
 
   log_proc(w->log_B2, "\n\n");
