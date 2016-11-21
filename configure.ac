@@ -31,6 +31,7 @@ AC_CONFIG_FILES([            \
   gd/Makefile                \
   green/Makefile             \
   grid/Makefile              \
+  grobs/Makefile             \
   hwm/Makefile               \
   invert_eej/Makefile        \
   iri/Makefile               \
@@ -43,6 +44,7 @@ AC_CONFIG_FILES([            \
   magdata/Makefile           \
   mageq/Makefile             \
   mfield/Makefile            \
+  mserv/Makefile             \
   msis/Makefile              \
   msynth/Makefile            \
   msynth/msynth.h            \

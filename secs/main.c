@@ -219,7 +219,11 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   int s = 0;
   size_t i, j, k;
   size_t nflagged, nunflagged;
-  secs1d_workspace *secs1d_p = secs1d_alloc(20);
+  /*const double pole_spacing = 0.5;*/
+  const double pole_spacing = 0.5;
+  /*const size_t flags = SECS1D_FLG_FIT_DF | SECS1D_FLG_FIT_CF;*/
+  const size_t flags = SECS1D_FLG_FIT_DF;
+  secs1d_workspace *secs1d_p = secs1d_alloc(flags, SECS1D_LMAX, R_EARTH_KM + 110.0, pole_spacing);
   const char *file1 = "data1.txt";
   const char *file2 = "data2.txt";
   const char *file3 = "data3.txt";
@@ -228,14 +232,24 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   FILE *fp2 = fopen(file2, "w");
   FILE *fp3 = fopen(file3, "w");
   FILE *fp_chi = fopen(file_chi, "w");
+  FILE *fp_track = fopen("track.dat", "w");
   size_t idx = 0;
   char buf[2048];
+  struct timeval tv0, tv1;
 
   nflagged = track_nflagged(track1);
   nunflagged = track1->n - nflagged;
   fprintf(stderr, "Total tracks:    %zu\n", track1->n);
   fprintf(stderr, "Total flagged:   %zu\n", nflagged);
   fprintf(stderr, "Total unflagged: %zu\n", nunflagged);
+
+  /* print header */
+  secs1d_print_track(1, fp1, NULL, NULL, secs1d_p);
+
+  track_print_track(1, fp_track, NULL, NULL);
+
+  fprintf(stderr, "main_proc: npoles = %zu\n", secs1d_p->npoles);
+  fprintf(stderr, "main_proc: ncoeff = %zu\n", secs1d_p->p);
 
   for (i = 0; i < 1; ++i)
     {
@@ -247,7 +261,20 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
       if (tptr->flags != 0)
         continue;
 
-      secs1d_add_track(tptr, data, track1, secs1d_p);
+      fprintf(stderr, "main_proc: adding data for track %zu/%zu to LS system (index %zu)...", i + 1, track1->n, idx);
+      gettimeofday(&tv0, NULL);
+      secs1d_add_track(tptr, data, secs1d_p);
+      gettimeofday(&tv1, NULL);
+      fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+      fprintf(stderr, "main_proc: fitting 1D SECS to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
+      secs1d_fit(secs1d_p);
+      fprintf(stderr, "done\n");
+
+      secs1d_print_track(0, fp1, tptr, data, secs1d_p);
+      track_print_track(0, fp_track, tptr, data);
+
+      exit(1);
 
 #if 0
       /* find Swarm C crossing within 1 min and 1.7 deg of A */
@@ -378,7 +405,7 @@ main(int argc, char *argv[])
   params.lon_max = 200.0;
   params.kp_min = 0.0;
   params.kp_max = 2.0;
-  params.downsample = 15;
+  params.downsample = 1;
   params.alpha = -1.0;
   params.thresh[0] = 210.0;
   params.thresh[1] = 170.0;

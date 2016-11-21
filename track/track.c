@@ -549,23 +549,8 @@ track_print(const char *filename, const size_t flags,
   fprintf(fp, "# Total unflagged: %zu\n", w->n - nflagged);
   fprintf(fp, "# Track selection flags: %zu\n", flags);
 
-  i = 1;
-  fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
-  fprintf(fp, "# Field %zu: UT (hours)\n", i++);
-  fprintf(fp, "# Field %zu: local time (hours)\n", i++);
-  fprintf(fp, "# Field %zu: season (doy)\n", i++);
-  fprintf(fp, "# Field %zu: altitude (km)\n", i++);
-  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: geocentric latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: NEC X residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC Y residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC Z residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: F residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC X measurement (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC Y measurement (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC Z measurement (nT)\n", i++);
-  fprintf(fp, "# Field %zu: electron density data (cm^{-3})\n", i++);
+  /* print header */
+  track_print_track(1, fp, NULL, data);
 
   for (i = 0; i < w->n; ++i)
     {
@@ -580,42 +565,78 @@ track_print(const char *filename, const size_t flags,
             continue;
         }
 
-      for (j = 0; j < tptr->n; ++j)
-        {
-          size_t didx = j + tptr->start_idx;
-          time_t unix_time = satdata_epoch2timet(data->t[didx]);
-          double ut = get_ut(unix_time);
-          double lt = get_localtime(unix_time, data->longitude[didx] * M_PI / 180.0);
-
-          if (SATDATA_BadData(data->flags[didx]))
-            continue;
-
-          fprintf(fp, "%ld %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
-                  unix_time,
-                  ut,
-                  lt,
-                  get_season(unix_time),
-                  data->altitude[didx],
-                  data->longitude[didx],
-                  data->latitude[didx],
-                  data->qdlat[didx],
-                  tptr->Bx[j],
-                  tptr->By[j],
-                  tptr->Bz[j],
-                  tptr->Bf[j],
-                  SATDATA_VEC_X(data->B, didx),
-                  SATDATA_VEC_Y(data->B, didx),
-                  SATDATA_VEC_Z(data->B, didx),
-                  data->ne[didx]);
-        }
-
-      fprintf(fp, "\n\n");
+      /* print this track */
+      track_print_track(0, fp, tptr, data);
     }
 
   fclose(fp);
 
   return s;
 } /* track_print() */
+
+int
+track_print_track(const int header, FILE *fp, const track_data *tptr,
+                  const satdata_mag *data)
+{
+  int s = 0;
+  size_t j;
+
+  if (header)
+    {
+      j = 1;
+      fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", j++);
+      fprintf(fp, "# Field %zu: UT (hours)\n", j++);
+      fprintf(fp, "# Field %zu: local time (hours)\n", j++);
+      fprintf(fp, "# Field %zu: season (doy)\n", j++);
+      fprintf(fp, "# Field %zu: radius (km)\n", j++);
+      fprintf(fp, "# Field %zu: longitude (degrees)\n", j++);
+      fprintf(fp, "# Field %zu: geocentric latitude (degrees)\n", j++);
+      fprintf(fp, "# Field %zu: QD latitude (degrees)\n", j++);
+      fprintf(fp, "# Field %zu: NEC X residual (nT)\n", j++);
+      fprintf(fp, "# Field %zu: NEC Y residual (nT)\n", j++);
+      fprintf(fp, "# Field %zu: NEC Z residual (nT)\n", j++);
+      fprintf(fp, "# Field %zu: F residual (nT)\n", j++);
+      fprintf(fp, "# Field %zu: NEC X measurement (nT)\n", j++);
+      fprintf(fp, "# Field %zu: NEC Y measurement (nT)\n", j++);
+      fprintf(fp, "# Field %zu: NEC Z measurement (nT)\n", j++);
+      fprintf(fp, "# Field %zu: electron density data (cm^{-3})\n", j++);
+
+      return s;
+    }
+
+  for (j = 0; j < tptr->n; ++j)
+    {
+      size_t didx = j + tptr->start_idx;
+      time_t unix_time = satdata_epoch2timet(data->t[didx]);
+      double ut = get_ut(unix_time);
+      double lt = get_localtime(unix_time, data->longitude[didx] * M_PI / 180.0);
+
+      if (SATDATA_BadData(data->flags[didx]))
+        continue;
+
+      fprintf(fp, "%ld %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
+              unix_time,
+              ut,
+              lt,
+              get_season(unix_time),
+              data->altitude[didx] + data->R,
+              data->longitude[didx],
+              data->latitude[didx],
+              data->qdlat[didx],
+              tptr->Bx[j],
+              tptr->By[j],
+              tptr->Bz[j],
+              tptr->Bf[j],
+              SATDATA_VEC_X(data->B, didx),
+              SATDATA_VEC_Y(data->B, didx),
+              SATDATA_VEC_Z(data->B, didx),
+              data->ne[didx]);
+    }
+
+  fprintf(fp, "\n\n");
+
+  return s;
+}
 
 /*
 track_print_stats_flag()

@@ -84,6 +84,8 @@ int track_find(const double t_eq, const double phi_eq, const double dt_min,
                const double dphi, size_t *idx, const track_workspace *w);
 int track_print(const char *filename, const size_t flags,
                 const satdata_mag *data, track_workspace *w);
+int track_print_track(const int header, FILE *fp, const track_data *tptr,
+                      const satdata_mag *data);
 int track_print_stats_flag(const char *filename, const size_t flag,
                            track_workspace *w);
 int track_print_stats(const char *filename, track_workspace *w);

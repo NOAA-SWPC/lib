@@ -8,6 +8,7 @@ SUBDIRS =         \
   efi             \
   green           \
   grid            \
+  grobs           \
   iri             \
   julia           \
   lapack_wrapper  \
@@ -17,6 +18,7 @@ SUBDIRS =         \
   msis            \
   msynth          \
   mageq           \
+	mserv           \
   peak            \
 	secs            \
   superlu         \

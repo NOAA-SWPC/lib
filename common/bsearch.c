@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 /* Perform a binary search of an array of values.
  * 
@@ -55,6 +56,23 @@ bsearch_desc_double(const double x_array[], double x,
   while(ihi > ilo + 1) {
     size_t i = (ihi + ilo)/2;
     if(-x_array[i] > -x)
+      ihi = i;
+    else
+      ilo = i;
+  }
+  
+  return ilo;
+}
+
+size_t
+bsearch_timet(const time_t x_array[], const time_t x,
+              size_t index_lo, size_t index_hi)
+{
+  size_t ilo = index_lo;
+  size_t ihi = index_hi;
+  while(ihi > ilo + 1) {
+    size_t i = (ihi + ilo)/2;
+    if(x_array[i] > x)
       ihi = i;
     else
       ilo = i;
