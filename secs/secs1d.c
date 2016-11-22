@@ -106,12 +106,21 @@ secs1d_alloc(const size_t flags, const size_t lmax, const double R_iono, const d
   }
 
   w->theta0 = malloc(npoles * sizeof(double));
-  w->Pltheta0 = malloc((w->lmax + 1) * sizeof(double));
   w->Pltheta = malloc((w->lmax + 1) * sizeof(double));
+  w->Pl1theta = malloc((w->lmax + 1) * sizeof(double));
+
+  w->Pltheta0 = gsl_matrix_alloc(npoles, w->lmax + 1);
 
   /* fill in theta0 array */
   for (i = 0; i < npoles; ++i)
-    w->theta0[i] = theta_min + i * dtheta;
+    {
+      gsl_vector_view v = gsl_matrix_row(w->Pltheta0, i);
+
+      w->theta0[i] = theta_min + i * dtheta;
+
+      /* compute P_l(cos(theta0)) */
+      gsl_sf_legendre_Pl_array(w->lmax, cos(w->theta0[i]), v.vector.data);
+    }
 
   return w;
 }
@@ -156,10 +165,13 @@ secs1d_free(secs1d_workspace *w)
     free(w->theta0);
 
   if (w->Pltheta0)
-    free(w->Pltheta0);
+    gsl_matrix_free(w->Pltheta0);
 
   if (w->Pltheta)
     free(w->Pltheta);
+
+  if (w->Pl1theta)
+    free(w->Pl1theta);
 
   if (w->multifit_p)
     gsl_multifit_linear_free(w->multifit_p);
@@ -531,11 +543,11 @@ secs1d_green_df()
   Compute magnetic field Green's function for a single divergence-free
 1D SECS
 
-Inputs: r      - radius (km)
-        theta  - colatitude (radians)
-        theta0 - pole position (radians)
-        B      - (output) magnetic field Green's function (X,Y,Z)
-        w      - workspace
+Inputs: r        - radius (km)
+        theta    - colatitude (radians)
+        pole_idx - pole position [0,npoles-1]
+        B        - (output) magnetic field Green's function (X,Y,Z)
+        w        - workspace
 
 Return: success/error
 
@@ -547,32 +559,43 @@ Notes:
 */
 
 int
-secs1d_green_df(const double r, const double theta, const double theta0,
+secs1d_green_df(const double r, const double theta, const size_t pole_idx,
                 double B[3], secs1d_workspace *w)
 {
-  const double costheta = cos(theta);
+  const double ct = cos(theta);
+  const double st = sin(theta);
+  gsl_vector_view Ptheta0 = gsl_matrix_row(w->Pltheta0, pole_idx);
+  size_t l;
+
   B[0] = 0.0;
   B[1] = 0.0;
   B[2] = 0.0;
 
-  /* compute P_l(cos(theta0)) */
-  gsl_sf_legendre_Pl_array(w->lmax, cos(theta0), w->Pltheta0);
+  /* compute P_l^1(cos(theta)) for all l */
+  w->Pl1theta[0] = 0.0;
+  w->Pl1theta[1] = -st;
+  w->Pl1theta[2] = -3.0 * ct * st;
+
+  for (l = 2; l < w->lmax; ++l)
+    {
+      w->Pl1theta[l + 1] = ((2.0*l + 1.0) * ct * w->Pl1theta[l] -
+                            (l + 1.0) * w->Pl1theta[l - 1]) / (double) l;
+    }
 
   if (r > w->R_iono)
     {
       double ratio = w->R_iono / r;
       double rterm = ratio; /* (R / r)^{l+1} */
-      size_t l;
 
       for (l = 1; l <= w->lmax; ++l)
         {
-          double Pl1 = gsl_sf_legendre_Plm(l, 1, costheta);
+          double Pltheta0 = gsl_vector_get(&Ptheta0.vector, l);
 
           /* (R / r)^{l+1} */
           rterm *= ratio;
 
-          B[0] += rterm / (l + 1.0) * w->Pltheta0[l] * Pl1;
-          B[2] -= rterm * w->Pltheta0[l] * w->Pltheta[l];
+          B[0] += rterm / (l + 1.0) * Pltheta0 * w->Pl1theta[l];
+          B[2] -= rterm * Pltheta0 * w->Pltheta[l];
         }
 
       B[0] *= SECS1D_MU_0 / (2.0 * r);
@@ -725,11 +748,10 @@ build_matrix_row_df(const double r, const double theta,
 
   for (i = 0; i < w->npoles; ++i)
     {
-      double theta0 = w->theta0[i];
       double B[3];
 
       /* compute divergence-free 1D SECS Green's functions */
-      secs1d_green_df(r, theta, theta0, B, w);
+      secs1d_green_df(r, theta, i, B, w);
 
       gsl_vector_set(X, w->df_offset + i, B[0]);
       gsl_vector_set(Z, w->df_offset + i, B[2]);

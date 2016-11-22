@@ -44,8 +44,8 @@ typedef struct
 
   size_t lmax;      /* maximum order for legendre functions */
   double *theta0;   /* pole locations */
-  double *Pl1;      /* P_{l,1}(cos(theta)) legendre functions */
-  double *Pltheta0; /* P_l(cos(theta0)) functions */
+  double *Pl1theta; /* P_{l,1}(cos(theta)) legendre functions, size lmax + 1 */
+  gsl_matrix *Pltheta0; /* P_l(cos(theta0)) functions, npoles-by-(lmax + 1) */
   double *Pltheta;  /* P_l(cos(theta)) functions */
 
   gsl_matrix *X;    /* LS matrix */
@@ -85,7 +85,7 @@ int secs1d_eval_J(const double r, const double theta,
 int secs1d_print_track(const int header, FILE *fp, const track_data *tptr,
                        const satdata_mag *data, secs1d_workspace *w);
 int secs1d_green_df_init(const double theta, secs1d_workspace *w);
-int secs1d_green_df(const double r, const double theta, const double theta0,
+int secs1d_green_df(const double r, const double theta, const size_t pole_idx,
                     double B[3], secs1d_workspace *w);
 int secs1d_green_cf(const double r, const double theta, const double theta0,
                     double B[3], secs1d_workspace *w);
