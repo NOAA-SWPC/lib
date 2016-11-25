@@ -9,19 +9,25 @@
 #include <math.h>
 #include <string.h>
 #include <errno.h>
+#include <strings.h>
+#include <ctype.h>
 
 #include <gsl/gsl_math.h>
 
 #include "common.h"
 #include "grobs.h"
 
+static int iaga_read_HDZF(FILE *fp, grobs_data *data);
+static int iaga_read_XYZF(FILE *fp, grobs_data *data);
+
 grobs_data *
-iaga_read_HDZF(const char *filename, grobs_data *data)
+grobs_iaga_read(const char *filename, grobs_data *data)
 {
   FILE *fp;
-  int ret;
   char buf[GROBS_MAX_BUFFER];
-  size_t n;
+  char s1[GROBS_MAX_BUFFER];
+  char s2[GROBS_MAX_BUFFER];
+  int header_cnt = 0;
 
   fp = fopen(filename, "r");
   if (!fp)
@@ -31,15 +37,83 @@ iaga_read_HDZF(const char *filename, grobs_data *data)
       return NULL;
     }
 
+  /* allocate space for 1-minute data */
   if (data == NULL)
+    data = grobs_alloc(GROBS_MAX_YEAR * 527040);
+
+  while (fgets(buf, GROBS_MAX_BUFFER, fp) != NULL)
     {
-      data = calloc(1, sizeof(grobs_data));
-      n = 0;
+      int c;
+      double val;
+      char *bufptr = buf;
+
+      while (isspace(*bufptr))
+        bufptr++;
+
+      if (*bufptr == '#')
+        continue;
+
+      if (!strncasecmp(bufptr, "geodetic latitude", 17))
+        {
+          c = sscanf(bufptr, "%s %s %lf", s1, s2, &val);
+          if (c == 3)
+            {
+              ++header_cnt;
+              data->glat = val;
+            }
+        }
+      else if (!strncasecmp(bufptr, "geodetic longitude", 18))
+        {
+          c = sscanf(bufptr, "%s %s %lf", s1, s2, &val);
+          if (c == 3)
+            {
+              ++header_cnt;
+              data->glon = val;
+            }
+        }
+      else if (!strncasecmp(bufptr, "reported", 8))
+        {
+          c = sscanf(bufptr, "%s %s", s1, s2);
+          if (c == 2)
+            {
+              ++header_cnt;
+              if (!strncmp(s2, "HDZF", 4))
+                {
+                  iaga_read_HDZF(fp, data);
+                }
+              else if (!strncmp(s2, "XYZF", 4))
+                {
+                  iaga_read_XYZF(fp, data);
+                }
+              else
+                {
+                  fprintf(stderr, "grobs_iaga_read: unknown format type: %s\n", s2);
+                  header_cnt = 0;
+                }
+            }
+
+          /* this is the last header line read, so break after
+           * reading the file */
+          break;
+        }
     }
-  else
+
+  fclose(fp);
+
+  if (header_cnt != 3)
     {
-      n = data->n;
+      fprintf(stderr, "grobs_iaga_read: failed to read header\n");
     }
+
+  return data;
+}
+
+static int
+iaga_read_HDZF(FILE *fp, grobs_data *data)
+{
+  int ret;
+  char buf[GROBS_MAX_BUFFER];
+  size_t n = data->n;
 
   while (fgets(buf, GROBS_MAX_BUFFER, fp) != NULL)
     {
@@ -79,44 +153,28 @@ iaga_read_HDZF(const char *filename, grobs_data *data)
       data->X[n] = H * cos(Drad);
       data->Y[n] = H * sin(Drad);
       data->Z[n] = Z;
+      data->H[n] = H;
       data->D[n] = Drad * 180.0 / M_PI;
       data->I[n] = atan2(Z, H);
 
-      ++n;
+      if (++n >= data->ntot)
+        {
+          fprintf(stderr, "iaga_read: not enough space allocated: %zu\n", data->ntot);
+          break;
+        }
     }
-
-  fclose(fp);
 
   data->n = n;
 
-  return data;
+  return 0;
 }
 
-grobs_data *
-iaga_read_XYZF(const char *filename, grobs_data *data)
+static int
+iaga_read_XYZF(FILE *fp, grobs_data *data)
 {
-  FILE *fp;
   int ret;
   char buf[GROBS_MAX_BUFFER];
-  size_t n;
-
-  fp = fopen(filename, "r");
-  if (!fp)
-    {
-      fprintf(stderr, "fopen: cannot open %s: %s\n",
-              filename, strerror(errno));
-      return NULL;
-    }
-
-  if (data == NULL)
-    {
-      data = calloc(1, sizeof(grobs_data));
-      n = 0;
-    }
-  else
-    {
-      n = data->n;
-    }
+  size_t n = data->n;
 
   while (fgets(buf, GROBS_MAX_BUFFER, fp) != NULL)
     {
@@ -155,15 +213,18 @@ iaga_read_XYZF(const char *filename, grobs_data *data)
       data->X[n] = X;
       data->Y[n] = Y;
       data->Z[n] = Z;
+      data->H[n] = H;
       data->D[n] = atan2(Y, X) * 180.0 / M_PI;
       data->I[n] = atan2(Z, H);
 
-      ++n;
+      if (++n >= data->ntot)
+        {
+          fprintf(stderr, "iaga_read: not enough space allocated: %zu\n", data->ntot);
+          break;
+        }
     }
-
-  fclose(fp);
 
   data->n = n;
 
-  return data;
+  return 0;
 }

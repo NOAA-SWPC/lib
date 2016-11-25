@@ -23,7 +23,7 @@
 #include <gsl/gsl_blas.h>
 
 #include "common.h"
-#include "oct.h"
+#include "interp.h"
 #include "secs1d.h"
 #include "track.h"
 
@@ -32,6 +32,8 @@ static int build_matrix_row_df(const double r, const double theta,
 static int build_matrix_row_cf(const double r, const double theta,
                                gsl_vector *Y, secs1d_workspace *w);
 static int build_matrix_row_df_J(const double theta, gsl_vector *Y, secs1d_workspace *w);
+static int build_matrix_row_cf_J(const double theta, gsl_vector *X, gsl_vector *Z, secs1d_workspace *w);
+static double secs1d_tancot(const double theta, const double theta0, secs1d_workspace *w);
 
 /*
 secs1d_alloc()
@@ -92,7 +94,7 @@ secs1d_alloc(const size_t flags, const size_t lmax, const double R_iono, const d
 
   /* regularization matrix L */
   {
-    const size_t k = 1;
+    const size_t k = 2;
     w->L = gsl_matrix_alloc(w->p - k, w->p);
     w->Ltau = gsl_vector_alloc(w->p - k);
     w->M = gsl_matrix_alloc(w->nmax, w->p);
@@ -101,7 +103,6 @@ secs1d_alloc(const size_t flags, const size_t lmax, const double R_iono, const d
     w->cs = gsl_vector_alloc(w->p);
 
     gsl_multifit_linear_Lk(w->p, k, w->L);
-    print_octave(w->L, "L");
     gsl_multifit_linear_L_decomp(w->L, w->Ltau);
   }
 
@@ -179,6 +180,28 @@ secs1d_free(secs1d_workspace *w)
   free(w);
 }
 
+/* reset workspace to work on new data set */
+int
+secs1d_reset(secs1d_workspace *w)
+{
+  w->n = 0;
+  return 0;
+}
+
+/*
+secs1d_add_track()
+  Add satellite data from a single track to LS system
+
+Inputs: tptr - track pointer
+        data - satellite data
+        w    - workspace
+
+Return: success/error
+
+Notes:
+1) w->n is updated with the number of total data added
+*/
+
 int
 secs1d_add_track(const track_data *tptr, const satdata_mag *data,
                  secs1d_workspace *w)
@@ -206,7 +229,7 @@ secs1d_add_track(const track_data *tptr, const satdata_mag *data,
 
           /* upweight equatorial data */
           if (fabs(data->qdlat[didx]) < 10.0)
-            wi *= 1.0;
+            wi *= 10.0;
 
           /* set rhs vector */
           gsl_vector_set(w->rhs, rowidx, tptr->Bx[i]);
@@ -275,7 +298,7 @@ int
 secs1d_fit(secs1d_workspace *w)
 {
   const size_t npts = 200;
-  const double tol = 1.0e-4;
+  const double tol = 1.0e-6;
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);
   gsl_vector *eta = gsl_vector_alloc(npts);
@@ -291,9 +314,11 @@ secs1d_fit(secs1d_workspace *w)
   gsl_matrix_view As = gsl_matrix_submatrix(w->Xs, 0, 0, w->n - w->p + m, m);
   gsl_vector_view bs = gsl_vector_subvector(w->bs, 0, w->n - w->p + m);
   gsl_vector_view cs = gsl_vector_subvector(w->cs, 0, m);
+  const char *lambda_file = "lambda.dat";
+  FILE *fp = fopen(lambda_file, "w");
 
-  print_octave(&A.matrix, "A");
-  printv_octave(&b.vector, "b");
+  if (w->n < w->p)
+    return -1;
 
 #if 0 /* TSVD */
 
@@ -344,26 +369,32 @@ secs1d_fit(secs1d_workspace *w)
   fprintf(stderr, "lambda_l = %.12e\n", lambda_l);
   fprintf(stderr, "lambda_gcv = %.12e\n", lambda_gcv);
 
+  fprintf(stderr, "secs1d_fit: writing %s...", lambda_file);
+
   for (i = 0; i < npts; ++i)
     {
-      fprintf(stdout, "%e %e %e %e\n",
+      fprintf(fp, "%e %e %e %e\n",
               gsl_vector_get(reg_param, i),
               gsl_vector_get(rho, i),
               gsl_vector_get(eta, i),
               gsl_vector_get(G, i));
     }
 
+  fprintf(stderr, "done\n");
+
 #endif
 
   fprintf(stderr, "rnorm = %.12e\n", rnorm);
   fprintf(stderr, "snorm = %.12e\n", snorm);
 
-  printv_octave(w->c, "c");
+  fprintf(stderr, "cond(X) = %.12e\n", 1.0 / gsl_multifit_linear_rcond(w->multifit_p));
 
   gsl_vector_free(reg_param);
   gsl_vector_free(rho);
   gsl_vector_free(eta);
   gsl_vector_free(G);
+
+  fclose(fp);
 
   return 0;
 }
@@ -446,14 +477,13 @@ secs1d_eval_J(const double r, const double theta,
       gsl_blas_ddot(&vy.vector, w->c, &J[1]);
     }
 
-#if 0
   if (w->flags & SECS1D_FLG_FIT_CF)
     {
-      build_matrix_row_cf(r, theta, &vy.vector, w);
+      build_matrix_row_cf_J(theta, &vx.vector, &vz.vector, w);
 
-      gsl_blas_ddot(&vy.vector, w->c, &B[1]);
+      gsl_blas_ddot(&vx.vector, w->c, &J[0]);
+      gsl_blas_ddot(&vz.vector, w->c, &J[2]);
     }
-#endif
 
   /* convert to units of A/km */
   for (i = 0; i < 3; ++i)
@@ -487,7 +517,9 @@ secs1d_print_track(const int header, FILE *fp, const track_data *tptr,
       fprintf(fp, "# Field %zu: SECS1D B_X (nT)\n", i++);
       fprintf(fp, "# Field %zu: SECS1D B_Y (nT)\n", i++);
       fprintf(fp, "# Field %zu: SECS1D B_Z (nT)\n", i++);
+      fprintf(fp, "# Field %zu: SECS1D J_X\n", i++);
       fprintf(fp, "# Field %zu: SECS1D J_Y\n", i++);
+      fprintf(fp, "# Field %zu: SECS1D J_Z\n", i++);
       return 0;
     }
 
@@ -509,7 +541,7 @@ secs1d_print_track(const int header, FILE *fp, const track_data *tptr,
       secs1d_eval_B(r, theta, B_secs, w);
       secs1d_eval_J(r, theta, J_secs, w);
 
-      fprintf(fp, "%ld %f %f %f %f %f %f %f %f %f %f %f\n",
+      fprintf(fp, "%ld %f %f %f %f %f %f %f %f %f %f %f %f %f\n",
               satdata_epoch2timet(data->t[didx]),
               r,
               data->longitude[didx],
@@ -521,7 +553,9 @@ secs1d_print_track(const int header, FILE *fp, const track_data *tptr,
               B_secs[0],
               B_secs[1],
               B_secs[2],
-              J_secs[1]);
+              J_secs[0],
+              J_secs[1],
+              J_secs[2]);
     }
 
   fprintf(fp, "\n\n");
@@ -624,30 +658,9 @@ Return: success/error
 int
 secs1d_green_df_J(const double theta, const double theta0, double K[3], secs1d_workspace *w)
 {
-  const double dtheta_2 = 0.5 * w->dtheta;
-  const double d = theta - theta0;
-
   K[0] = 0.0;
+  K[1] = secs1d_tancot(theta, theta0, w) / (2.0 * w->R_iono);
   K[2] = 0.0;
-
-  if (fabs(d) > dtheta_2)
-    {
-      double cs = cos(theta);
-      double sn = sin(theta);
-
-      K[1] = (cs + GSL_SIGN(d)) / sn;
-    }
-  else
-    {
-      /* use linear interpolation near 1D SECS pole */
-      double north = -tan(0.5 * (theta0 - dtheta_2));
-      double south = 1.0 / tan(0.5 * (theta0 + dtheta_2));
-      double f = (south - north) / w->dtheta;
-
-      K[1] = 0.5 * (north + south) + d * f;
-    }
-
-  K[1] /= 2.0 * w->R_iono;
 
   return GSL_SUCCESS;
 }
@@ -671,17 +684,16 @@ secs1d_green_cf(const double r, const double theta, const double theta0,
                 double B[3], secs1d_workspace *w)
 {
   B[0] = 0.0;
-  B[1] = 0.0;
   B[2] = 0.0;
 
   if (r > w->R_iono)
     {
-      if (theta > theta0)
-        B[1] = -tan(0.5 * (M_PI - theta));
-      else
-        B[1] = tan(0.5 * theta);
-
+      B[1] = -secs1d_tancot(theta, theta0, w);
       B[1] *= SECS1D_MU_0 / (2.0 * r);
+    }
+  else
+    {
+      B[1] = 0.0;
     }
 
   return GSL_SUCCESS;
@@ -704,15 +716,9 @@ Return: success/error
 int
 secs1d_green_cf_J(const double r, const double theta, const double theta0, double K[3], secs1d_workspace *w)
 {
+  K[0] = -secs1d_tancot(theta, theta0, w) / (2.0 * w->R_iono);
   K[1] = 0.0;
   K[2] = 0.0;
-
-  if (theta < theta0)
-    K[0] = tan(0.5 * theta);
-  else
-    K[0] = -tan(0.5 * (M_PI - theta));
-
-  K[0] /= (2.0 * w->R_iono);
 
   if (r >= w->R_iono)
     K[2] = -1.0 / (2.0 * r * r);
@@ -826,4 +832,85 @@ build_matrix_row_df_J(const double theta, gsl_vector *Y, secs1d_workspace *w)
     }
 
   return 0;
+}
+
+/*
+build_matrix_row_cf_J()
+  Build matrix rows corresponding to CF SECS (current)
+
+Inputs: theta - colatitude (radians)
+        X     - (output) X Green's functions for J_cf
+        Z     - (output) Z Green's functions for J_cf
+        w     - workspace
+
+Notes:
+1) J vector for CF 1D SECS does not have a Y component
+*/
+
+static int
+build_matrix_row_cf_J(const double theta, gsl_vector *X, gsl_vector *Z, secs1d_workspace *w)
+{
+  size_t i;
+
+  gsl_vector_set_zero(X);
+  gsl_vector_set_zero(Z);
+
+  for (i = 0; i < w->npoles; ++i)
+    {
+      double theta0 = w->theta0[i];
+      double J[3];
+
+      /* compute curl-free 1D SECS Green's functions */
+      secs1d_green_cf_J(w->R_iono, theta, theta0, J, w);
+
+      gsl_vector_set(X, w->cf_offset + i, J[0]);
+      gsl_vector_set(Z, w->cf_offset + i, J[2]);
+    }
+
+  return 0;
+}
+
+/*
+secs1d_tancot()
+  Compute a discontinuous function common to several of the 1D SECS basis
+functions:
+
+f(theta,theta0) = { -tan(theta/2), theta < theta0
+                  {  cot(theta/2), theta > theta0
+
+using linear interpolation across the discontinuous pole region
+*/
+
+static double
+secs1d_tancot(const double theta, const double theta0, secs1d_workspace *w)
+{
+  const double dtheta_2 = 0.5 * w->dtheta;
+  const double d = theta - theta0;
+  double f;
+
+  if (fabs(d) > dtheta_2)
+    {
+      double cs = cos(theta);
+      double sn = sin(theta);
+
+      /*
+       * use half angle formulas:
+       *
+       * -tan(theta/2) = (cos(theta) - 1) / sin(theta)
+       *  cot(theta/2) = (cos(theta) + 1) / sin(theta)
+       */
+      f = (cs + GSL_SIGN(d)) / sn;
+    }
+  else
+    {
+      /* use linear interpolation near 1D SECS pole */
+      double a = theta0 - dtheta_2;
+      double b = theta0 + dtheta_2;
+      double fa = -tan(0.5 * a);          /* -tan(a/2) */
+      double fb = tan(0.5 * (M_PI - b));  /*  cot(b/2) */
+
+      f = interp1d(a, b, fa, fb, theta);
+    }
+
+  return f;
 }

@@ -23,6 +23,7 @@
 
 #include "secs1d.h"
 #include "common.h"
+#include "mageq.h"
 #include "msynth.h"
 #include "oct.h"
 #include "track.h"
@@ -219,10 +220,8 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   int s = 0;
   size_t i, j, k;
   size_t nflagged, nunflagged;
-  /*const double pole_spacing = 0.5;*/
   const double pole_spacing = 0.5;
-  /*const size_t flags = SECS1D_FLG_FIT_DF | SECS1D_FLG_FIT_CF;*/
-  const size_t flags = SECS1D_FLG_FIT_DF;
+  const size_t flags = SECS1D_FLG_FIT_DF | SECS1D_FLG_FIT_CF;
   secs1d_workspace *secs1d_p = secs1d_alloc(flags, SECS1D_LMAX, R_EARTH_KM + 110.0, pole_spacing);
   const char *file1 = "data1.txt";
   const char *file2 = "data2.txt";
@@ -233,9 +232,11 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   FILE *fp3 = fopen(file3, "w");
   FILE *fp_chi = fopen(file_chi, "w");
   FILE *fp_track = fopen("track.dat", "w");
+  FILE *fp_current = fopen("current.dat", "w");
   size_t idx = 0;
   char buf[2048];
   struct timeval tv0, tv1;
+  mageq_workspace *mageq_p = mageq_alloc();
 
   nflagged = track_nflagged(track1);
   nunflagged = track1->n - nflagged;
@@ -248,33 +249,57 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
 
   track_print_track(1, fp_track, NULL, NULL);
 
+  i = 1;
+  fprintf(fp_current, "# Field %zu: timestamp\n", i++);
+  fprintf(fp_current, "# Field %zu: local time of equator crossing (hours)\n", i++);
+  fprintf(fp_current, "# Field %zu: longitude of equator crossing (degrees)\n", i++);
+  fprintf(fp_current, "# Field %zu: J_y (A/km)\n", i++);
+
   fprintf(stderr, "main_proc: npoles = %zu\n", secs1d_p->npoles);
   fprintf(stderr, "main_proc: ncoeff = %zu\n", secs1d_p->p);
 
-  for (i = 0; i < 1; ++i)
+  for (i = 0; i < track1->n; ++i)
     {
       track_data *tptr = &(track1->tracks[i]);
       track_data *tptr2, *tptr3;
-      double dphi;
+      double dphi, latc, J[3];
       time_t unix_time;
 
       if (tptr->flags != 0)
         continue;
 
+      secs1d_reset(secs1d_p);
+
       fprintf(stderr, "main_proc: adding data for track %zu/%zu to LS system (index %zu)...", i + 1, track1->n, idx);
       gettimeofday(&tv0, NULL);
       secs1d_add_track(tptr, data, secs1d_p);
       gettimeofday(&tv1, NULL);
-      fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+      fprintf(stderr, "done (%zu data added, %g seconds)\n", secs1d_p->n, time_diff(tv0, tv1));
 
       fprintf(stderr, "main_proc: fitting 1D SECS to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
-      secs1d_fit(secs1d_p);
-      fprintf(stderr, "done\n");
+      s = secs1d_fit(secs1d_p);
+      fprintf(stderr, "done (s = %d)\n", s);
+
+      if (s)
+        continue;
 
       secs1d_print_track(0, fp1, tptr, data, secs1d_p);
       track_print_track(0, fp_track, tptr, data);
 
-      exit(1);
+      /* calculate current density at magnetic equator at this longitude */
+      latc = mageq_calc(tptr->lon_eq * M_PI / 180.0, R_EARTH_KM + 110.0,
+                        satdata_epoch2year(tptr->t_eq), mageq_p);
+
+      secs1d_eval_J(R_EARTH_KM + 110.0, M_PI / 2.0 - latc, J, secs1d_p);
+
+      fprintf(fp_current, "%ld %f %f %f\n",
+              satdata_epoch2timet(tptr->t_eq),
+              tptr->lt_eq,
+              tptr->lon_eq,
+              J[1]);
+      fflush(fp_current);
+
+      continue;
 
 #if 0
       /* find Swarm C crossing within 1 min and 1.7 deg of A */
@@ -346,11 +371,14 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
     }
 
   secs1d_free(secs1d_p);
+  mageq_free(mageq_p);
 
   fclose(fp1);
   fclose(fp2);
   fclose(fp3);
   fclose(fp_chi);
+  fclose(fp_track);
+  fclose(fp_current);
 
   return s;
 }

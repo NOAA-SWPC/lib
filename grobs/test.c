@@ -16,12 +16,16 @@ main(int argc, char *argv[])
   grobs_data *data = NULL;
   size_t i;
 
-  while ((c = getopt(argc, argv, "i:")) != (-1))
+  while ((c = getopt(argc, argv, "i:w:")) != (-1))
     {
       switch (c)
         {
           case 'i':
-            data = iaga_read_HDZF(optarg, NULL);
+            data = grobs_iaga_read(optarg, NULL);
+            break;
+
+          case 'w':
+            data = grobs_wamnet_read(optarg, NULL);
             break;
 
           case '?':
@@ -34,17 +38,18 @@ main(int argc, char *argv[])
 
   if (data == NULL)
     {
-      printf("usage: %s <-i iaga_file>\n", argv[0]);
+      printf("usage: %s [-i iaga_file] [-w wamnet_file]\n", argv[0]);
       exit(1);
     }
 
   for (i = 0; i < data->n; ++i)
     {
-      printf("%ld %f %f %f\n",
+      printf("%ld %f %f %f %f\n",
              data->t[i],
              data->X[i],
              data->Y[i],
-             data->Z[i]);
+             data->Z[i],
+             data->H[i]);
     }
 
   return 0;

@@ -75,6 +75,7 @@ typedef struct
 secs1d_workspace *secs1d_alloc(const size_t flags, const size_t lmax,
                                const double R_iono, const double pole_spacing);
 void secs1d_free(secs1d_workspace *w);
+int secs1d_reset(secs1d_workspace *w);
 int secs1d_add_track(const track_data *tptr, const satdata_mag *data,
                      secs1d_workspace *w);
 int secs1d_fit(secs1d_workspace *w);

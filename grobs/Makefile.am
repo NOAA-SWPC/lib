@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libgrobs.la
 
-libgrobs_la_SOURCES = iaga.c
+libgrobs_la_SOURCES = grobs.c iaga.c wamnet.c
 
 AM_CPPFLAGS = -I$(top_builddir)/common
 
