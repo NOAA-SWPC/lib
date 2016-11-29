@@ -21,12 +21,13 @@
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_multifit.h>
 
-#include "secs1d.h"
 #include "common.h"
 #include "mageq.h"
 #include "msynth.h"
 #include "oct.h"
 #include "track.h"
+
+#include "magfit.h"
 
 /* define to fit pca modes to C/B data */
 #define FIT_PCA_C                  1
@@ -221,9 +222,9 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   size_t i, j, k;
   size_t nflagged, nunflagged;
   const double pole_spacing = 0.5;
-  /*const size_t flags = SECS1D_FLG_FIT_DF | SECS1D_FLG_FIT_CF;*/
-  const size_t flags = SECS1D_FLG_FIT_DF;
-  secs1d_workspace *secs1d_p = secs1d_alloc(flags, SECS1D_LMAX, R_EARTH_KM + 110.0, pole_spacing);
+  const magfit_type *T = magfit_secs1d;
+  magfit_parameters magfit_params = magfit_default_parameters();
+  magfit_workspace *magfit_p;
   const char *file1 = "data1.txt";
   const char *file2 = "data2.txt";
   const char *file3 = "data3.txt";
@@ -239,6 +240,8 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   struct timeval tv0, tv1;
   mageq_workspace *mageq_p = mageq_alloc();
 
+  magfit_p = magfit_alloc(T, &magfit_params);
+
   nflagged = track_nflagged(track1);
   nunflagged = track1->n - nflagged;
   fprintf(stderr, "Total tracks:    %zu\n", track1->n);
@@ -246,7 +249,7 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   fprintf(stderr, "Total unflagged: %zu\n", nunflagged);
 
   /* print header */
-  secs1d_print_track(1, fp1, NULL, NULL, secs1d_p);
+  magfit_print_track(1, fp1, NULL, NULL, magfit_p);
 
   track_print_track(1, fp_track, NULL, NULL);
 
@@ -256,44 +259,42 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   fprintf(fp_current, "# Field %zu: longitude of equator crossing (degrees)\n", i++);
   fprintf(fp_current, "# Field %zu: J_y (A/km)\n", i++);
 
-  fprintf(stderr, "main_proc: npoles = %zu\n", secs1d_p->npoles);
-  fprintf(stderr, "main_proc: ncoeff = %zu\n", secs1d_p->p);
-
   for (i = 0; i < track1->n; ++i)
     {
       track_data *tptr = &(track1->tracks[i]);
       track_data *tptr2, *tptr3;
       double dphi, latc, J[3];
       time_t unix_time;
+      size_t ndata;
 
       if (tptr->flags != 0)
         continue;
 
-      secs1d_reset(secs1d_p);
+      magfit_reset(magfit_p);
 
       fprintf(stderr, "main_proc: adding data for track %zu/%zu to LS system (index %zu)...", i + 1, track1->n, idx);
       gettimeofday(&tv0, NULL);
-      secs1d_add_track(tptr, data, secs1d_p);
+      ndata = magfit_add_track(tptr, data, magfit_p);
       gettimeofday(&tv1, NULL);
-      fprintf(stderr, "done (%zu data added, %g seconds)\n", secs1d_p->n, time_diff(tv0, tv1));
+      fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
 
-      fprintf(stderr, "main_proc: fitting 1D SECS to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
+      fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
       gettimeofday(&tv0, NULL);
-      s = secs1d_fit(secs1d_p);
+      s = magfit_fit(magfit_p);
       gettimeofday(&tv1, NULL);
       fprintf(stderr, "done (s = %d, %g seconds)\n", s, time_diff(tv0, tv1));
 
       if (s)
         continue;
 
-      secs1d_print_track(0, fp1, tptr, data, secs1d_p);
+      magfit_print_track(0, fp1, tptr, data, magfit_p);
       track_print_track(0, fp_track, tptr, data);
 
       /* calculate current density at magnetic equator at this longitude */
       latc = mageq_calc(tptr->lon_eq * M_PI / 180.0, R_EARTH_KM + 110.0,
                         satdata_epoch2year(tptr->t_eq), mageq_p);
 
-      secs1d_eval_J(R_EARTH_KM + 110.0, M_PI / 2.0 - latc, J, secs1d_p);
+      magfit_eval_J(magfit_params.R, M_PI / 2.0 - latc, J, magfit_p);
 
       fprintf(fp_current, "%ld %f %f %f\n",
               satdata_epoch2timet(tptr->t_eq),
@@ -371,7 +372,7 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
       ++idx;
     }
 
-  secs1d_free(secs1d_p);
+  magfit_free(magfit_p);
   mageq_free(mageq_p);
 
   fclose(fp1);

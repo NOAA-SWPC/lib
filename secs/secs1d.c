@@ -94,15 +94,32 @@ secs1d_alloc(const size_t flags, const size_t lmax, const double R_iono, const d
 
   /* regularization matrix L */
   {
+#if 0
+    /* single k-derivative norm */
     const size_t k = 2;
-    w->L = gsl_matrix_alloc(w->p - k, w->p);
-    w->Ltau = gsl_vector_alloc(w->p - k);
+    const size_t m = w->p - k; /* L is m-by-p */
+#else
+    /* Sobolev norm */
+    const size_t kmax = 3;
+    const size_t m = w->p;
+    const double alpha_data[] = { 0.1, 0.5, 1.0, 1.0 };
+    gsl_vector_const_view alpha = gsl_vector_const_view_array(alpha_data, kmax + 1);
+#endif
+
+    w->L = gsl_matrix_alloc(m, w->p);
+    w->Ltau = gsl_vector_alloc(m);
     w->M = gsl_matrix_alloc(w->nmax, w->p);
     w->Xs = gsl_matrix_alloc(w->nmax, w->p);
     w->bs = gsl_vector_alloc(w->nmax);
     w->cs = gsl_vector_alloc(w->p);
 
+#if 0
     gsl_multifit_linear_Lk(w->p, k, w->L);
+#else
+    gsl_multifit_linear_Lsobolev(w->p, kmax, &alpha.vector,
+                                 w->L, w->multifit_p);
+#endif
+
     gsl_multifit_linear_L_decomp(w->L, w->Ltau);
   }
 
@@ -316,6 +333,7 @@ secs1d_fit(secs1d_workspace *w)
   gsl_vector_view cs = gsl_vector_subvector(w->cs, 0, m);
   const char *lambda_file = "lambda.dat";
   FILE *fp = fopen(lambda_file, "w");
+  double s0; /* largest singular value */
 
   if (w->n < w->p)
     return -1;
@@ -349,6 +367,7 @@ secs1d_fit(secs1d_workspace *w)
 
   /* compute SVD of A */
   gsl_multifit_linear_svd(&As.matrix, w->multifit_p);
+  s0 = gsl_vector_get(w->multifit_p->S, 0);
 
   /* compute L-curve */
   gsl_multifit_linear_lcurve(&bs.vector, reg_param, rho, eta, w->multifit_p);
@@ -358,8 +377,11 @@ secs1d_fit(secs1d_workspace *w)
   /* compute GCV curve */
   gsl_multifit_linear_gcv(&bs.vector, reg_param, G, &lambda_gcv, &G_gcv, w->multifit_p);
 
+  /* the L-curve method often overdamps the system, not sure why */
+  lambda_l *= 1.0e-2;
+  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
+
   /* solve regularized system with lambda_l */
-  lambda_l = tol * gsl_vector_get(w->multifit_p->S, 0);
   gsl_multifit_linear_solve(lambda_l, &As.matrix, &bs.vector, &cs.vector, &rnorm, &snorm, w->multifit_p);
 
   /* convert back to general form */

@@ -18,6 +18,7 @@ SUBDIRS =         \
   msis            \
   msynth          \
   mageq           \
+  magfit          \
 	mserv           \
   peak            \
 	secs            \

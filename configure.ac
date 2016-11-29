@@ -43,6 +43,7 @@ AC_CONFIG_FILES([            \
   lls/Makefile               \
   magdata/Makefile           \
   mageq/Makefile             \
+  magfit/Makefile            \
   mfield/Makefile            \
   mserv/Makefile             \
   msis/Makefile              \
