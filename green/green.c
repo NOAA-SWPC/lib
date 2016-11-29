@@ -535,3 +535,50 @@ green_print_spectrum_azim(const char *filename, const gsl_vector * c,
 
   return 0;
 }
+
+/*
+green_k2g()
+  Convert external Gauss coefficients knm to internal coefficients
+gnm using the relation
+
+gnm = -(n / (n+1)) (b/R)^{2n + 1} knm
+
+Inputs: b - radius of current shell (km)
+        k - knm, size nnm
+        g - (output) gnm, size nnm
+        w - workspace
+
+Return: success/error
+*/
+
+int
+green_k2g(const double b, const gsl_vector *k, gsl_vector *g,
+          const green_workspace *w)
+{
+  const size_t nmax = w->nmax;
+  const size_t mmax = w->mmax;
+  const double ratio = b / w->R;
+  const double ratio_sq = ratio * ratio;
+  double rfac = ratio * ratio_sq; /* (b/R)^3 */
+  size_t n;
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int M = (int) GSL_MIN(n, mmax);
+      int m;
+      double nfac = -(double)n / (n + 1.0);
+
+      for (m = -M; m <= M; ++m)
+        {
+          size_t cidx = green_nmidx(n, m, w);
+          double knm = gsl_vector_get(k, cidx);
+
+          gsl_vector_set(g, cidx, nfac * rfac * knm);
+        }
+
+      /* (b/R)^{2n + 1} */
+      rfac *= ratio_sq;
+    }
+
+  return 0;
+}

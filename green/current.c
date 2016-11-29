@@ -17,8 +17,8 @@
 
 /*
 green_eval_sheet_int()
-  Compute sheet current density at a given radius due to
-an internal current source
+  Compute sheet current density at a given radius using
+internal Gauss coefficients gnm
 
 Inputs: b     - radius of spherical shell (km)
         theta - colatitude (radians)
