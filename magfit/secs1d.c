@@ -75,6 +75,7 @@ typedef struct
 static void *secs1d_alloc(const void * params);
 static void secs1d_free(void * vstate);
 static int secs1d_reset(void * vstate);
+static size_t secs1d_ncoeff(void * vstate);
 static size_t secs1d_add_track(const track_data *tptr, const satdata_mag *data,
                                void * vstate);
 static int secs1d_fit(void * vstate);
@@ -82,6 +83,7 @@ static int secs1d_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs1d_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
+static double secs1d_eval_chi(const double theta, const double phi, void * vstate);
 
 static int build_matrix_row_df(const double r, const double theta,
                                gsl_vector *X, gsl_vector *Z, secs1d_state_t *state);
@@ -268,6 +270,13 @@ secs1d_reset(void * vstate)
   secs1d_state_t *state = (secs1d_state_t *) vstate;
   state->n = 0;
   return 0;
+}
+
+static size_t
+secs1d_ncoeff(void * vstate)
+{
+  secs1d_state_t *state = (secs1d_state_t *) vstate;
+  return state->p;
 }
 
 /*
@@ -588,6 +597,28 @@ secs1d_eval_J(const double r, const double theta, const double phi,
     J[i] *= 1.0e3;
 
   return 0;
+}
+
+/*
+secs1d_eval_chi()
+  Evaluate current stream function at a given theta using
+previously computed 1D SECS coefficients
+
+Inputs: theta  - colatitude (radians)
+        phi    - longitude (radians)
+        vstate - workspace
+
+Return: current stream function in kA/nT
+
+Notes:
+1) state->c must contain 1D SECS coefficients
+*/
+
+static double
+secs1d_eval_chi(const double theta, const double phi, void * vstate)
+{
+  secs1d_state_t *state = (secs1d_state_t *) vstate;
+  return 0.0;
 }
 
 int
@@ -947,10 +978,12 @@ static const magfit_type secs1d_type =
   "secs1d",
   secs1d_alloc,
   secs1d_reset,
+  secs1d_ncoeff,
   secs1d_add_track,
   secs1d_fit,
   secs1d_eval_B,
   secs1d_eval_J,
+  secs1d_eval_chi,
   secs1d_free
 };
 

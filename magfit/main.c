@@ -235,11 +235,10 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   FILE *fp_track = fopen("track.dat", "w");
   FILE *fp_current = fopen("current.dat", "w");
   size_t idx = 0;
-  char buf[2048];
   struct timeval tv0, tv1;
   mageq_workspace *mageq_p = mageq_alloc();
 
-  magfit_params.pca_modes = 16;
+  magfit_params.pca_modes = 14;
 
   magfit_p = magfit_alloc(T, &magfit_params);
 
@@ -263,21 +262,108 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   for (i = 0; i < track1->n; ++i)
     {
       track_data *tptr = &(track1->tracks[i]);
-      track_data *tptr2, *tptr3;
-      double dphi, latc, J[3];
-      time_t unix_time;
+      track_data *tptr2 = NULL;
+      track_data *tptr3 = NULL;
+      time_t unix_time = satdata_epoch2timet(tptr->t_eq);
+      char buf[2048];
+      double latc, J[3];
       size_t ndata;
+      double dphi;
 
       if (tptr->flags != 0)
         continue;
 
       magfit_reset(magfit_p);
 
-      fprintf(stderr, "main_proc: adding data for track %zu/%zu to LS system (index %zu)...", i + 1, track1->n, idx);
+      if (track2)
+        {
+          /* find Swarm C crossing within 1 min and 1.7 deg of A */
+          s = track_find(tptr->t_eq, tptr->lon_eq, 1.0, 1.7, &j, track2);
+          if (s)
+            continue;
+
+          tptr2 = &(track2->tracks[j]);
+          if (tptr2->flags != 0)
+            continue;
+        }
+
+      if (track3)
+        {
+          /* find Swarm B crossing */
+          s = track_find(tptr->t_eq, tptr->lon_eq, 5.0, 20.0, &k, track3);
+          if (s)
+            continue;
+
+          tptr3 = &(track3->tracks[k]);
+          if (tptr3->flags != 0)
+            continue;
+
+          /* force Swarm B to be more than 10 deg away from A */
+          dphi = wrap180(tptr->lon_eq - tptr3->lon_eq);
+          if (fabs(dphi) < 10.0)
+            continue;
+        }
+
+      sprintf(buf, "%s", ctime(&unix_time));
+      buf[strlen(buf) - 1] = '\0';
+
+      if (tptr2 && tptr3)
+        {
+          dphi = wrap180(tptr->lon_eq - tptr3->lon_eq);
+          fprintf(stderr, "main_proc: found track triple, %s, dt = %f [min], dphi = %f [deg]\n",
+                  buf,
+                  (tptr->t_eq - tptr3->t_eq) / 60000.0,
+                  dphi);
+          fprintf(stderr, "\t LT A = %f\n", tptr->lt_eq);
+          fprintf(stderr, "\t LT C = %f\n", tptr2->lt_eq);
+          fprintf(stderr, "\t LT B = %f\n", tptr3->lt_eq);
+          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr->lon_eq);
+          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr2->lon_eq);
+          fprintf(stderr, "\t longitude B = %f [deg]\n", tptr3->lon_eq);
+        }
+      else if (tptr2)
+        {
+          dphi = wrap180(tptr->lon_eq - tptr2->lon_eq);
+          fprintf(stderr, "main_proc: found track double, %s, dt = %f [min], dphi = %f [deg]\n",
+                  buf,
+                  (tptr->t_eq - tptr2->t_eq) / 60000.0,
+                  dphi);
+          fprintf(stderr, "\t LT A = %f\n", tptr->lt_eq);
+          fprintf(stderr, "\t LT C = %f\n", tptr2->lt_eq);
+          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr->lon_eq);
+          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr2->lon_eq);
+        }
+      else
+        {
+          fprintf(stderr, "main_proc: found track single, %s, LT = %.1f, LON = %.1f [deg]\n",
+                  buf,
+                  tptr->lt_eq,
+                  tptr->lon_eq);
+        }
+
+      fprintf(stderr, "main_proc: adding data for satellite 1 track %zu/%zu to LS system...", i + 1, track1->n);
       gettimeofday(&tv0, NULL);
       ndata = magfit_add_track(tptr, data, magfit_p);
       gettimeofday(&tv1, NULL);
       fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
+
+      if (tptr2)
+        {
+          fprintf(stderr, "main_proc: adding data for satellite 2 track %zu/%zu to LS system...", j + 1, track2->n);
+          gettimeofday(&tv0, NULL);
+          ndata = magfit_add_track(tptr2, data2, magfit_p);
+          gettimeofday(&tv1, NULL);
+          fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
+        }
+
+      if (tptr3)
+        {
+          fprintf(stderr, "main_proc: adding data for satellite 3 track %zu/%zu to LS system...", k + 1, track3->n);
+          gettimeofday(&tv0, NULL);
+          ndata = magfit_add_track(tptr3, data3, magfit_p);
+          gettimeofday(&tv1, NULL);
+          fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
+        }
 
       fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
       gettimeofday(&tv0, NULL);
@@ -289,6 +375,13 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
         continue;
 
       magfit_print_track(0, fp1, tptr, data, magfit_p);
+
+      if (tptr2)
+        magfit_print_track(0, fp2, tptr2, data2, magfit_p);
+
+      if (tptr3)
+        magfit_print_track(0, fp3, tptr3, data3, magfit_p);
+
       track_print_track(0, fp_track, tptr, data);
 
       /* calculate current density at magnetic equator at this longitude */
@@ -304,71 +397,10 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
               J[1]);
       fflush(fp_current);
 
-#if 0
-      /* find Swarm C crossing within 1 min and 1.7 deg of A */
-      s = track_find(tptr->t_eq, tptr->lon_eq, 1.0, 1.7, &j, track2);
-      if (s)
-        continue;
-
-      tptr2 = &(track2->tracks[j]);
-      if (tptr2->flags != 0)
-        continue;
-
-      /* find Swarm B crossing */
-      s = track_find(tptr->t_eq, tptr->lon_eq, 5.0, 20.0, &k, track3);
-      if (s)
-        continue;
-
-      tptr3 = &(track3->tracks[k]);
-      if (tptr3->flags != 0)
-        continue;
-
-      dphi = wrap180(tptr->lon_eq - tptr3->lon_eq);
-      if (fabs(dphi) < 10.0)
-        continue;
-
-      unix_time = satdata_epoch2timet(tptr->t_eq);
-      sprintf(buf, "%s", ctime(&unix_time));
-      buf[strlen(buf) - 1] = '\0';
-
-      fprintf(stderr, "main_proc: found track triple, %s, dt = %f [min], dphi = %f [deg]\n",
-              buf,
-              (tptr->t_eq - tptr3->t_eq) / 60000.0,
-              dphi);
-      fprintf(stderr, "\t LT A = %f\n", tptr->lt_eq);
-      fprintf(stderr, "\t LT C = %f\n", tptr2->lt_eq);
-      fprintf(stderr, "\t LT B = %f\n", tptr3->lt_eq);
-      fprintf(stderr, "\t longitude A = %f [deg]\n", tptr->lon_eq);
-      fprintf(stderr, "\t longitude C = %f [deg]\n", tptr2->lon_eq);
-      fprintf(stderr, "\t longitude B = %f [deg]\n", tptr3->lon_eq);
-              
-      fprintf(stderr, "main_proc: fitting PCs to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
-
-      pcafit(i, data, track1,
-#if FIT_PCA_C
-             j, data2, track2,
-#else
-             0, NULL, NULL,
-#endif
-#if FIT_PCA_B
-             k, data3, track3,
-#else
-             0, NULL, NULL,
-#endif
-             c, pca_p);
-
-      fprintf(stderr, "done\n");
-
-      /* write PCA along-track prediction for all satellites */
-      write_pca_track(0, fp1, data, c, i, track1, pca_p);
-      write_pca_track(0, fp2, data2, c, j, track2, pca_p);
-      write_pca_track(0, fp3, data3, c, k, track3, pca_p);
-
-      /* write PCA current map */
+      /* write current map */
       fprintf(stderr, "main_proc: writing current map for index %zu to %s...", idx, file_chi);
-      pca_print_map(fp_chi, R_EARTH_KM + 450.0, c, pca_p);
+      magfit_print_map(fp_chi, R_EARTH_KM + 450.0, magfit_p);
       fprintf(stderr, "done\n");
-#endif
 
       ++idx;
     }

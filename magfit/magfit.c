@@ -175,6 +175,70 @@ magfit_eval_J(const double r, const double theta, const double phi,
 }
 
 /*
+magfit_print_map()
+  Print lat/lon map of current flow and magnetic field components
+
+Inputs: fp - output file
+        r  - radius of shell for magnetic field maps (km)
+        w  - workspace
+*/
+
+int
+magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
+{
+  int s = 0;
+  const magfit_parameters *params = &(w->params);
+  const size_t p = (w->type->ncoeff)(w->state);
+  double lat, lon;
+  size_t i;
+
+  i = 1;
+  fprintf(fp, "# Number of basis functions: %zu\n", p);
+  fprintf(fp, "# Current shell radius: %g [km]\n", params->R);
+  fprintf(fp, "# Magnetic field shell radius: %g [km]\n", r);
+  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: chi (kA / nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_y (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_z (nT)\n", i++);
+
+  for (lon = -180.0; lon <= 180.0; lon += 1.0)
+    {
+      double phi = lon * M_PI / 180.0;
+
+      for (lat = -89.9; lat <= 89.9; lat += 1.0)
+        {
+          double theta = M_PI / 2.0 - lat * M_PI / 180.0;
+          double B[3];
+          double chi;
+
+          /* compute current stream function */
+          chi = (w->type->eval_chi)(theta, phi, w->state);
+
+          /* compute magnetic field vector */
+          s += (w->type->eval_B)(r, theta, phi, B, w->state);
+
+          fprintf(fp, "%f %f %f %f %f %f\n",
+                  lon,
+                  lat,
+                  chi,
+                  B[0],
+                  B[1],
+                  B[2]);
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  fprintf(fp, "\n\n");
+
+  fflush(fp);
+
+  return s;
+}
+
+/*
 magfit_print_track()
   Print a track with magnetic model to a file
 */

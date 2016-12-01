@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "interp.h"
+#include "oct.h"
 #include "pca.h"
 #include "track.h"
 
@@ -58,13 +59,15 @@ typedef struct
 static void *pcafit_alloc(const void * params);
 static void pcafit_free(void * vstate);
 static int pcafit_reset(void * vstate);
+static size_t pcafit_ncoeff(void * vstate);
 static size_t pcafit_add_track(const track_data *tptr, const satdata_mag *data,
-                            void * vstate);
+                               void * vstate);
 static int pcafit_fit(void * vstate);
 static int pcafit_eval_B(const double r, const double theta, const double phi,
-                      double B[3], void * vstate);
+                         double B[3], void * vstate);
 static int pcafit_eval_J(const double r, const double theta, const double phi,
-                      double J[3], void * vstate);
+                         double J[3], void * vstate);
+static double pcafit_eval_chi(const double theta, const double phi, void * vstate);
 
 static int build_matrix_row(const double r, const double theta, const double phi,
                             gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
@@ -146,6 +149,13 @@ pcafit_reset(void * vstate)
   pca_state_t *state = (pca_state_t *) vstate;
   state->n = 0;
   return 0;
+}
+
+static size_t
+pcafit_ncoeff(void * vstate)
+{
+  pca_state_t *state = (pca_state_t *) vstate;
+  return state->p;
 }
 
 /*
@@ -230,7 +240,7 @@ pcafit_fit(void * vstate)
 {
   pca_state_t *state = (pca_state_t *) vstate;
   const size_t npts = 200;
-  const double tol = 1.0e-6;
+  const double tol = 0.5; /* lower bound on damping parameter */
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);
   gsl_vector *eta = gsl_vector_alloc(npts);
@@ -263,15 +273,18 @@ pcafit_fit(void * vstate)
   /* compute GCV curve */
   gsl_multifit_linear_gcv(&b.vector, reg_param, G, &lambda_gcv, &G_gcv, state->multifit_p);
 
-  /* the L-curve method often overdamps the system, not sure why */
-  lambda_l *= 1.0e-2;
-  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
+  /* sometimes L-corner method underdamps */
+  lambda_l = GSL_MAX(lambda_l, tol * s0);
 
   /* solve regularized system with lambda_l */
   gsl_multifit_linear_solve(lambda_l, &A.matrix, &b.vector, state->c, &rnorm, &snorm, state->multifit_p);
 
-  fprintf(stderr, "lambda_l = %.12e\n", lambda_l);
-  fprintf(stderr, "lambda_gcv = %.12e\n", lambda_gcv);
+  fprintf(stderr, "\n\t s0 = %g\n", s0);
+  fprintf(stderr, "\t lambda_l = %g\n", lambda_l);
+  fprintf(stderr, "\t lambda_gcv = %g\n", lambda_gcv);
+  fprintf(stderr, "\t rnorm = %g\n", rnorm);
+  fprintf(stderr, "\t snorm = %g\n", snorm);
+  fprintf(stderr, "\t cond(X) = %g\n", 1.0 / gsl_multifit_linear_rcond(state->multifit_p));
 
   fprintf(stderr, "pcafit_fit: writing %s...", lambda_file);
 
@@ -285,11 +298,6 @@ pcafit_fit(void * vstate)
     }
 
   fprintf(stderr, "done\n");
-
-  fprintf(stderr, "rnorm = %.12e\n", rnorm);
-  fprintf(stderr, "snorm = %.12e\n", snorm);
-
-  fprintf(stderr, "cond(X) = %.12e\n", 1.0 / gsl_multifit_linear_rcond(state->multifit_p));
 
   gsl_vector_free(reg_param);
   gsl_vector_free(rho);
@@ -357,6 +365,32 @@ pcafit_eval_J(const double r, const double theta, const double phi,
   return status;
 }
 
+/*
+pcafit_eval_chi()
+  Evaluate current stream function at a given (theta,phi) using
+previously computed coefficients
+
+Inputs: theta  - colatitude (radians)
+        phi    - longitude (radians)
+        vstate - workspace
+
+Return: current stream function chi in kA/nT
+
+Notes:
+1) state->c must contain coefficients
+*/
+
+static double
+pcafit_eval_chi(const double theta, const double phi, void * vstate)
+{
+  pca_state_t *state = (pca_state_t *) vstate;
+  double chi;
+
+  chi = pca_chi(state->c, theta, phi, state->pca_workspace_p);
+
+  return chi;
+}
+
 static int
 build_matrix_row(const double r, const double theta, const double phi,
                  gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
@@ -384,10 +418,12 @@ static const magfit_type pca_type =
   "pca",
   pcafit_alloc,
   pcafit_reset,
+  pcafit_ncoeff,
   pcafit_add_track,
   pcafit_fit,
   pcafit_eval_B,
   pcafit_eval_J,
+  pcafit_eval_chi,
   pcafit_free
 };
 
