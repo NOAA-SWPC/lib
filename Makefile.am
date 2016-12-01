@@ -21,7 +21,6 @@ SUBDIRS =         \
   magfit          \
 	mserv           \
   peak            \
-	secs            \
   superlu         \
   hwm             \
   cond            \

@@ -52,7 +52,6 @@ AC_CONFIG_FILES([            \
   peak/Makefile              \
   poltor/Makefile            \
   pomme/Makefile             \
-  secs/Makefile              \
   superlu/Makefile           \
   swarm/Makefile             \
   pca/Makefile               \
