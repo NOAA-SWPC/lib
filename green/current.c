@@ -17,14 +17,14 @@
 
 /*
 green_eval_sheet_int()
-  Compute sheet current density at a given radius using
+  Compute equivalent sheet current density at a given radius using
 internal Gauss coefficients gnm
 
 Inputs: b     - radius of spherical shell (km)
         theta - colatitude (radians)
         phi   - longitude (radians)
         gnm   - gnm coefficients
-        K     - (output) sheet current density in kA/km in (X,Y,Z)
+        K     - (output) sheet current density in A/km in (X,Y,Z)
         w     - workspace
 
 Return: success/error
@@ -93,8 +93,9 @@ green_eval_sheet_int(const double b, const double theta, const double phi,
         }
     }
 
-  K[0] /= (GREEN_MU_0 * ratio);
-  K[1] /= (GREEN_MU_0 * ratio);
+  /* convert to A/km */
+  K[0] *= 1.0e3 / (GREEN_MU_0 * ratio);
+  K[1] *= 1.0e3 / (GREEN_MU_0 * ratio);
 
   return s;
 }

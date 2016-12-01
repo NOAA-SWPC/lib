@@ -418,6 +418,43 @@ pca_B(const gsl_vector *alpha, const double r, const double theta, const double 
 }
 
 /*
+pca_K()
+  Compute sheet current density at a given point, using
+a linear combination of principal components
+
+Inputs: alpha - coefficients of sum over PCs
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        K     - (output) sheet current density in A/km
+        w     - workspace
+
+Return: success/error
+*/
+
+int
+pca_K(const gsl_vector *alpha, const double theta, const double phi, double K[3], pca_workspace *w)
+{
+  int status;
+  const size_t p = alpha->size; /* number of principal components to use to compute K */
+  size_t i;
+
+  gsl_vector_set_zero(w->work);
+
+  /* compute: work = sum_i alpha_i G_i over largest p principal components in gnm basis */
+  for (i = 0; i < p; ++i)
+    {
+      double ai = gsl_vector_get(alpha, i);
+      gsl_vector_view Gi = gsl_matrix_column(w->G, i);
+
+      gsl_blas_daxpy(ai, &Gi.vector, w->work);
+    }
+
+  status = green_eval_sheet_int(w->b, theta, phi, w->work->data, K, w->green_workspace_p);
+
+  return status;
+}
+
+/*
 pca_chi()
   Compute total current stream function at a given point, using
 a linear combination of principal components:
@@ -517,10 +554,16 @@ pca_pc_chi(const size_t pcidx, const double theta, const double phi, pca_workspa
 pca_pc_calc_chi()
   Compute current stream function for a single PC
 
+chi = -(b/mu0) (b/R) sum_{nm} qnm Ynm
+
+where:
+
+qnm = (2n + 1)/(n + 1) (b/R)^{n-2} knm
+
 Inputs: b     - radius of current shell (km)
         theta - colatitude (radians)
         phi   - longitude (radians)
-        k     - coefficient vector
+        k     - coefficient vector knm for this PC
         w     - workspace
 */
 

@@ -2,7 +2,10 @@
  * magfit.c
  *
  * High-level routines for fitting models to magnetic vector
- * data
+ * data.
+ *
+ * Models supported:
+ * 1. 1D SECS
  */
 
 #include <stdio.h>
@@ -32,12 +35,10 @@
 
 /*
 magfit_alloc()
-  Allocate secs 1d workspace
+  Allocate magfit workspace
 
-Inputs: flags        - SECS1D_FLG_xxx
-        lmax         - maximum degree for Legendre functions in expansion
-        R_iono       - radius of ionosphere (km)
-        pole_spacing - along-orbit latitude spacing of SECS poles (degrees)
+Inputs: T      - model type
+        params - parameters
 
 Return: pointer to workspace
 */
@@ -82,6 +83,8 @@ magfit_default_parameters(void)
   params.R = R_EARTH_KM + 110.0;
   params.lmax = MAGFIT_SECS_LMAX;
   params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
+
+  params.pca_modes = 16;
 
   return params;
 }
@@ -138,15 +141,16 @@ previously computed coefficients
 
 Inputs: r     - radius (km)
         theta - colatitude (radians)
+        phi   - longitude (radians)
         B     - (output) magnetic field vector (nT)
         w     - workspace
 */
 
 int
-magfit_eval_B(const double r, const double theta,
+magfit_eval_B(const double r, const double theta, const double phi,
               double B[3], magfit_workspace *w)
 {
-  int status = (w->type->eval_B)(r, theta, B, w->state);
+  int status = (w->type->eval_B)(r, theta, phi, B, w->state);
   return status;
 }
 
@@ -157,15 +161,16 @@ previously computed coefficients
 
 Inputs: r     - radius (km)
         theta - colatitude (radians)
+        phi   - longitude (radians)
         J     - (output) current density vector [A/km]
         w     - workspace
 */
 
 int
-magfit_eval_J(const double r, const double theta,
+magfit_eval_J(const double r, const double theta, const double phi,
               double J[3], magfit_workspace *w)
 {
-  int status = (w->type->eval_J)(r, theta, J, w->state);
+  int status = (w->type->eval_J)(r, theta, phi, J, w->state);
   return status;
 }
 
@@ -205,6 +210,7 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
       size_t didx = i + tptr->start_idx;
       double r = data->altitude[didx] + data->R;
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+      double phi = data->longitude[didx] * M_PI / 180.0;
       double B_model[3], J_model[3];
 
       if (!SATDATA_AvailableData(data->flags[didx]))
@@ -214,9 +220,9 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
       if (fabs(data->qdlat[didx]) > MAGFIT_QDMAX)
         continue;
 
-      /* compute SECS model prediction */
-      magfit_eval_B(r, theta, B_model, w);
-      magfit_eval_J(r, theta, J_model, w);
+      /* compute model prediction */
+      magfit_eval_B(r, theta, phi, B_model, w);
+      magfit_eval_J(r, theta, phi, J_model, w);
 
       fprintf(fp, "%ld %f %f %f %f %f %f %f %f %f %f %f %f %f\n",
               satdata_epoch2timet(data->t[didx]),

@@ -549,6 +549,9 @@ Inputs: b - radius of current shell (km)
         w - workspace
 
 Return: success/error
+
+Notes:
+1) It is allowed for k = g for an in-place transform
 */
 
 int

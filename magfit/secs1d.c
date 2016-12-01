@@ -78,9 +78,9 @@ static int secs1d_reset(void * vstate);
 static size_t secs1d_add_track(const track_data *tptr, const satdata_mag *data,
                                void * vstate);
 static int secs1d_fit(void * vstate);
-static int secs1d_eval_B(const double r, const double theta,
+static int secs1d_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
-static int secs1d_eval_J(const double r, const double theta,
+static int secs1d_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
 
 static int build_matrix_row_df(const double r, const double theta,
@@ -495,6 +495,7 @@ previously computed 1D SECS coefficients
 
 Inputs: r      - radius (km)
         theta  - colatitude (radians)
+        phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
         vstate - state
 
@@ -503,13 +504,15 @@ Notes:
 */
 
 static int
-secs1d_eval_B(const double r, const double theta,
+secs1d_eval_B(const double r, const double theta, const double phi,
               double B[3], void * vstate)
 {
   secs1d_state_t *state = (secs1d_state_t *) vstate;
   gsl_vector_view vx = gsl_matrix_row(state->X, 0);
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
+
+  (void) phi; /* unused parameter */
 
   B[0] = 0.0;
   B[1] = 0.0;
@@ -540,6 +543,7 @@ previously computed 1D SECS coefficients
 
 Inputs: r      - radius (km)
         theta  - colatitude (radians)
+        phi    - longitude (radians)
         J      - (output) current density vector [A/km]
         vstate - workspace
 
@@ -548,7 +552,7 @@ Notes:
 */
 
 static int
-secs1d_eval_J(const double r, const double theta,
+secs1d_eval_J(const double r, const double theta, const double phi,
               double J[3], void * vstate)
 {
   secs1d_state_t *state = (secs1d_state_t *) vstate;
@@ -556,6 +560,9 @@ secs1d_eval_J(const double r, const double theta,
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
   size_t i;
+
+  (void) r;   /* unused parameter */
+  (void) phi; /* unused parameter */
 
   J[0] = 0.0;
   J[1] = 0.0;

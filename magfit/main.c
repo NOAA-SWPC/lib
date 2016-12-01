@@ -221,8 +221,7 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   int s = 0;
   size_t i, j, k;
   size_t nflagged, nunflagged;
-  const double pole_spacing = 0.5;
-  const magfit_type *T = magfit_secs1d;
+  const magfit_type *T = magfit_pca;
   magfit_parameters magfit_params = magfit_default_parameters();
   magfit_workspace *magfit_p;
   const char *file1 = "data1.txt";
@@ -239,6 +238,8 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   char buf[2048];
   struct timeval tv0, tv1;
   mageq_workspace *mageq_p = mageq_alloc();
+
+  magfit_params.pca_modes = 16;
 
   magfit_p = magfit_alloc(T, &magfit_params);
 
@@ -294,7 +295,7 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
       latc = mageq_calc(tptr->lon_eq * M_PI / 180.0, R_EARTH_KM + 110.0,
                         satdata_epoch2year(tptr->t_eq), mageq_p);
 
-      magfit_eval_J(magfit_params.R, M_PI / 2.0 - latc, J, magfit_p);
+      magfit_eval_J(magfit_params.R, M_PI / 2.0 - latc, tptr->lon_eq * M_PI / 180.0, J, magfit_p);
 
       fprintf(fp_current, "%ld %f %f %f\n",
               satdata_epoch2timet(tptr->t_eq),
