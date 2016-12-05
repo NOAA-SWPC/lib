@@ -29,9 +29,6 @@
 
 #include "magfit.h"
 
-/* mu_0 in units of: nT / (kA km^{-1}) */
-#define SECS1D_MU_0                  (400.0 * M_PI)
-
 /* relative weightings of different components */
 #define PCA_WEIGHT_X                 (5.0)
 #define PCA_WEIGHT_Y                 (1.0)
@@ -60,8 +57,8 @@ static void *pcafit_alloc(const void * params);
 static void pcafit_free(void * vstate);
 static int pcafit_reset(void * vstate);
 static size_t pcafit_ncoeff(void * vstate);
-static size_t pcafit_add_track(const track_data *tptr, const satdata_mag *data,
-                               void * vstate);
+static int pcafit_add_datum(const double r, const double theta, const double phi,
+                            const double qdlat, const double B[3], void * vstate);
 static int pcafit_fit(void * vstate);
 static int pcafit_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
@@ -159,68 +156,54 @@ pcafit_ncoeff(void * vstate)
 }
 
 /*
-pcafit_add_track()
-  Add satellite data from a single track to LS system
+pcafit_add_datum()
+  Add single vector measurement to LS system
 
-Inputs: tptr   - track pointer
-        data   - satellite data
+Inputs: r      - radius (km)
+        theta  - colatitude (radians)
+        phi    - longitude (radians)
+        qdlat  - QD latitude (degrees)
+        B      - magnetic field vector NEC (nT)
         vstate - state
 
-Return: total data added so far
+Return: success/error
 
 Notes:
 1) state->n is updated with the number of total data added
 */
 
-static size_t
-pcafit_add_track(const track_data *tptr, const satdata_mag *data,
-              void * vstate)
+static int
+pcafit_add_datum(const double r, const double theta, const double phi,
+                 const double qdlat, const double B[3], void * vstate)
 {
   pca_state_t *state = (pca_state_t *) vstate;
   size_t rowidx = state->n;
-  size_t i;
+  double wi = 1.0;
+  gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
+  gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
+  gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
 
-  for (i = 0; i < tptr->n; ++i)
-    {
-      size_t didx = i + tptr->start_idx;
-      double r = data->altitude[didx] + data->R;
-      double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
-      double phi = data->longitude[didx] * M_PI / 180.0;
-      double wi = 1.0;
-      gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
-      gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
-      gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
+  /* upweight equatorial data */
+  if (fabs(qdlat) <= 10.0)
+    wi = PCA_WEIGHT_EEJ;
 
-      if (!SATDATA_AvailableData(data->flags[didx]))
-        continue;
+  /* set rhs vector */
+  gsl_vector_set(state->rhs, rowidx, B[0]);
+  gsl_vector_set(state->rhs, rowidx + 1, B[1]);
+  gsl_vector_set(state->rhs, rowidx + 2, B[2]);
 
-      /* fit only low-latitude data */
-      if (fabs(data->qdlat[didx]) > MAGFIT_QDMAX)
-        continue;
+  /* set weight vector */
+  gsl_vector_set(state->wts, rowidx, PCA_WEIGHT_X * wi);
+  gsl_vector_set(state->wts, rowidx + 1, PCA_WEIGHT_Y *  wi);
+  gsl_vector_set(state->wts, rowidx + 2, PCA_WEIGHT_Z *  wi);
 
-      /* upweight equatorial data */
-      if (fabs(data->qdlat[didx]) <= 10.0)
-        wi = PCA_WEIGHT_EEJ;
-
-      /* set rhs vector */
-      gsl_vector_set(state->rhs, rowidx, tptr->Bx[i]);
-      gsl_vector_set(state->rhs, rowidx + 1, tptr->By[i]);
-      gsl_vector_set(state->rhs, rowidx + 2, tptr->Bz[i]);
-
-      /* set weight vector */
-      gsl_vector_set(state->wts, rowidx, PCA_WEIGHT_X * wi);
-      gsl_vector_set(state->wts, rowidx + 1,PCA_WEIGHT_Y *  wi);
-      gsl_vector_set(state->wts, rowidx + 2,PCA_WEIGHT_Z *  wi);
-
-      /* build 3 rows of the LS matrix */
-      build_matrix_row(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
-
-      rowidx += 3;
-    }
+  /* build 3 rows of the LS matrix */
+  build_matrix_row(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
+  rowidx += 3;
 
   state->n = rowidx;
 
-  return state->n;
+  return GSL_SUCCESS;
 }
 
 /*
@@ -232,7 +215,7 @@ Inputs: vstate - state
 Return: success/error
 
 Notes:
-1) Data must be added to workspace via pca_add_track()
+1) Data must be added to workspace via pca_add_datum()
 */
 
 static int
@@ -273,13 +256,21 @@ pcafit_fit(void * vstate)
   /* compute GCV curve */
   gsl_multifit_linear_gcv(&b.vector, reg_param, G, &lambda_gcv, &G_gcv, state->multifit_p);
 
-  /* sometimes L-corner method underdamps */
+#if 1
+  /* sometimes L-corner method underdamps; for single satellite fit, disable this;
+   * for 2-3 satellites, enable this check */
   lambda_l = GSL_MAX(lambda_l, tol * s0);
+#else
+  lambda_l = GSL_MAX(lambda_l, 1.0e-2 * s0);
+#endif
 
   /* solve regularized system with lambda_l */
   gsl_multifit_linear_solve(lambda_l, &A.matrix, &b.vector, state->c, &rnorm, &snorm, state->multifit_p);
 
-  fprintf(stderr, "\n\t s0 = %g\n", s0);
+  fprintf(stderr, "\n");
+  fprintf(stderr, "\t n = %zu\n", state->n);
+  fprintf(stderr, "\t p = %zu\n", state->p);
+  fprintf(stderr, "\t s0 = %g\n", s0);
   fprintf(stderr, "\t lambda_l = %g\n", lambda_l);
   fprintf(stderr, "\t lambda_gcv = %g\n", lambda_gcv);
   fprintf(stderr, "\t rnorm = %g\n", rnorm);
@@ -419,7 +410,7 @@ static const magfit_type pca_type =
   pcafit_alloc,
   pcafit_reset,
   pcafit_ncoeff,
-  pcafit_add_track,
+  pcafit_add_datum,
   pcafit_fit,
   pcafit_eval_B,
   pcafit_eval_J,

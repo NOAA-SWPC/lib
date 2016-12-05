@@ -28,9 +28,6 @@
 
 #include "magfit.h"
 
-/* mu_0 in units of: nT / (kA km^{-1}) */
-#define SECS1D_MU_0                  (400.0 * M_PI)
-
 typedef struct
 {
   size_t n;         /* total number of measurements in system */
@@ -76,8 +73,8 @@ static void *secs1d_alloc(const void * params);
 static void secs1d_free(void * vstate);
 static int secs1d_reset(void * vstate);
 static size_t secs1d_ncoeff(void * vstate);
-static size_t secs1d_add_track(const track_data *tptr, const satdata_mag *data,
-                               void * vstate);
+static int secs1d_add_datum(const double r, const double theta, const double phi,
+                            const double qdlat, const double B[3], void * vstate);
 static int secs1d_fit(void * vstate);
 static int secs1d_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
@@ -112,11 +109,11 @@ secs1d_alloc(const void * params)
   secs1d_state_t *state;
   const size_t flags = mparams->secs_flags;
   const double lat_spacing = mparams->lat_spacing;
-  const double max_lat = 60.0;
-  const size_t npoles = (size_t) ((2.0 * max_lat) / lat_spacing + 1.0);
+  const double lat_min = mparams->lat_min;
+  const double lat_max = mparams->lat_max;
+  const size_t npoles = (size_t) ((lat_max - lat_min) / lat_spacing + 1.0);
   const double dtheta = lat_spacing * M_PI / 180.0;
-  const double theta_min = M_PI / 2.0 - max_lat * M_PI / 180.0;
-  const double theta_max = M_PI / 2.0 + max_lat * M_PI / 180.0;
+  const double theta_min = M_PI / 2.0 - lat_max * M_PI / 180.0;
   size_t i;
 
   state = calloc(1, sizeof(secs1d_state_t));
@@ -280,97 +277,74 @@ secs1d_ncoeff(void * vstate)
 }
 
 /*
-secs1d_add_track()
-  Add satellite data from a single track to LS system
+secs1d_add_datum()
+  Add single vector measurement to LS system
 
-Inputs: tptr   - track pointer
-        data   - satellite data
+Inputs: r      - radius (km)
+        theta  - colatitude (radians)
+        phi    - longitude (radians)
+        qdlat  - QD latitude (degrees)
+        B      - magnetic field vector NEC (nT)
         vstate - state
 
-Return: total data added so far
+Return: success/error
 
 Notes:
 1) state->n is updated with the number of total data added
 */
 
-static size_t
-secs1d_add_track(const track_data *tptr, const satdata_mag *data,
-                 void * vstate)
+static int
+secs1d_add_datum(const double r, const double theta, const double phi,
+                 const double qdlat, const double B[3], void * vstate)
 {
   secs1d_state_t *state = (secs1d_state_t *) vstate;
   size_t rowidx = state->n;
-  size_t i;
+  double wi = 1.0;
+
+  (void) phi; /* unused parameter */
 
   if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
     {
-      for (i = 0; i < tptr->n; ++i)
-        {
-          size_t didx = i + tptr->start_idx;
-          double r = data->altitude[didx] + data->R;
-          double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
-          double wi = 1.0;
-          gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
-          gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 1);
+      gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
+      gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 1);
 
-          if (!SATDATA_AvailableData(data->flags[didx]))
-            continue;
+      /* upweight equatorial data */
+      if (fabs(qdlat) < 10.0)
+        wi *= 10.0;
 
-          /* fit only low-latitude data */
-          if (fabs(data->qdlat[didx]) > MAGFIT_QDMAX)
-            continue;
+      /* set rhs vector */
+      gsl_vector_set(state->rhs, rowidx, B[0]);
+      gsl_vector_set(state->rhs, rowidx + 1, B[2]);
 
-          /* upweight equatorial data */
-          if (fabs(data->qdlat[didx]) < 10.0)
-            wi *= 10.0;
+      /* set weight vector */
+      gsl_vector_set(state->wts, rowidx, wi);
+      gsl_vector_set(state->wts, rowidx + 1, wi);
 
-          /* set rhs vector */
-          gsl_vector_set(state->rhs, rowidx, tptr->Bx[i]);
-          gsl_vector_set(state->rhs, rowidx + 1, tptr->Bz[i]);
+      /* build 2 rows of the LS matrix for DF SECS */
+      build_matrix_row_df(r, theta, &vx.vector, &vz.vector, state);
 
-          /* set weight vector */
-          gsl_vector_set(state->wts, rowidx, wi);
-          gsl_vector_set(state->wts, rowidx + 1, wi);
-
-          /* build 2 rows of the LS matrix for DF SECS */
-          build_matrix_row_df(r, theta, &vx.vector, &vz.vector, state);
-
-          rowidx += 2;
-        }
+      rowidx += 2;
     }
 
   if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
     {
-      for (i = 0; i < tptr->n; ++i)
-        {
-          size_t didx = i + tptr->start_idx;
-          double r = data->altitude[didx] + data->R;
-          double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
-          double wi = 1.0;
-          gsl_vector_view vy = gsl_matrix_row(state->X, rowidx);
+      gsl_vector_view vy = gsl_matrix_row(state->X, rowidx);
 
-          if (!SATDATA_AvailableData(data->flags[didx]))
-            continue;
+      /* set rhs vector */
+      gsl_vector_set(state->rhs, rowidx, B[1]);
 
-          /* fit only low-latitude data */
-          if (fabs(data->qdlat[didx]) > MAGFIT_QDMAX)
-            continue;
+      /* set weight vector */
+      gsl_vector_set(state->wts, rowidx, wi);
 
-          /* set rhs vector */
-          gsl_vector_set(state->rhs, rowidx, tptr->By[i]);
+      /* build 1 row of the LS matrix for CF SECS */
+      build_matrix_row_cf(r, theta, &vy.vector, state);
 
-          /* set weight vector */
-          gsl_vector_set(state->wts, rowidx, wi);
-
-          /* build 1 row of the LS matrix for CF SECS */
-          build_matrix_row_cf(r, theta, &vy.vector, state);
-
-          rowidx += 1;
-        }
+      rowidx += 1;
     }
 
   state->n = rowidx;
 
-  return state->n;
+  return GSL_SUCCESS;
 }
 
 /*
@@ -383,7 +357,7 @@ Return: success/error
 
 Notes:
 1) Data must be added to workspace via
-secs1d_add_track()
+secs1d_add_datum()
 */
 
 static int
@@ -690,8 +664,8 @@ secs1d_green_df(const double r, const double theta, const size_t pole_idx,
           B[2] -= rterm * Pltheta0 * state->Pltheta[l];
         }
 
-      B[0] *= SECS1D_MU_0 / (2.0 * r);
-      B[2] *= SECS1D_MU_0 / (2.0 * r);
+      B[0] *= MAGFIT_MU_0 / (2.0 * r);
+      B[2] *= MAGFIT_MU_0 / (2.0 * r);
     }
   else
     {
@@ -747,7 +721,7 @@ secs1d_green_cf(const double r, const double theta, const double theta0,
   if (r > state->R_iono)
     {
       B[1] = -secs1d_tancot(theta, theta0, state);
-      B[1] *= SECS1D_MU_0 / (2.0 * r);
+      B[1] *= MAGFIT_MU_0 / (2.0 * r);
     }
   else
     {
@@ -979,7 +953,7 @@ static const magfit_type secs1d_type =
   secs1d_alloc,
   secs1d_reset,
   secs1d_ncoeff,
-  secs1d_add_track,
+  secs1d_add_datum,
   secs1d_fit,
   secs1d_eval_B,
   secs1d_eval_J,

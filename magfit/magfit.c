@@ -6,6 +6,8 @@
  *
  * Models supported:
  * 1. 1D SECS
+ * 2. 2D SECS (DF only)
+ * 3. PCA
  */
 
 #include <stdio.h>
@@ -79,7 +81,12 @@ magfit_default_parameters(void)
 {
   magfit_parameters params;
 
-  params.lat_spacing = 0.5;
+  params.lat_spacing = 2.0;
+  params.lat_min = -60.0;
+  params.lat_max = 60.0;
+  params.lon_spacing = 5.0;
+  params.lon_min = 0.0; /* these should be set by user */
+  params.lon_max = 0.0;
   params.R = R_EARTH_KM + 110.0;
   params.lmax = MAGFIT_SECS_LMAX;
   params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
@@ -111,7 +118,40 @@ size_t
 magfit_add_track(const track_data *tptr, const satdata_mag *data,
                  magfit_workspace *w)
 {
-  size_t n = (w->type->add_track)(tptr, data, w->state);
+  int s;
+  size_t n = 0;
+  size_t i;
+
+  for (i = 0; i < tptr->n; ++i)
+    {
+      size_t didx = i + tptr->start_idx;
+      double r = data->altitude[didx] + data->R;
+      double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+      double phi = data->longitude[didx] * M_PI / 180.0;
+      double qdlat = data->qdlat[didx];
+      double B[3];
+
+      if (!SATDATA_AvailableData(data->flags[didx]))
+        continue;
+
+      /* fit only low-latitude data */
+      if (fabs(qdlat) > MAGFIT_QDMAX)
+        continue;
+
+      B[0] = tptr->Bx[i];
+      B[1] = tptr->By[i];
+      B[2] = tptr->Bz[i];
+
+      s = (w->type->add_datum)(r, theta, phi, qdlat, B, w->state);
+      if (s)
+        {
+          fprintf(stderr, "magfit_add_track: error adding data\n");
+          break;
+        }
+
+      ++n;
+    }
+
   return n;
 }
 
@@ -306,6 +346,78 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
     }
 
   fprintf(fp, "\n\n");
+
+  return 0;
+}
+
+/*
+magfit_print_rms()
+  Print rms between a track and magnetic model to a file
+
+Inputs: header - print header?
+        fp     - file pointer
+        lon0   - reference longitude (degrees)
+        tptr   - track data
+        data   - satellite data
+        w      - workspace
+*/
+
+int
+magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data *tptr,
+                 const satdata_mag *data, magfit_workspace *w)
+{
+  size_t i;
+  double rms[3] = { 0.0, 0.0, 0.0 };
+  size_t n = 0;
+
+  if (header)
+    {
+      i = 1;
+      fprintf(fp, "# Field %zu: timestamp of equator crossing\n", i++);
+      fprintf(fp, "# Field %zu: dlon (degrees)\n", i++);
+      fprintf(fp, "# Field %zu: X rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: Y rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: Z rms (nT)\n", i++);
+      return 0;
+    }
+
+  for (i = 0; i < tptr->n; ++i)
+    {
+      size_t didx = i + tptr->start_idx;
+      double r = data->altitude[didx] + data->R;
+      double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+      double phi = data->longitude[didx] * M_PI / 180.0;
+      double B_model[3];
+
+      if (!SATDATA_AvailableData(data->flags[didx]))
+        continue;
+
+      /* use only low-latitude data */
+      if (fabs(data->qdlat[didx]) > MAGFIT_QDMAX)
+        continue;
+
+      /* compute model prediction */
+      magfit_eval_B(r, theta, phi, B_model, w);
+
+      rms[0] += pow(tptr->Bx[i] - B_model[0], 2.0);
+      rms[1] += pow(tptr->By[i] - B_model[1], 2.0);
+      rms[2] += pow(tptr->Bz[i] - B_model[2], 2.0);
+      ++n;
+    }
+
+  if (n > 0)
+    {
+      for (i = 0; i < 3; ++i)
+        rms[i] = sqrt(rms[i] / (double)n);
+    }
+
+  fprintf(fp, "%ld %.4f %.2f %.2f %.2f\n",
+          satdata_epoch2timet(tptr->t_eq),
+          wrap180(tptr->lon_eq - lon0),
+          rms[0],
+          rms[1],
+          rms[2]);
+  fflush(fp);
 
   return 0;
 }

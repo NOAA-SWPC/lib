@@ -29,9 +29,9 @@
 
 #include "magfit.h"
 
-/* define to fit pca modes to C/B data */
-#define FIT_PCA_C                  1
-#define FIT_PCA_B                  1
+/* define to fit to C/B data */
+#define FIT_SAT_C                  1
+#define FIT_SAT_B                  1
 
 typedef struct
 {
@@ -215,13 +215,12 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
 } /* preprocess_data() */
 
 int
-main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *data3,
-          track_workspace *track1, track_workspace *track2, track_workspace *track3)
+main_proc(const satdata_mag *data[3], track_workspace *track[3])
 {
   int s = 0;
   size_t i, j, k;
   size_t nflagged, nunflagged;
-  const magfit_type *T = magfit_pca;
+  const magfit_type *T = magfit_secs2d;
   magfit_parameters magfit_params = magfit_default_parameters();
   magfit_workspace *magfit_p;
   const char *file1 = "data1.txt";
@@ -234,22 +233,22 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   FILE *fp_chi = fopen(file_chi, "w");
   FILE *fp_track = fopen("track.dat", "w");
   FILE *fp_current = fopen("current.dat", "w");
+  FILE *fp_rms = fopen("rms.dat", "w");
   size_t idx = 0;
   struct timeval tv0, tv1;
   mageq_workspace *mageq_p = mageq_alloc();
 
-  magfit_params.pca_modes = 14;
+  magfit_params.pca_modes = 15;
 
-  magfit_p = magfit_alloc(T, &magfit_params);
-
-  nflagged = track_nflagged(track1);
-  nunflagged = track1->n - nflagged;
-  fprintf(stderr, "Total tracks:    %zu\n", track1->n);
+  nflagged = track_nflagged(track[0]);
+  nunflagged = track[0]->n - nflagged;
+  fprintf(stderr, "Total tracks:    %zu\n", track[0]->n);
   fprintf(stderr, "Total flagged:   %zu\n", nflagged);
   fprintf(stderr, "Total unflagged: %zu\n", nunflagged);
 
   /* print header */
-  magfit_print_track(1, fp1, NULL, NULL, magfit_p);
+  magfit_print_track(1, fp1, NULL, NULL, NULL);
+  magfit_print_rms(1, fp_rms, 0.0, NULL, NULL, NULL);
 
   track_print_track(1, fp_track, NULL, NULL);
 
@@ -259,113 +258,126 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   fprintf(fp_current, "# Field %zu: longitude of equator crossing (degrees)\n", i++);
   fprintf(fp_current, "# Field %zu: J_y (A/km)\n", i++);
 
-  for (i = 0; i < track1->n; ++i)
+  for (i = 0; i < track[0]->n; ++i)
     {
-      track_data *tptr = &(track1->tracks[i]);
-      track_data *tptr2 = NULL;
-      track_data *tptr3 = NULL;
-      time_t unix_time = satdata_epoch2timet(tptr->t_eq);
+      track_data *tptr[3] = { &(track[0]->tracks[i]), NULL, NULL };
+      time_t unix_time = satdata_epoch2timet(tptr[0]->t_eq);
       char buf[2048];
       double latc, J[3];
       size_t ndata;
       double dphi;
 
-      if (tptr->flags != 0)
+      if (tptr[0]->flags != 0)
         continue;
 
-      magfit_reset(magfit_p);
-
-      if (track2)
+      if (track[1])
         {
           /* find Swarm C crossing within 1 min and 1.7 deg of A */
-          s = track_find(tptr->t_eq, tptr->lon_eq, 1.0, 1.7, &j, track2);
+          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 1.0, 1.7, &j, track[1]);
           if (s)
             continue;
 
-          tptr2 = &(track2->tracks[j]);
-          if (tptr2->flags != 0)
+          tptr[1] = &(track[1]->tracks[j]);
+          if (tptr[1]->flags != 0)
             continue;
         }
 
-      if (track3)
+      if (track[2])
         {
           /* find Swarm B crossing */
-          s = track_find(tptr->t_eq, tptr->lon_eq, 5.0, 20.0, &k, track3);
+          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);
           if (s)
             continue;
 
-          tptr3 = &(track3->tracks[k]);
-          if (tptr3->flags != 0)
+          tptr[2] = &(track[2]->tracks[k]);
+          if (tptr[2]->flags != 0)
             continue;
 
+#if 0
           /* force Swarm B to be more than 10 deg away from A */
-          dphi = wrap180(tptr->lon_eq - tptr3->lon_eq);
+          dphi = wrap180(tptr[0]->lon_eq - tptr[2]->lon_eq);
           if (fabs(dphi) < 10.0)
             continue;
+#endif
         }
 
       sprintf(buf, "%s", ctime(&unix_time));
       buf[strlen(buf) - 1] = '\0';
 
-      if (tptr2 && tptr3)
+      if (tptr[1] && tptr[2])
         {
-          dphi = wrap180(tptr->lon_eq - tptr3->lon_eq);
+          dphi = wrap180(tptr[2]->lon_eq - tptr[0]->lon_eq);
           fprintf(stderr, "main_proc: found track triple, %s, dt = %f [min], dphi = %f [deg]\n",
                   buf,
-                  (tptr->t_eq - tptr3->t_eq) / 60000.0,
+                  (tptr[0]->t_eq - tptr[2]->t_eq) / 60000.0,
                   dphi);
-          fprintf(stderr, "\t LT A = %f\n", tptr->lt_eq);
-          fprintf(stderr, "\t LT C = %f\n", tptr2->lt_eq);
-          fprintf(stderr, "\t LT B = %f\n", tptr3->lt_eq);
-          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr->lon_eq);
-          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr2->lon_eq);
-          fprintf(stderr, "\t longitude B = %f [deg]\n", tptr3->lon_eq);
+          fprintf(stderr, "\t LT A = %f\n", tptr[0]->lt_eq);
+          fprintf(stderr, "\t LT C = %f\n", tptr[1]->lt_eq);
+          fprintf(stderr, "\t LT B = %f\n", tptr[2]->lt_eq);
+          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr[0]->lon_eq);
+          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr[1]->lon_eq);
+          fprintf(stderr, "\t longitude B = %f [deg]\n", tptr[2]->lon_eq);
+
+          magfit_params.lon_max = tptr[2]->lon_eq + 1.0;
         }
-      else if (tptr2)
+      else if (tptr[1])
         {
-          dphi = wrap180(tptr->lon_eq - tptr2->lon_eq);
+          dphi = wrap180(tptr[1]->lon_eq - tptr[0]->lon_eq);
           fprintf(stderr, "main_proc: found track double, %s, dt = %f [min], dphi = %f [deg]\n",
                   buf,
-                  (tptr->t_eq - tptr2->t_eq) / 60000.0,
+                  (tptr[0]->t_eq - tptr[1]->t_eq) / 60000.0,
                   dphi);
-          fprintf(stderr, "\t LT A = %f\n", tptr->lt_eq);
-          fprintf(stderr, "\t LT C = %f\n", tptr2->lt_eq);
-          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr->lon_eq);
-          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr2->lon_eq);
+          fprintf(stderr, "\t LT A = %f\n", tptr[0]->lt_eq);
+          fprintf(stderr, "\t LT C = %f\n", tptr[1]->lt_eq);
+          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr[0]->lon_eq);
+          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr[1]->lon_eq);
+
+          magfit_params.lon_max = tptr[1]->lon_eq + 1.0;
         }
       else
         {
           fprintf(stderr, "main_proc: found track single, %s, LT = %.1f, LON = %.1f [deg]\n",
                   buf,
-                  tptr->lt_eq,
-                  tptr->lon_eq);
+                  tptr[0]->lt_eq,
+                  tptr[0]->lon_eq);
+
+          magfit_params.lon_max = tptr[0]->lon_eq + 1.0;
         }
 
-      fprintf(stderr, "main_proc: adding data for satellite 1 track %zu/%zu to LS system...", i + 1, track1->n);
+      magfit_params.lon_min = tptr[0]->lon_eq - 1.0;
+      magfit_p = magfit_alloc(T, &magfit_params);
+
+      magfit_reset(magfit_p);
+
+      fprintf(stderr, "main_proc: adding data for satellite 1 track %zu/%zu to LS system...", i + 1, track[0]->n);
       gettimeofday(&tv0, NULL);
-      ndata = magfit_add_track(tptr, data, magfit_p);
+      ndata = magfit_add_track(tptr[0], data[0], magfit_p);
       gettimeofday(&tv1, NULL);
       fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
 
-      if (tptr2)
+#if FIT_SAT_C
+      if (tptr[1])
         {
-          fprintf(stderr, "main_proc: adding data for satellite 2 track %zu/%zu to LS system...", j + 1, track2->n);
+          fprintf(stderr, "main_proc: adding data for satellite 2 track %zu/%zu to LS system...", j + 1, track[1]->n);
           gettimeofday(&tv0, NULL);
-          ndata = magfit_add_track(tptr2, data2, magfit_p);
+          ndata = magfit_add_track(tptr[1], data[1], magfit_p);
           gettimeofday(&tv1, NULL);
           fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
         }
+#endif
 
-      if (tptr3)
+#if FIT_SAT_B
+      if (tptr[2])
         {
-          fprintf(stderr, "main_proc: adding data for satellite 3 track %zu/%zu to LS system...", k + 1, track3->n);
+          fprintf(stderr, "main_proc: adding data for satellite 3 track %zu/%zu to LS system...", k + 1, track[2]->n);
           gettimeofday(&tv0, NULL);
-          ndata = magfit_add_track(tptr3, data3, magfit_p);
+          ndata = magfit_add_track(tptr[2], data[2], magfit_p);
           gettimeofday(&tv1, NULL);
           fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
         }
+#endif
 
-      fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
+      fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track[0]->n, idx);
       gettimeofday(&tv0, NULL);
       s = magfit_fit(magfit_p);
       gettimeofday(&tv1, NULL);
@@ -374,38 +386,44 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
       if (s)
         continue;
 
-      magfit_print_track(0, fp1, tptr, data, magfit_p);
+      magfit_print_track(0, fp1, tptr[0], data[0], magfit_p);
 
-      if (tptr2)
-        magfit_print_track(0, fp2, tptr2, data2, magfit_p);
+      if (tptr[1])
+        magfit_print_track(0, fp2, tptr[1], data[1], magfit_p);
 
-      if (tptr3)
-        magfit_print_track(0, fp3, tptr3, data3, magfit_p);
+      if (tptr[2])
+        {
+          magfit_print_track(0, fp3, tptr[2], data[2], magfit_p);
+          magfit_print_rms(0, fp_rms, tptr[0]->lon_eq, tptr[2], data[2], magfit_p);
+        }
 
-      track_print_track(0, fp_track, tptr, data);
+      track_print_track(0, fp_track, tptr[0], data[0]);
 
       /* calculate current density at magnetic equator at this longitude */
-      latc = mageq_calc(tptr->lon_eq * M_PI / 180.0, R_EARTH_KM + 110.0,
-                        satdata_epoch2year(tptr->t_eq), mageq_p);
+      latc = mageq_calc(tptr[0]->lon_eq * M_PI / 180.0, R_EARTH_KM + 110.0,
+                        satdata_epoch2year(tptr[0]->t_eq), mageq_p);
 
-      magfit_eval_J(magfit_params.R, M_PI / 2.0 - latc, tptr->lon_eq * M_PI / 180.0, J, magfit_p);
+      magfit_eval_J(magfit_params.R, M_PI / 2.0 - latc, tptr[0]->lon_eq * M_PI / 180.0, J, magfit_p);
 
       fprintf(fp_current, "%ld %f %f %f\n",
-              satdata_epoch2timet(tptr->t_eq),
-              tptr->lt_eq,
-              tptr->lon_eq,
+              satdata_epoch2timet(tptr[0]->t_eq),
+              tptr[0]->lt_eq,
+              tptr[0]->lon_eq,
               J[1]);
       fflush(fp_current);
 
+#if 1
       /* write current map */
       fprintf(stderr, "main_proc: writing current map for index %zu to %s...", idx, file_chi);
       magfit_print_map(fp_chi, R_EARTH_KM + 450.0, magfit_p);
       fprintf(stderr, "done\n");
+#endif
 
       ++idx;
+
+      magfit_free(magfit_p);
     }
 
-  magfit_free(magfit_p);
   mageq_free(mageq_p);
 
   fclose(fp1);
@@ -414,6 +432,7 @@ main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *
   fclose(fp_chi);
   fclose(fp_track);
   fclose(fp_current);
+  fclose(fp_rms);
 
   return s;
 }
@@ -430,7 +449,6 @@ print_help(char *argv[])
   fprintf(stderr, "\t --champ_plp_file | -b champ_plp_index_file  - CHAMP PLP index file\n");
   fprintf(stderr, "\t --all | -a                                  - print all tracks (no filtering)\n");
   fprintf(stderr, "\t --downsample | -d downsample                - downsampling factor\n");
-  fprintf(stderr, "\t --output_file | -o output_file              - output file\n");
   fprintf(stderr, "\t --lt_min | -j lt_min                        - local time minimum\n");
   fprintf(stderr, "\t --lt_max | -k lt_max                        - local time maximum\n");
   fprintf(stderr, "\t --alt_min | -l alt_min                      - altitude minimum\n");
@@ -445,16 +463,12 @@ print_help(char *argv[])
 int
 main(int argc, char *argv[])
 {
-  char *data_file = "track_data.dat";
-  char *stats_file = "track_stats.dat";
-  char *output_file = NULL;
-  satdata_mag *data = NULL;
-  satdata_mag *data2 = NULL;
-  satdata_mag *data3 = NULL;
   satdata_lp *lp_data = NULL;
   struct timeval tv0, tv1;
-  track_workspace *track_p, *track2_p, *track3_p;
+  satdata_mag *data[3] = { NULL, NULL, NULL };
+  track_workspace *track_p[3] = { NULL, NULL, NULL };
   preprocess_parameters params;
+  size_t i;
 
   /* defaults */
   params.all = 0;
@@ -468,7 +482,7 @@ main(int argc, char *argv[])
   params.lon_max = 200.0;
   params.kp_min = 0.0;
   params.kp_max = 2.0;
-  params.downsample = 1;
+  params.downsample = 2;
   params.alpha = -1.0;
   params.thresh[0] = 210.0;
   params.thresh[1] = 170.0;
@@ -494,12 +508,11 @@ main(int argc, char *argv[])
           { "lon_max", required_argument, NULL, 'u' },
           { "kp_min", required_argument, NULL, 'v' },
           { "kp_max", required_argument, NULL, 'w' },
-          { "output_file", required_argument, NULL, 'o' },
           { "alpha", required_argument, NULL, 'q' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "ab:c:d:j:k:l:m:o:q:r:s:t:u:v:x:", long_options, &option_index);
+      c = getopt_long(argc, argv, "ab:c:d:j:k:l:m:q:r:s:t:u:v:x:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -510,24 +523,24 @@ main(int argc, char *argv[])
             break;
 
           case 's':
-            data = read_swarm(optarg);
+            data[0] = read_swarm(optarg);
             break;
 
           case 'r':
-            data2 = read_swarm(optarg);
+            data[1] = read_swarm(optarg);
             break;
 
           case 'x':
-            data3 = read_swarm(optarg);
+            data[2] = read_swarm(optarg);
             break;
 
           case 'c':
             fprintf(stderr, "main: reading %s...", optarg);
             gettimeofday(&tv0, NULL);
-            data = satdata_champ_read_idx(optarg, 0);
+            data[0] = satdata_champ_read_idx(optarg, 0);
             gettimeofday(&tv1, NULL);
             fprintf(stderr, "done (%zu data read, %g seconds)\n",
-                    data->n, time_diff(tv0, tv1));
+                    data[0]->n, time_diff(tv0, tv1));
 
             /* check for instrument flags since we use Stage1 data */
             {
@@ -540,9 +553,9 @@ main(int argc, char *argv[])
 #endif
 
               fprintf(stderr, "main: filtering for instrument flags...");
-              nflag = satdata_champ_filter_instrument(1, champ_flags, data);
+              nflag = satdata_champ_filter_instrument(1, champ_flags, data[0]);
               fprintf(stderr, "done (%zu/%zu (%.1f%%) data flagged)\n",
-                      nflag, data->n, (double)nflag / (double)data->n * 100.0);
+                      nflag, data[0]->n, (double)nflag / (double)data[0]->n * 100.0);
             }
 
             break;
@@ -555,10 +568,6 @@ main(int argc, char *argv[])
 
           case 'd':
             params.downsample = (size_t) atoi(optarg);
-            break;
-
-          case 'o':
-            output_file = optarg;
             break;
 
           case 'j':
@@ -602,7 +611,7 @@ main(int argc, char *argv[])
         }
     }
 
-  if (!data)
+  if (!data[0])
     {
       print_help(argv);
       exit(1);
@@ -623,28 +632,27 @@ main(int argc, char *argv[])
   if (lp_data)
     {
       fprintf(stderr, "main: adding electron densities to magnetic data...");
-      satdata_mag_fill_ne(data, lp_data);
+      satdata_mag_fill_ne(data[0], lp_data);
       fprintf(stderr, "done\n");
     }
 
-  track_p = preprocess_data(&params, data);
-
-  if (data2)
-    track2_p = preprocess_data(&params, data2);
-
-  if (data3)
-    track3_p = preprocess_data(&params, data3);
-
-  main_proc(data, data2, data3, track_p, track2_p, track3_p);
-
-  satdata_mag_free(data);
-  track_free(track_p);
-
-  if (data2)
+  /* initialize tracks */
+  for (i = 0; i < 3; ++i)
     {
-      satdata_mag_free(data2);
-      track_free(track2_p);
+      if (data[i] != NULL)
+        track_p[i] = preprocess_data(&params, data[i]);
+    }
+
+  main_proc((const satdata_mag **) data, track_p);
+
+  for (i = 0; i < 3; ++i)
+    {
+      if (data[i] != NULL)
+        {
+          satdata_mag_free(data[i]);
+          track_free(track_p[i]);
+        }
     }
 
   return 0;
-} /* main() */
+}

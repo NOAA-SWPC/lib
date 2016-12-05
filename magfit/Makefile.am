@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libmagfit.la
 
-libmagfit_la_SOURCES = magfit.c secs1d.c pca.c
+libmagfit_la_SOURCES = magfit.c secs1d.c secs2d.c pca.c
 
 AM_CPPFLAGS = -I$(top_builddir)/common -I$(top_builddir)/track -I$(top_builddir)/msynth -I$(top_builddir)/green -I$(top_builddir)/lapack_wrapper -I$(top_builddir)/mageq -I$(top_builddir)/grobs -I$(top_builddir)/pca
 
