@@ -81,7 +81,8 @@ magfit_default_parameters(void)
 {
   magfit_parameters params;
 
-  params.lat_spacing = 2.0;
+  params.lat_spacing1d = 0.5;
+  params.lat_spacing2d = 2.0;
   params.lat_min = -60.0;
   params.lat_max = 60.0;
   params.lon_spacing = 5.0;
@@ -229,8 +230,51 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
   int s = 0;
   const magfit_parameters *params = &(w->params);
   const size_t p = (w->type->ncoeff)(w->state);
+  double (*eval_chi)(const double theta, const double phi, void * state) = w->type->eval_chi;
+  void *chi_state = w->state;
+  magfit_workspace *gaussint_p = NULL;
   double lat, lon;
   size_t i;
+
+  if (eval_chi == NULL)
+    {
+      /*
+       * For 1D and 2D SECS, generate magnetic field values on a spherical shell and
+       * invert for internal gauss coefficients. Then we can use standard formulas to
+       * determine stream function chi
+       */
+
+      gaussint_p = magfit_alloc(magfit_gaussint, &(w->params));
+
+      fprintf(stderr, "magfit_print_map: building dataset for for gauss coefficient inversion...");
+
+      for (lon = -180.0; lon <= 180.0; lon += 2.5)
+        {
+          double phi = lon * M_PI / 180.0;
+
+          for (lat = -89.9; lat <= 89.9; lat += 1.0)
+            {
+              double theta = M_PI / 2.0 - lat * M_PI / 180.0;
+              double B[3];
+
+              /* compute magnetic field vector */
+              s += (w->type->eval_B)(r, theta, phi, B, w->state);
+
+              /* add B to gaussint workspace */
+              (gaussint_p->type->add_datum)(r, theta, phi, 0.0, B, gaussint_p->state);
+            }
+        }
+
+      fprintf(stderr, "done\n");
+
+      /* fit internal gauss coefficients to magnetic field data */
+      fprintf(stderr, "magfit_print_map: inverting for gauss coefficients...");
+      magfit_fit(gaussint_p);
+      fprintf(stderr, "done\n");
+
+      eval_chi = gaussint_p->type->eval_chi;
+      chi_state = gaussint_p->state;
+    }
 
   i = 1;
   fprintf(fp, "# Number of basis functions: %zu\n", p);
@@ -254,7 +298,7 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
           double chi;
 
           /* compute current stream function */
-          chi = (w->type->eval_chi)(theta, phi, w->state);
+          chi = (eval_chi)(theta, phi, chi_state);
 
           /* compute magnetic field vector */
           s += (w->type->eval_B)(r, theta, phi, B, w->state);
@@ -274,6 +318,9 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
   fprintf(fp, "\n\n");
 
   fflush(fp);
+
+  if (gaussint_p)
+    magfit_free(gaussint_p);
 
   return s;
 }

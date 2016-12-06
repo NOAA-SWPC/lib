@@ -49,5 +49,7 @@ int green_k2g(const double b, const gsl_vector *k, gsl_vector *g,
 /* current.c */
 int green_eval_sheet_int(const double b, const double theta, const double phi,
                          const double *gnm, double K[3], green_workspace *w);
+double green_eval_chi_int(const double b, const double theta, const double phi,
+                          const double *gnm, green_workspace *w);
 
 #endif /* INCLUDED_green_h */

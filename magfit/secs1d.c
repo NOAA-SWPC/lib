@@ -108,7 +108,7 @@ secs1d_alloc(const void * params)
   const magfit_parameters *mparams = (const magfit_parameters *) params;
   secs1d_state_t *state;
   const size_t flags = mparams->secs_flags;
-  const double lat_spacing = mparams->lat_spacing;
+  const double lat_spacing = mparams->lat_spacing1d;
   const double lat_min = mparams->lat_min;
   const double lat_max = mparams->lat_max;
   const size_t npoles = (size_t) ((lat_max - lat_min) / lat_spacing + 1.0);
@@ -957,7 +957,11 @@ static const magfit_type secs1d_type =
   secs1d_fit,
   secs1d_eval_B,
   secs1d_eval_J,
+#if 0
   secs1d_eval_chi,
+#else
+  NULL,
+#endif
   secs1d_free
 };
 

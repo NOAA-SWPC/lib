@@ -75,16 +75,19 @@ static int secs2d_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs2d_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
-static double secs2d_eval_chi(const double theta, const double phi, void * vstate);
 
 static int secs2d_green_df(const double r, const double theta, const double phi,
                            const double theta0, const double phi0,
                            double B[3], secs2d_state_t *state);
+static int secs2d_green_df_J(const double theta, const double phi, const double theta0, const double phi0,
+                             double K[3], secs2d_state_t *state);
 static int secs2d_matrix_row_df(const double r, const double theta, const double phi,
                                 gsl_vector *X, gsl_vector *Y, gsl_vector *Z, secs2d_state_t *state);
 static int secs2d_matrix_row_cf(const double r, const double theta,
                                 gsl_vector *Y, secs2d_state_t *state);
-static int secs2d_matrix_row_df_J(const double theta, gsl_vector *Y, secs2d_state_t *state);
+static int secs2d_matrix_row_df_J(const double theta, const double phi,
+                                  gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
+                                  secs2d_state_t *state);
 static int secs2d_matrix_row_cf_J(const double theta, gsl_vector *X, gsl_vector *Z, secs2d_state_t *state);
 static int secs2d_transform(const double theta0, const double phi0, const double theta, const double phi,
                             double *thetap);
@@ -107,7 +110,7 @@ secs2d_alloc(const void * params)
   const magfit_parameters *mparams = (const magfit_parameters *) params;
   secs2d_state_t *state;
   const size_t flags = mparams->secs_flags;
-  const double lat_spacing = mparams->lat_spacing;
+  const double lat_spacing = mparams->lat_spacing2d;
   const double lat_max = mparams->lat_max;
   const double lat_min = mparams->lat_min;
   const size_t ntheta = (size_t) ((lat_max - lat_min) / lat_spacing + 1.0);
@@ -305,7 +308,7 @@ secs2d_fit(void * vstate)
 {
   secs2d_state_t *state = (secs2d_state_t *) vstate;
   const size_t npts = 200;
-  const double tol = 1.0e-6;
+  const double tol = 1.0e-2;
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);
   gsl_vector *eta = gsl_vector_alloc(npts);
@@ -327,7 +330,7 @@ secs2d_fit(void * vstate)
   fprintf(stderr, "\t n = %zu\n", state->n);
   fprintf(stderr, "\t p = %zu\n", state->p);
 
-#if 0 /* TSVD */
+#if 1 /* TSVD */
 
   {
     double chisq;
@@ -377,13 +380,13 @@ secs2d_fit(void * vstate)
   gsl_multifit_linear_lcorner(rho, eta, &i);
   lambda_l = gsl_vector_get(reg_param, i);
 
-  /* the L-curve method often overdamps the system, not sure why */
-  lambda_l *= 1.0e-2;
-  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
+  /* lower bound on lambda */
+  lambda_l = GSL_MAX(lambda_l, tol * s0);
 
   /* solve regularized system with lambda_l */
   gsl_multifit_linear_solve(lambda_l, &A.matrix, &b.vector, state->c, &rnorm, &snorm, state->multifit_p);
 
+  fprintf(stderr, "\t s0 = %.12e\n", s0);
   fprintf(stderr, "\t lambda_l = %.12e\n", lambda_l);
   fprintf(stderr, "\t lambda_gcv = %.12e\n", lambda_gcv);
   fprintf(stderr, "\t rnorm = %.12e\n", rnorm);
@@ -477,7 +480,6 @@ secs2d_eval_J(const double r, const double theta, const double phi,
   size_t i;
 
   (void) r;   /* unused parameter */
-  (void) phi; /* unused parameter */
 
   J[0] = 0.0;
   J[1] = 0.0;
@@ -485,9 +487,11 @@ secs2d_eval_J(const double r, const double theta, const double phi,
 
   if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
     {
-      secs2d_matrix_row_df_J(theta, &vy.vector, state);
+      secs2d_matrix_row_df_J(theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
 
+      gsl_blas_ddot(&vx.vector, state->c, &J[0]);
       gsl_blas_ddot(&vy.vector, state->c, &J[1]);
+      gsl_blas_ddot(&vz.vector, state->c, &J[2]);
     }
 
   if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
@@ -503,28 +507,6 @@ secs2d_eval_J(const double r, const double theta, const double phi,
     J[i] *= 1.0e3;
 
   return 0;
-}
-
-/*
-secs2d_eval_chi()
-  Evaluate current stream function at a given theta using
-previously computed 1D SECS coefficients
-
-Inputs: theta  - colatitude (radians)
-        phi    - longitude (radians)
-        vstate - workspace
-
-Return: current stream function in kA/nT
-
-Notes:
-1) state->c must contain 1D SECS coefficients
-*/
-
-static double
-secs2d_eval_chi(const double theta, const double phi, void * vstate)
-{
-  secs2d_state_t *state = (secs2d_state_t *) vstate;
-  return 0.0;
 }
 
 /*
@@ -578,20 +560,29 @@ secs2d_green_df_J()
 1D SECS
 
 Inputs: theta  - colatitude (radians)
-        theta0 - pole position (radians)
+        phi    - longitude (radians)
+        theta0 - pole colatitude position (radians)
+        phi0   - pole longitude position (radians)
         K      - (output) current density Green's function (X,Y,Z)
         w      - workspace
 
 Return: success/error
 */
 
-int
-secs2d_green_df_J(const double theta, const double theta0, double K[3], secs2d_state_t *state)
+static int
+secs2d_green_df_J(const double theta, const double phi, const double theta0, const double phi0,
+                  double K[3], secs2d_state_t *state)
 {
-  /*XXX*/
+  double thetap;
+
+  secs2d_transform(theta0, phi0, theta, phi, &thetap);
+
   K[0] = 0.0;
-  K[1] = 0.0;
+  K[1] = 1.0 / (4.0 * M_PI * state->R) * tan(0.5 * (M_PI - thetap));
   K[2] = 0.0;
+
+  /* transform from SECS-centered system to geographic */
+  secs2d_transform_vec(theta0, phi0, theta, phi, K, K);
 
   return GSL_SUCCESS;
 }
@@ -738,7 +729,10 @@ secs2d_matrix_row_df_J()
   Build matrix rows corresponding to DF SECS (current)
 
 Inputs: theta - colatitude (radians)
+        phi   - longitude (radians)
+        X     - (output) X Green's functions for J_df
         Y     - (output) Y Green's functions for J_df
+        Z     - (output) Z Green's functions for J_df
         w     - workspace
 
 Notes:
@@ -746,21 +740,33 @@ Notes:
 */
 
 static int
-secs2d_matrix_row_df_J(const double theta, gsl_vector *Y, secs2d_state_t *state)
+secs2d_matrix_row_df_J(const double theta, const double phi,
+                       gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
+                       secs2d_state_t *state)
 {
-  size_t i;
+  size_t i, j;
 
+  gsl_vector_set_zero(X);
   gsl_vector_set_zero(Y);
+  gsl_vector_set_zero(Z);
 
   for (i = 0; i < state->ntheta; ++i)
     {
       double theta0 = state->theta0[i];
-      double J[3];
 
-      /* compute divergence-free 1D SECS Green's functions */
-      secs2d_green_df_J(theta, theta0, J, state);
+      for (j = 0; j < state->nphi; ++j)
+        {
+          double phi0 = state->phi0[j];
+          size_t pole_idx = secs2d_idx(i, j, state);
+          double J[3];
 
-      gsl_vector_set(Y, state->df_offset + i, J[1]);
+          /* compute divergence-free 1D SECS Green's functions */
+          secs2d_green_df_J(theta, phi, theta0, phi0, J, state);
+
+          gsl_vector_set(X, state->df_offset + pole_idx, J[0]);
+          gsl_vector_set(Y, state->df_offset + pole_idx, J[1]);
+          gsl_vector_set(Z, state->df_offset + pole_idx, J[2]);
+        }
     }
 
   return 0;
@@ -902,7 +908,7 @@ static const magfit_type secs2d_type =
   secs2d_fit,
   secs2d_eval_B,
   secs2d_eval_J,
-  secs2d_eval_chi,
+  NULL,
   secs2d_free
 };
 

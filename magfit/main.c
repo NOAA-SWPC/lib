@@ -237,6 +237,7 @@ main_proc(const satdata_mag *data[3], track_workspace *track[3])
   size_t idx = 0;
   struct timeval tv0, tv1;
   mageq_workspace *mageq_p = mageq_alloc();
+  const double dlon = 2.0;
 
   magfit_params.pca_modes = 15;
 
@@ -318,7 +319,7 @@ main_proc(const satdata_mag *data[3], track_workspace *track[3])
           fprintf(stderr, "\t longitude C = %f [deg]\n", tptr[1]->lon_eq);
           fprintf(stderr, "\t longitude B = %f [deg]\n", tptr[2]->lon_eq);
 
-          magfit_params.lon_max = tptr[2]->lon_eq + 1.0;
+          magfit_params.lon_max = tptr[2]->lon_eq + dlon;
         }
       else if (tptr[1])
         {
@@ -332,7 +333,7 @@ main_proc(const satdata_mag *data[3], track_workspace *track[3])
           fprintf(stderr, "\t longitude A = %f [deg]\n", tptr[0]->lon_eq);
           fprintf(stderr, "\t longitude C = %f [deg]\n", tptr[1]->lon_eq);
 
-          magfit_params.lon_max = tptr[1]->lon_eq + 1.0;
+          magfit_params.lon_max = tptr[1]->lon_eq + dlon;
         }
       else
         {
@@ -341,10 +342,10 @@ main_proc(const satdata_mag *data[3], track_workspace *track[3])
                   tptr[0]->lt_eq,
                   tptr[0]->lon_eq);
 
-          magfit_params.lon_max = tptr[0]->lon_eq + 1.0;
+          magfit_params.lon_max = tptr[0]->lon_eq + dlon;
         }
 
-      magfit_params.lon_min = tptr[0]->lon_eq - 1.0;
+      magfit_params.lon_min = tptr[0]->lon_eq - dlon;
       magfit_p = magfit_alloc(T, &magfit_params);
 
       magfit_reset(magfit_p);

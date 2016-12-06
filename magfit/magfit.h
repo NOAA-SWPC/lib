@@ -25,10 +25,11 @@
 typedef struct
 {
   /* SECS parameters */
-  double lat_spacing;   /* latitude pole spacing (degrees) */
+  double lat_spacing1d; /* latitude pole spacing for 1D SECS (degrees) */
+  double lat_spacing2d; /* latitude pole spacing for 2D SECS (degrees) */
   double lat_min;       /* minimum geocentric latitude for SECS poles (degrees) */
   double lat_max;       /* maximum geocentric latitude for SECS poles (degrees) */
-  double lon_spacing;   /* longitude pole spacing (degrees) */
+  double lon_spacing;   /* longitude pole spacing for 2D SECS (degrees) */
   double lon_min;       /* minimum longitude for SECS poles (degrees) */
   double lon_max;       /* maximum longitude for SECS poles (degrees) */
   double R;             /* reference radius (km) */
@@ -64,6 +65,7 @@ typedef struct
 const magfit_type * magfit_secs1d;
 const magfit_type * magfit_secs2d;
 const magfit_type * magfit_pca;
+const magfit_type * magfit_gaussint;
 
 /*
  * Prototypes
