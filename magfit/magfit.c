@@ -350,9 +350,9 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
       fprintf(fp, "# Field %zu: model B_X (nT)\n", i++);
       fprintf(fp, "# Field %zu: model B_Y (nT)\n", i++);
       fprintf(fp, "# Field %zu: model B_Z (nT)\n", i++);
-      fprintf(fp, "# Field %zu: model J_X\n", i++);
-      fprintf(fp, "# Field %zu: model J_Y\n", i++);
-      fprintf(fp, "# Field %zu: model J_Z\n", i++);
+      fprintf(fp, "# Field %zu: model J_X (A/km)\n", i++);
+      fprintf(fp, "# Field %zu: model J_Y (A/km)\n", i++);
+      fprintf(fp, "# Field %zu: model J_Z (A/km)\n", i++);
       return 0;
     }
 

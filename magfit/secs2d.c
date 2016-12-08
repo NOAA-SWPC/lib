@@ -308,6 +308,7 @@ secs2d_fit(void * vstate)
 {
   secs2d_state_t *state = (secs2d_state_t *) vstate;
   const size_t npts = 200;
+  /* Note: to get a reasonable current map, use tol = 3e-1 */
   const double tol = 1.0e-2;
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);

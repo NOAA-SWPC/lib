@@ -35,7 +35,7 @@
 #define PCA_WEIGHT_Z                 (5.0)
 
 /* assign higher weight to low-latitude data for better EEJ fit */
-#define PCA_WEIGHT_EEJ               (3.0)
+#define PCA_WEIGHT_EEJ               (10.0)
 
 typedef struct
 {
@@ -261,7 +261,8 @@ pcafit_fit(void * vstate)
    * for 2-3 satellites, enable this check */
   lambda_l = GSL_MAX(lambda_l, tol * s0);
 #else
-  lambda_l = GSL_MAX(lambda_l, 1.0e-2 * s0);
+  lambda_l = GSL_MAX(lambda_l, 1.0e-10 * s0);
+  lambda_l = lambda_gcv;
 #endif
 
   /* solve regularized system with lambda_l */
