@@ -485,18 +485,26 @@ print_residuals(const char *filename, mfield_workspace *w)
           double phi = mptr->phi[j];
           time_t unix_time = satdata_epoch2timet(mptr->t[j]);
           double lt = get_localtime(unix_time, phi);
-          double B_nec[3], B_int[4], B_ext[4], B_model[4];
+          double B_nec[3], B_int[4], B_model[4];
+          double B_ext[4] = { 0.0, 0.0, 0.0, 0.0 };
           double res[4];
           int fit_scal = MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
           int fit_X = MAGDATA_ExistX(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
           int fit_Y = MAGDATA_ExistY(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
           int fit_Z = MAGDATA_ExistZ(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]);
 
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
           mfield_eval(mptr->t[j], r, theta, phi, B_int, w);
-          mfield_eval_ext(mptr->t[j], r, theta, phi, B_ext, w);
+
+          /* external field is fitted only to data points used for main field modeling */
+          if ((MAGDATA_ExistX(mptr->flags[j]) || MAGDATA_ExistY(mptr->flags[j]) ||
+               MAGDATA_ExistZ(mptr->flags[j]) || MAGDATA_ExistScalar(mptr->flags[j])) &&
+              (MAGDATA_FitMF(mptr->flags[j])))
+            {
+              mfield_eval_ext(mptr->t[j], r, theta, phi, B_ext, w);
+            }
 
           /* add apriori external/crustal fields to computed external field */
           B_ext[0] += mptr->Bx_model[j];
@@ -891,6 +899,8 @@ main(int argc, char *argv[])
   }
 
   fprintf(stderr, "main: data epoch = %.2f\n", mfield_data_epoch(mfield_data_p));
+  fprintf(stderr, "main: data tmin  = %.2f\n", satdata_epoch2year(mfield_data_p->t0_data));
+  fprintf(stderr, "main: data tmax  = %.2f\n", satdata_epoch2year(mfield_data_p->t1_data));
 
 #if 1
   /* print spatial coverage maps for each satellite */

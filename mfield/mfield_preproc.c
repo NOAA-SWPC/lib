@@ -84,7 +84,7 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 #define MFIELD_HIGH_LATITUDE      (60.0)
 
 /* define to fit Z component at high latitudes instead of F */
-#define MFIELD_FIT_Z_HIGHLAT      1
+#define MFIELD_FIT_Z_HIGHLAT      0
 
 /* Global */
 solarpos_workspace *solarpos_workspace_p = NULL;

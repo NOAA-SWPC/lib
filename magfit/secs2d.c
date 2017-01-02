@@ -28,8 +28,8 @@
 
 #include "magfit.h"
 
-/* mu_0 in units of: nT / (kA km^{-1}) */
-#define SECS1D_MU_0                  (400.0 * M_PI)
+/* define to use uniform pole spacing in latitude */
+#define SECS2D_UNIFORM_THETA         0
 
 typedef struct
 {
@@ -39,7 +39,6 @@ typedef struct
   size_t flags;     /* MAGFIT_SECS_FLG_xxx */
   size_t ntheta;    /* number of poles in theta direction */
   size_t nphi;      /* number of poles in phi direction */
-  double dtheta;    /* spacing of 1D SECS poles in radians */
 
   size_t df_offset; /* offset in 'c' of DF coefficients */
   size_t cf_offset; /* offset in 'c' of CF coefficients */
@@ -113,8 +112,12 @@ secs2d_alloc(const void * params)
   const double lat_spacing = mparams->lat_spacing2d;
   const double lat_max = mparams->lat_max;
   const double lat_min = mparams->lat_min;
+#if SECS2D_UNIFORM_THETA
   const size_t ntheta = (size_t) ((lat_max - lat_min) / lat_spacing + 1.0);
   const double dtheta = lat_spacing * M_PI / 180.0;
+#else
+  const size_t ntheta = 31; /* 5 degree spacing outside [-10,10] latitude, 2 degree spacing inside */
+#endif
   const double theta_min = M_PI / 2.0 - lat_max * M_PI / 180.0;
   const double lon_spacing = mparams->lon_spacing;
   const double lon_max = mparams->lon_max;
@@ -139,7 +142,6 @@ secs2d_alloc(const void * params)
   state->flags = flags;
   state->df_offset = 0;
   state->cf_offset = 0;
-  state->dtheta = dtheta;
 
   if (flags & MAGFIT_SECS_FLG_FIT_DF)
     {
@@ -164,10 +166,28 @@ secs2d_alloc(const void * params)
   state->phi0 = malloc(nphi * sizeof(double));
 
   /* fill in theta0 array */
+#if SECS2D_UNIFORM_THETA
   for (i = 0; i < ntheta; ++i)
     {
       state->theta0[i] = theta_min + i * dtheta;
     }
+#else
+  {
+    double dtheta = 5.0 * M_PI / 180.0;
+    double theta1 = M_PI / 2.0 - 10.0 * M_PI / 180.0;
+    double theta2 = M_PI / 2.0 + 10.0 * M_PI / 180.0;
+
+    state->theta0[0] = theta_min;
+    for (i = 1; i < ntheta; ++i)
+      {
+        state->theta0[i] = state->theta0[i - 1] + dtheta;
+        if (i >= 10 && i < 20)
+          dtheta = 2.0 * M_PI / 180.0;
+        else
+          dtheta = 5.0 * M_PI / 180.0;
+      }
+  }
+#endif
 
   /* fill in phi0 array */
   for (i = 0; i < nphi; ++i)
@@ -309,7 +329,11 @@ secs2d_fit(void * vstate)
   secs2d_state_t *state = (secs2d_state_t *) vstate;
   const size_t npts = 200;
   /* Note: to get a reasonable current map, use tol = 3e-1 */
-  const double tol = 1.0e-2;
+#if 1
+  const double tol = 1.5e-1;
+#else
+  const double tol = 3.0e-1;
+#endif
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);
   gsl_vector *eta = gsl_vector_alloc(npts);

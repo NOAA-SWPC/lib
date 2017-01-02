@@ -1,4 +1,4 @@
-#!/home/palken/usr/bin/gnuplot
+#!/usr/bin/env gnuplot
 #
 # Plot time series (histogram) of model data distribution
 # Use plothist.sh to generate data files

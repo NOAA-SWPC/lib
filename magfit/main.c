@@ -241,6 +241,13 @@ main_proc(const satdata_mag *data[3], track_workspace *track[3])
 
   magfit_params.pca_modes = 15;
 
+  if (T == magfit_secs1d)
+    {
+      magfit_params.secs_flags = MAGFIT_SECS_FLG_FIT_DF | MAGFIT_SECS_FLG_FIT_CF;
+    }
+
+  putenv("TZ=GMT");
+
   nflagged = track_nflagged(track[0]);
   nunflagged = track[0]->n - nflagged;
   fprintf(stderr, "Total tracks:    %zu\n", track[0]->n);
@@ -249,12 +256,14 @@ main_proc(const satdata_mag *data[3], track_workspace *track[3])
 
   /* print header */
   magfit_print_track(1, fp1, NULL, NULL, NULL);
+  magfit_print_track(1, fp2, NULL, NULL, NULL);
+  magfit_print_track(1, fp3, NULL, NULL, NULL);
   magfit_print_rms(1, fp_rms, 0.0, NULL, NULL, NULL);
 
   track_print_track(1, fp_track, NULL, NULL);
 
   i = 1;
-  fprintf(fp_current, "# Field %zu: timestamp\n", i++);
+  fprintf(fp_current, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
   fprintf(fp_current, "# Field %zu: local time of equator crossing (hours)\n", i++);
   fprintf(fp_current, "# Field %zu: longitude of equator crossing (degrees)\n", i++);
   fprintf(fp_current, "# Field %zu: J_y (A/km)\n", i++);
@@ -318,6 +327,19 @@ main_proc(const satdata_mag *data[3], track_workspace *track[3])
           fprintf(stderr, "\t longitude A = %f [deg]\n", tptr[0]->lon_eq);
           fprintf(stderr, "\t longitude C = %f [deg]\n", tptr[1]->lon_eq);
           fprintf(stderr, "\t longitude B = %f [deg]\n", tptr[2]->lon_eq);
+
+          {
+            time_t t;
+            
+            t = satdata_epoch2timet(tptr[0]->t_eq);
+            fprintf(stderr, "\t UT A = %s", ctime(&t));
+
+            t = satdata_epoch2timet(tptr[1]->t_eq);
+            fprintf(stderr, "\t UT C = %s", ctime(&t));
+
+            t = satdata_epoch2timet(tptr[2]->t_eq);
+            fprintf(stderr, "\t UT B = %s", ctime(&t));
+          }
 
           magfit_params.lon_max = tptr[2]->lon_eq + dlon;
         }

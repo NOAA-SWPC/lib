@@ -41,7 +41,7 @@
 #define MFIELD_FIT_EXTFIELD    1
 
 /* epoch to define SV and SA terms in fit */
-#define MFIELD_EPOCH          (2014.0)
+#define MFIELD_EPOCH          (2016.0)
 
 #define MFIELD_RE_KM          (6371.2)
 

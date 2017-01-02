@@ -21,7 +21,8 @@ set style circle radius 0.004
 
 load 'lines2.cfg'
 load 'ylaton.cfg'
-set xrange [2013.5:2016.5]
+#set xrange [2013.5:2016.5]
+set xrange [2013.5:*]
 
 satindices = "A B C"
 

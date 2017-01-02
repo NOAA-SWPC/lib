@@ -1,1 +1,18 @@
 mfield_ascii - convert binary coefficient file to ASCII format
+
+STEPS FOR MAKING A MAIN FIELD MODEL
+===================================
+
+1. Run mfield_preproc on all satellite data files needed for model
+   a. Typically use MFIELD_FIT_Z_HIGHLAT = 0 to use F at high-latitudes (historically)
+
+PLOTTING
+========
+
+1. To plot temporal distribution of vector and scalar data:
+   a. Run mfield on all 3 Swarm datasets to generate datamap.dat.{0,1,2}
+   b. Run plothist.sh to make data histograms
+   c. Run plothist.gp to make 'hist.png' plot
+
+2. To plot time vs latitude distribution of data:
+   a. Run plot_spatial.gp to make 'spatial.png' plot

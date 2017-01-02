@@ -350,7 +350,7 @@ gaussint_eval_J(const double r, const double theta, const double phi,
 
   (void) r; /* unused parameter */
 
-  status = green_eval_sheet_int(R_EARTH_KM + 110.0, theta, phi, state->c->data, J,
+  status = green_eval_sheet_int(R_EARTH_KM + 110.0, theta, phi, state->c, J,
                                 state->green_workspace_p);
 
   return status;
@@ -377,7 +377,7 @@ gaussint_eval_chi(const double theta, const double phi, void * vstate)
   gaussint_state_t *state = (gaussint_state_t *) vstate;
   double chi;
 
-  chi = green_eval_chi_int(R_EARTH_KM + 110.0, theta, phi, state->c->data, state->green_workspace_p);
+  chi = green_eval_chi_int(R_EARTH_KM + 110.0, theta, phi, state->c, state->green_workspace_p);
 
   return chi;
 }

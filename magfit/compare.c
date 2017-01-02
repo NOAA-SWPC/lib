@@ -36,7 +36,7 @@
 /* allowed difference in longitude */
 #define LON_WINDOW        (5.0)
 
-#define MAX_KP            (1.0)
+#define MAX_KP            (2.0)
 
 #define MAX_PAIRS         1000
 

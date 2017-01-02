@@ -150,9 +150,56 @@ lapack_complex_lls(const gsl_matrix_complex * A, const gsl_matrix_complex * B,
   return s;
 }
 
+/* symmetric eigenvalues using lower triangle */
 int
-lapack_eigen_symm(const gsl_matrix * m, gsl_vector *eval, gsl_matrix *evec,
-                  int *eval_found)
+lapack_eigen_symm(const gsl_matrix * m, gsl_vector *eval, int *eval_found)
+{
+  int s;
+  const lapack_int N = m->size1;
+  gsl_matrix *A = gsl_matrix_alloc(N, N);
+  double vl = 0.0, vu = 0.0;
+  lapack_int il = 0, iu = 0;
+  lapack_int lda = A->size1;
+  lapack_int ldz = A->size1;
+  double abstol = 0.0;
+  lapack_int M = 0;
+  lapack_int *isuppz = malloc(2*N*sizeof(lapack_int));
+
+  gsl_matrix_transpose_memcpy(A, m);
+
+  s = LAPACKE_dsyevr(LAPACK_COL_MAJOR,
+                     'N',
+                     'A',
+                     'L',
+                     N,
+                     A->data,
+                     lda,
+                     vl,
+                     vu,
+                     il,
+                     iu,
+                     abstol,
+                     &M,
+                     eval->data,
+                     NULL,
+                     ldz,
+                     isuppz);
+
+  /* sort into descending order */
+  gsl_vector_reverse(eval);
+
+  *eval_found = M;
+
+  free(isuppz);
+  gsl_matrix_free(A);
+
+  return s;
+}
+
+/* symmetric eigenvalues and eigenvectors using lower triangle */
+int
+lapack_eigen_symmv(const gsl_matrix * m, gsl_vector *eval, gsl_matrix *evec,
+                   int *eval_found)
 {
   int s;
   const lapack_int N = m->size1;

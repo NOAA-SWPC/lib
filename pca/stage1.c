@@ -43,6 +43,8 @@
 #include "pca.h"
 #include "tiegcm.h"
 
+#include "pca_common.c"
+
 #define USE_SYNTH_DATA              0
 
 /*
@@ -54,12 +56,13 @@ Inputs: filename - where to store residuals
         A        - model matrix
         c        - model coefficients
         data     - TIEGCM data
+        green_p  - green workspace
 */
 
 double
 print_residuals(const char *filename, const size_t tidx,
                 const gsl_matrix *A, const gsl_vector *c,
-                const tiegcm_data *data)
+                const tiegcm_data *data, green_workspace *green_p)
 {
   FILE *fp;
   gsl_vector *b = gsl_vector_alloc(A->size1); /* model prediction */
@@ -88,13 +91,17 @@ print_residuals(const char *filename, const size_t tidx,
   fprintf(fp, "# Field %zu: Modeled B_x (nT)\n", j++);
   fprintf(fp, "# Field %zu: Modeled B_y (nT)\n", j++);
   fprintf(fp, "# Field %zu: Modeled B_z (nT)\n", j++);
+  fprintf(fp, "# Field %zu: Modeled chi (kA)\n", j++);
 
   for (ilon = 0; ilon < data->nlon; ++ilon)
     {
+      double phi = data->glon[ilon] * M_PI / 180.0;
+
       for (ilat = 0; ilat < data->nlat; ++ilat)
         {
           size_t idx = TIEGCM_BIDX(tidx, ilat, ilon, data);
-          double B_model[3], B_data[3];
+          double B_model[3], B_data[3], chi;
+          double theta = M_PI / 2.0 - data->glat[ilat] * M_PI / 180.0;
 
           B_data[0] = data->Bx[idx] * 1.0e9;
           B_data[1] = data->By[idx] * 1.0e9;
@@ -108,15 +115,18 @@ print_residuals(const char *filename, const size_t tidx,
               rnorm = gsl_hypot(rnorm, B_data[j] - B_model[j]);
             }
 
-          fprintf(fp, "%f %f %f %f %f %f %f %f\n",
-                  data->glon[ilon],
+          chi = green_eval_chi_ext(green_p->R + 110.0, theta, phi, c, green_p);
+
+          fprintf(fp, "%8.4f %8.4f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n",
+                  wrap180(data->glon[ilon]),
                   data->glat[ilat],
                   data->Bx[idx] * 1.0e9,
                   data->By[idx] * 1.0e9,
                   data->Bz[idx] * 1.0e9,
                   B_model[0],
                   B_model[1],
-                  B_model[2]);
+                  B_model[2],
+                  chi);
         }
 
       fprintf(fp, "\n");
@@ -199,7 +209,6 @@ main_build_matrix(const magdata *mdata, green_workspace *green_p,
   const size_t n = A->size1;
   const double eps = 1.0e-6;
   size_t rowidx = 0;
-  size_t ilon, ilat;
   size_t i;
 
   for (i = 0; i < mdata->n; ++i)
@@ -306,6 +315,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   int status;
   const char *res_file = "res.dat";
   const char *spectrum_file = "spectrum.s";
+  const char *spectrum_taper_file = "spectrum_taper.s";
   const char *spectrum_azim_file = "spectrum_azim.s";
   const char *datamap_file = "datamap.dat";
   const size_t nmax = 60;
@@ -318,6 +328,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   gsl_matrix *A = gsl_matrix_alloc(n, p);       /* least squares matrix */
   gsl_matrix *B = gsl_matrix_alloc(n, nrhs);    /* right hand sides */
   gsl_matrix *X = gsl_matrix_alloc(p, nrhs);    /* solution vectors */
+  gsl_matrix *X_taper = gsl_matrix_alloc(p, nrhs);  /* tapered solution vectors to reduce ringing */
   gsl_vector *r = gsl_vector_alloc(n);          /* residual vector */
   magdata *mdata;
   size_t k;
@@ -372,6 +383,12 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   fprintf(stderr, "done (%g seconds, s = %d, rank = %d)\n",
           time_diff(tv0, tv1), status, rank);
 
+  /* taper high degree coefficients to correct TIEGCM ringing */
+  {
+    gsl_matrix_memcpy(X_taper, X);
+    taper_knm(30, X_taper, green_p);
+  }
+
   /* print spectrum of coefficients at time t_0 */
   {
     const size_t k = 0;
@@ -384,16 +401,23 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
     fprintf(stderr, "main_proc: writing azimuth spectrum at t0 to %s...", spectrum_azim_file);
     green_print_spectrum_azim(spectrum_azim_file, &x.vector, green_p);
     fprintf(stderr, "done\n");
+
+    x = gsl_matrix_column(X_taper, k);
+    fprintf(stderr, "main_proc: writing tapered spectrum at t0 to %s...", spectrum_taper_file);
+    green_print_spectrum(spectrum_taper_file, &x.vector, green_p);
+    fprintf(stderr, "done\n");
   }
 
-  /* print residuals at time t_0 */
+  /* print residuals for a given timestamp */
   {
-    const size_t k = 0;
-    gsl_vector_view x = gsl_matrix_column(X, k);
+    const time_t unix_time = 1240660800; /* Apr 25 2009 12:00:00 UTC */
+    const size_t k = bsearch_timet(data->t, unix_time, 0, data->nt - 1);
+    /*const size_t k = 0;*/
+    gsl_vector_view x = gsl_matrix_column(X_taper, k);
     double rnorm;
 
     fprintf(stderr, "main_proc: writing residuals to %s...", res_file);
-    rnorm = print_residuals(res_file, k, A, &x.vector, data);
+    rnorm = print_residuals(res_file, k, A, &x.vector, data, green_p);
     fprintf(stderr, "done (|| b - A x || = %.12e)\n", rnorm);
   }
 
@@ -468,6 +492,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   gsl_matrix_free(A);
   gsl_matrix_free(B);
   gsl_matrix_free(X);
+  gsl_matrix_free(X_taper);
 
   fclose(fp);
 

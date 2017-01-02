@@ -2,7 +2,8 @@
  * stage2b.c
  *
  * 1. Read in spherical harmonic time series knm from stage1 matrix file (nnm-by-nt)
- * 2. Compute SVD of knm matrix
+ * 2. Subtract mean from each knm(t) time series
+ * 2. Compute SVD of centered knm matrix
  * 3. Write singular values and singular vectors to disk
  */
 
@@ -17,6 +18,7 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_complex.h>
 #include <gsl/gsl_blas.h>
+#include <gsl/gsl_statistics.h>
 
 #include <fftw3.h>
 #include <lapacke/lapacke.h>
@@ -24,43 +26,71 @@
 #include "common.h"
 #include "green.h"
 #include "lapack_wrapper.h"
+#include "oct.h"
 
 #include "io.h"
 #include "pca.h"
 
-/*
-taper_knm()
-  Taper high degree knm coefficients to try to reduce ringing.
-We use a cosine taper set to 1 at nmin = 30, and going to 0 at
-nmax = 60
-*/
-static int
-taper_knm(gsl_matrix * K, green_workspace * green_p)
+#include "pca_common.c"
+
+/* define to subtract mean from knm(t) time series prior to SVD */
+#define SUBTRACT_MEAN           1
+
+/* define to construct and output covariance matrix
+ * 2 Jan 2017: after plotting covariance and correlation matrix,
+ * there isn't much structure to see */
+#define PLOT_COVAR              0
+
+int
+subtract_mean(gsl_matrix * K)
 {
-  const size_t nmin = 30;
-  const size_t nmax = green_p->nmax;
-  size_t n;
+  const size_t N = K->size1;
+  const size_t M = K->size2;
+  size_t i;
 
-  for (n = 1; n <= nmax; ++n)
+  for (i = 0; i < N; ++i)
     {
-      int M = (int) GSL_MIN(n, green_p->mmax);
-      int m;
-      double wn = 1.0;
+      gsl_vector_view v = gsl_matrix_row(K, i);
+      double mean = gsl_stats_mean(v.vector.data, v.vector.stride, M);
+      gsl_vector_add_constant(&v.vector, -mean);
+    }
 
-      /* compute taper weight */
-      if (n > nmin)
-        wn = cos((n - nmin) * M_PI / (double)nmax);
+  return 0;
+}
 
-      for (m = -M; m <= M; ++m)
+int
+correlation_matrix(gsl_matrix * A)
+{
+  const size_t N = A->size1;
+  size_t i, j;
+  gsl_vector *d = gsl_vector_alloc(N);
+
+  /* store inverse std deviations D = diag(A)^{-1/2} and set diag(A) = 1 */
+  for (i = 0; i < N; ++i)
+    {
+      double *Aii = gsl_matrix_ptr(A, i, i);
+
+      gsl_vector_set(d, i, 1.0 / sqrt(*Aii));
+      *Aii = 1.0;
+    }
+
+  /* compute correlation matrix corr = D A D, using lower triangle */
+  for (i = 0; i < N; ++i)
+    {
+      double di = gsl_vector_get(d, i);
+
+      for (j = 0; j < i; ++j)
         {
-          size_t cidx = green_nmidx(n, m, green_p);
-          gsl_vector_view row = gsl_matrix_row(K, cidx);
+          double dj = gsl_vector_get(d, j);
+          double *Aij = gsl_matrix_ptr(A, i, j);
 
-          gsl_vector_scale(&row.vector, wn);
+          *Aij *= di * dj;
         }
     }
 
-  return GSL_SUCCESS;
+  gsl_vector_free(d);
+
+  return 0;
 }
 
 int
@@ -112,14 +142,14 @@ main(int argc, char *argv[])
   nnm = K->size1;
   nt = K->size2;
 
-#if 1
+  /* taper spherical harmonic coefficients to eliminate ringing effect from TIEGCM */
   {
     green_workspace *green_p = green_alloc(60, 30, R_EARTH_KM);
     char *spectrum_file = "spectrum_taper.s";
     gsl_vector_view x = gsl_matrix_column(K, 0);
 
     fprintf(stderr, "main: tapering knm coefficients...");
-    taper_knm(K, green_p);
+    taper_knm(30, K, green_p);
     fprintf(stderr, "done\n");
 
     fprintf(stderr, "main: writing tapered spectrum to %s...", spectrum_file);
@@ -128,10 +158,55 @@ main(int argc, char *argv[])
 
     green_free(green_p);
   }
+
+#if SUBTRACT_MEAN
+  fprintf(stderr, "main: subtracting mean from each knm time series...");
+  subtract_mean(K);
+  fprintf(stderr, "done\n");
 #endif
 
   /* compute 1/sqrt(nt) K for SVD computation */
   gsl_matrix_scale(K, 1.0 / sqrt((double) nt));
+
+#if PLOT_COVAR
+  /* build and output covariance matrix */
+  {
+    const char *covar_file = "covar.dat";
+    const char *eval_file = "eval_time.txt";
+    gsl_matrix *covar = gsl_matrix_alloc(nnm, nnm);
+    gsl_vector *eval = gsl_vector_alloc(nnm);
+    int eval_found;
+    FILE *fp;
+
+    fprintf(stderr, "main: constructing covariance matrix...");
+    gsl_blas_dsyrk(CblasLower, CblasNoTrans, 1.0, K, 0.0, covar);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "main: computing eigenvalues of covariance matrix...");
+    lapack_eigen_symm(covar, eval, &eval_found);
+    fprintf(stderr, "done (%d eigenvalues found)\n", eval_found);
+
+    fprintf(stderr, "main: writing eigenvalues format to %s...", eval_file);
+    fp = fopen(eval_file, "w");
+    gsl_vector_fprintf(fp, eval, "%.12e");
+    fclose(fp);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "main: converting to correlation matrix...");
+    correlation_matrix(covar);
+    fprintf(stderr, "done\n");
+
+    /* copy lower triangle to upper */
+    gsl_matrix_transpose_tricpy('L', 0, covar, covar);
+
+    fprintf(stderr, "main: printing correlation matrix to %s...", covar_file);
+    octave_plot(covar, covar_file);
+    fprintf(stderr, "done\n");
+
+    gsl_matrix_free(covar);
+    gsl_vector_free(eval);
+  }
+#endif /* PLOT_COVAR */
 
   {
     const char *sval_txt_file = "sval_time.txt";

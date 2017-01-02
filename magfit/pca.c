@@ -256,12 +256,12 @@ pcafit_fit(void * vstate)
   /* compute GCV curve */
   gsl_multifit_linear_gcv(&b.vector, reg_param, G, &lambda_gcv, &G_gcv, state->multifit_p);
 
-#if 1
+#if 0
   /* sometimes L-corner method underdamps; for single satellite fit, disable this;
    * for 2-3 satellites, enable this check */
   lambda_l = GSL_MAX(lambda_l, tol * s0);
 #else
-  lambda_l = GSL_MAX(lambda_l, 1.0e-10 * s0);
+  lambda_l = GSL_MIN(lambda_l, 2.0e-3 * s0);
   lambda_l = lambda_gcv;
 #endif
 

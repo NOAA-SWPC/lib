@@ -16,5 +16,6 @@ void printcv_octave(const gsl_vector_complex *v, const char *str);
 void printsym_octave(const gsl_matrix *m, const char *str);
 void printherm_octave(const gsl_matrix_complex *m, const char *str);
 void printtri_octave(const gsl_matrix *m, const char *str);
+void octave_plot(const gsl_matrix * m, const char * filename);
 
 #endif /* INCLUDED_oct_h */

@@ -2,7 +2,7 @@
  * plot_maps.c
  *
  * Print lat/lon maps of magnetic field and current flow due to
- * first 3 PCs in time domain
+ * first few PCs in time domain
  */
 
 #include <stdio.h>
@@ -58,10 +58,10 @@ main(int argc, char *argv[])
   
   for (i = 0; i < 40; ++i)
     {
-      sprintf(buf, "maps/map%02zu.dat", i);
+      sprintf(buf, "maps/map%02zu.dat", i + 1);
 
       fprintf(stderr, "main: printing principle component %zu map to %s...",
-              i, buf);
+              i + 1, buf);
 
       pca_print_pc_map(buf, r, i, pca_workspace_p);
 

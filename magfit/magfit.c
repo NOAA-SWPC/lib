@@ -85,7 +85,7 @@ magfit_default_parameters(void)
   params.lat_spacing2d = 2.0;
   params.lat_min = -60.0;
   params.lat_max = 60.0;
-  params.lon_spacing = 5.0;
+  params.lon_spacing = 3.0;
   params.lon_min = 0.0; /* these should be set by user */
   params.lon_max = 0.0;
   params.R = R_EARTH_KM + 110.0;
@@ -126,7 +126,7 @@ magfit_add_track(const track_data *tptr, const satdata_mag *data,
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
-      double r = data->altitude[didx] + data->R;
+      double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
       double qdlat = data->qdlat[didx];
@@ -339,7 +339,7 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
   if (header)
     {
       i = 1;
-      fprintf(fp, "# Field %zu: timestamp\n", i++);
+      fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
       fprintf(fp, "# Field %zu: radius (km)\n", i++);
       fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
       fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
@@ -359,7 +359,7 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
-      double r = data->altitude[didx] + data->R;
+      double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
       double B_model[3], J_model[3];
@@ -431,7 +431,7 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
-      double r = data->altitude[didx] + data->R;
+      double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
       double B_model[3];

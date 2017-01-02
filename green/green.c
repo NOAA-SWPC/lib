@@ -58,6 +58,13 @@ green_alloc(const size_t nmax, const size_t mmax, const double R)
       return 0;
     }
 
+  w->work = malloc(w->nnm * sizeof(double));
+  if (!w->work)
+    {
+      green_free(w);
+      return 0;
+    }
+
   return w;
 }
 
@@ -75,6 +82,9 @@ green_free(green_workspace *w)
 
   if (w->dPlm)
     free(w->dPlm);
+
+  if (w->work)
+    free(w->work);
 
   free(w);
 }

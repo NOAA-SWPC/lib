@@ -449,7 +449,7 @@ pca_K(const gsl_vector *alpha, const double theta, const double phi, double K[3]
       gsl_blas_daxpy(ai, &Gi.vector, w->work);
     }
 
-  status = green_eval_sheet_int(w->b, theta, phi, w->work->data, K, w->green_workspace_p);
+  status = green_eval_sheet_int(w->b, theta, phi, w->work, K, w->green_workspace_p);
 
   return status;
 }

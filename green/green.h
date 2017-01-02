@@ -21,6 +21,7 @@ typedef struct
   double *sinmphi; /* array of sin(m phi) values, size mmax + 1 */
   double *Plm;     /* associated Legendre functions */
   double *dPlm;    /* derivatives of associated Legendre functions */
+  double *work;    /* workspace, size nnm */
 } green_workspace;
 
 /*
@@ -48,8 +49,10 @@ int green_k2g(const double b, const gsl_vector *k, gsl_vector *g,
 
 /* current.c */
 int green_eval_sheet_int(const double b, const double theta, const double phi,
-                         const double *gnm, double K[3], green_workspace *w);
+                         const gsl_vector *g, double K[3], green_workspace *w);
 double green_eval_chi_int(const double b, const double theta, const double phi,
-                          const double *gnm, green_workspace *w);
+                          const gsl_vector *g, green_workspace *w);
+double green_eval_chi_ext(const double b, const double theta, const double phi,
+                          const gsl_vector *k, green_workspace *w);
 
 #endif /* INCLUDED_green_h */

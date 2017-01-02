@@ -258,3 +258,35 @@ printtri_octave(const gsl_matrix *m, const char *str)
   if (str != NULL)
     fclose(fp);
 }
+
+/* print matrix in gnuplot format for easy plotting */
+void
+octave_plot(const gsl_matrix * m, const char * filename)
+{
+  FILE *fp;
+  size_t i, j;
+  const size_t N = m->size1;
+  const size_t M = m->size2;
+
+  if (filename == NULL)
+    fp = stdout;
+  else
+    fp = fopen(filename, "w");
+
+  if (!fp)
+    return;
+
+  for (i = 0; i < N; ++i)
+    {
+      for (j = 0; j < M; ++j)
+        {
+          double mij = gsl_matrix_get(m, i, j);
+          fprintf(fp, "%zu %zu %.12e\n", i, j, mij);
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  if (filename != NULL)
+    fclose(fp);
+}

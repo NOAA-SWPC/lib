@@ -163,78 +163,6 @@ solve_PCA(const size_t P, const gsl_matrix * knm,
   return status;
 }
 
-static double
-chi_ext(const double b, const double phi, const gsl_vector *k,
-        const green_workspace *green_p)
-{
-  const double mu0 = 400.0 * M_PI; /* units of nT / (kA km^{-1}) */
-  const size_t nmax = green_p->nmax;
-  const double *Plm = green_p->Plm;
-  const double ratio = b / R_EARTH_KM;
-  size_t n;
-  double chi = 0.0;
-  double rfac = 1.0;
-
-  for (n = 1; n <= nmax; ++n)
-    {
-      int M = (int) GSL_MIN(n, green_p->mmax);
-      int m;
-      double nfac = (2.0 * n + 1.0) / (n + 1.0);
-
-      for (m = -M; m <= M; ++m)
-        {
-          int mabs = abs(m);
-          size_t cidx = green_nmidx(n, m, green_p);
-          double knm = gsl_vector_get(k, cidx);
-          double qnm = nfac * rfac * knm;
-          size_t pidx = gsl_sf_legendre_array_index(n, mabs);
-          double Snm = Plm[pidx];
-
-          if (m < 0)
-            Snm *= sin(mabs * phi);
-          else
-            Snm *= cos(mabs * phi);
-
-          chi += qnm * Snm;
-        }
-
-      /* (b/R)^{n-2} */
-      rfac *= ratio;
-    }
-
-  /* units of kA */
-  chi *= -(b / mu0);
-
-  return chi;
-}
-
-int
-convert_k2g(const double b, const gsl_vector *k, gsl_vector *g,
-            const green_workspace *green_p)
-{
-  const size_t nmax = green_p->nmax;
-  const size_t mmax = green_p->mmax;
-  size_t n;
-
-  for (n = 1; n <= nmax; ++n)
-    {
-      int M = (int) GSL_MIN(n, mmax);
-      int m;
-      double nfac = -(double)n / (n + 1.0);
-      double rfac = pow(b / green_p->R, 2.0*n + 1.0);
-
-      for (m = -M; m <= M; ++m)
-        {
-          size_t cidx = green_nmidx(n, m, green_p);
-          double knm = gsl_vector_get(k, cidx);
-
-          gsl_vector_set(g, cidx, nfac * rfac * knm);
-        }
-    }
-
-  return 0;
-}
-
 int
 print_pc_maps(const char *filename, const gsl_matrix * U,
               green_workspace *green_p)
@@ -268,9 +196,9 @@ print_pc_maps(const char *filename, const gsl_matrix * U,
     }
 
   /* compute gnm coefficients in case r > b */
-  convert_k2g(b, &pc1.vector, gnm1, green_p);
-  convert_k2g(b, &pc2.vector, gnm2, green_p);
-  convert_k2g(b, &pc3.vector, gnm3, green_p);
+  green_k2g(b, &pc1.vector, gnm1, green_p);
+  green_k2g(b, &pc2.vector, gnm2, green_p);
+  green_k2g(b, &pc3.vector, gnm3, green_p);
 
   i = 1;
   fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
@@ -298,10 +226,9 @@ print_pc_maps(const char *filename, const gsl_matrix * U,
           double B_pc1[3], B_pc2[3], B_pc3[3];
           double chi1, chi2, chi3;
 
-          green_calc_ext(R_EARTH_KM, theta, phi, X, Y, Z, green_p);
-          chi1 = chi_ext(b, phi, &pc1.vector, green_p);
-          chi2 = chi_ext(b, phi, &pc2.vector, green_p);
-          chi3 = chi_ext(b, phi, &pc3.vector, green_p);
+          chi1 = green_eval_chi_ext(b, theta, phi, &pc1.vector, green_p);
+          chi2 = green_eval_chi_ext(b, theta, phi, &pc2.vector, green_p);
+          chi3 = green_eval_chi_ext(b, theta, phi, &pc3.vector, green_p);
 
           /*
            * If r < b, the current shell is an external source so
@@ -309,7 +236,7 @@ print_pc_maps(const char *filename, const gsl_matrix * U,
            *
            * If r > b, the current shell is an internal source, and
            * we must first compute the gnm coefficients from knm (done
-           * above via convert_k2g, and then use internal Green's functions
+           * above via green_k2g, and then use internal Green's functions
            * for the dot product
            */
           if (r <= b)
