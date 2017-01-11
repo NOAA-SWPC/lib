@@ -5,15 +5,22 @@
 #include <lapacke/lapacke.h>
 
 #include <gsl/gsl_math.h>
+#include <gsl/gsl_vector.h>
 #include <gsl/gsl_matrix.h>
+#include <gsl/gsl_blas.h>
 #include <gsl/gsl_eigen.h>
 
 #include "lapack_wrapper.h"
 
-/* minimize || A X - B || */
+/* minimize || A X - B ||
+ *
+ * Inputs: rank  - (output) effective rank of A
+ *         rnorm - vector of residual norms: || b_k - A x_k ||
+ *                 for k = 1,...,nrhs
+ */
 int
 lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
-           int *rank)
+           int *rank, gsl_vector *rnorm)
 {
   int s;
   lapack_int m = A->size1;
@@ -46,6 +53,25 @@ lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
   {
     gsl_matrix_view m = gsl_matrix_submatrix(work_B, 0, 0, X->size2, X->size1);
     gsl_matrix_transpose_memcpy(X, &m.matrix);
+  }
+
+  /* compute residual norms */
+  {
+    int i;
+    gsl_vector_view r = gsl_matrix_row(work_B, 0);
+
+    for (i = 0; i < nrhs; ++i)
+      {
+        gsl_vector_view xi = gsl_matrix_column(X, i);
+        gsl_vector_const_view bi = gsl_matrix_const_column(B, i);
+        double norm;
+
+        gsl_vector_memcpy(&r.vector, &bi.vector);
+        gsl_blas_dgemv(CblasNoTrans, -1.0, A, &xi.vector, 1.0, &r.vector);
+        norm = gsl_blas_dnrm2(&r.vector);
+
+        gsl_vector_set(rnorm, i, norm);
+      }
   }
 
   *rank = lrank;

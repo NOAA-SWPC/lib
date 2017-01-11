@@ -75,7 +75,7 @@ static int secs1d_reset(void * vstate);
 static size_t secs1d_ncoeff(void * vstate);
 static int secs1d_add_datum(const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
-static int secs1d_fit(void * vstate);
+static int secs1d_fit(double * rnorm, double * snorm, void * vstate);
 static int secs1d_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs1d_eval_J(const double r, const double theta, const double phi,
@@ -351,7 +351,9 @@ secs1d_add_datum(const double r, const double theta, const double phi,
 secs1d_fit()
   Fit 1D SECS to previously added tracks
 
-Inputs: vstate - state
+Inputs: rnorm  - residual norm || y - A x ||
+        snorm  - solution norm || L x ||
+        vstate - state
 
 Return: success/error
 
@@ -361,7 +363,7 @@ secs1d_add_datum()
 */
 
 static int
-secs1d_fit(void * vstate)
+secs1d_fit(double * rnorm, double * snorm, void * vstate)
 {
   secs1d_state_t *state = (secs1d_state_t *) vstate;
   const size_t npts = 200;
@@ -374,7 +376,6 @@ secs1d_fit(void * vstate)
   gsl_vector_view b = gsl_vector_subvector(state->rhs, 0, state->n);
   gsl_vector_view wts = gsl_vector_subvector(state->wts, 0, state->n);
   double lambda_gcv, lambda_l, G_gcv;
-  double rnorm, snorm;
   size_t i;
   const size_t m = state->L->size1;
   gsl_matrix_view M = gsl_matrix_submatrix(state->M, 0, 0, state->n, state->p);
@@ -397,7 +398,7 @@ secs1d_fit(void * vstate)
     gsl_multifit_wlinear_tsvd(&A.matrix, &wts.vector, &b.vector, tol, state->c, state->cov,
                               &chisq, &rank, state->multifit_p);
 
-    rnorm = sqrt(chisq);
+    *rnorm = sqrt(chisq);
     snorm = gsl_blas_dnrm2(state->c);
 
     fprintf(stderr, "secs1d_fit: rank = %zu/%zu\n", rank, state->p);
@@ -432,7 +433,7 @@ secs1d_fit(void * vstate)
   lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
 
   /* solve regularized system with lambda_l */
-  gsl_multifit_linear_solve(lambda_l, &As.matrix, &bs.vector, &cs.vector, &rnorm, &snorm, state->multifit_p);
+  gsl_multifit_linear_solve(lambda_l, &As.matrix, &bs.vector, &cs.vector, rnorm, snorm, state->multifit_p);
 
   /* convert back to general form */
   gsl_multifit_linear_wgenform2(state->L, state->Ltau, &A.matrix, &wts.vector, &b.vector, &cs.vector, &M.matrix,
@@ -456,8 +457,8 @@ secs1d_fit(void * vstate)
 
 #endif
 
-  fprintf(stderr, "rnorm = %.12e\n", rnorm);
-  fprintf(stderr, "snorm = %.12e\n", snorm);
+  fprintf(stderr, "rnorm = %.12e\n", *rnorm);
+  fprintf(stderr, "snorm = %.12e\n", *snorm);
 
   fprintf(stderr, "cond(X) = %.12e\n", 1.0 / gsl_multifit_linear_rcond(state->multifit_p));
 

@@ -6,6 +6,10 @@ STEPS FOR MAKING A MAIN FIELD MODEL
 1. Run mfield_preproc on all satellite data files needed for model
    a. Typically use MFIELD_FIT_Z_HIGHLAT = 0 to use F at high-latitudes (historically)
 
+   b. Check tolerances on flag_rms test - if the main field model in the data files
+      was made long ago, the rms differences could creep up, so that recent data could
+      be rejected more than older data. Look at the satrms.dat files to check on this.
+
 PLOTTING
 ========
 

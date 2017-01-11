@@ -12,7 +12,7 @@
 /* Prototypes */
 
 int lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
-               int *rank);
+               int *rank, gsl_vector * rnorm);
 int lapack_lls2(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x,
                 int *rank);
 int lapack_complex_lls(const gsl_matrix_complex * A, const gsl_matrix_complex * B,

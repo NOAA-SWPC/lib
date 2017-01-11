@@ -20,6 +20,8 @@
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_blas.h>
+#include <gsl/gsl_permutation.h>
+#include <gsl/gsl_linalg.h>
 
 #include "common.h"
 #include "interp.h"
@@ -39,15 +41,24 @@
 
 typedef struct
 {
-  size_t n;         /* total number of measurements in system */
-  size_t p;         /* number of coefficients */
-  size_t nmax;      /* maximum number of measurements in LS system */
+  size_t n;            /* total number of measurements in system */
+  size_t p;            /* number of coefficients */
+  size_t nmax;         /* maximum number of measurements in LS system */
 
-  gsl_matrix *X;    /* LS matrix */
-  gsl_vector *rhs;  /* rhs vector */
-  gsl_vector *wts;  /* weight vector */
-  gsl_matrix *cov;  /* covariance matrix */
-  gsl_vector *c;    /* solution vector */
+  gsl_matrix *X;       /* LS matrix */
+  gsl_vector *rhs;     /* rhs vector */
+  gsl_vector *wts;     /* weight vector */
+  gsl_matrix *cov;     /* covariance matrix */
+  gsl_vector *c;       /* solution vector */
+  gsl_vector *L;       /* regularization matrix diag(L) */
+
+  gsl_matrix *X_aug;   /* augmented matrix [ X ; lambda*L ] */
+  gsl_vector *rhs_aug; /* augmented rhs [ rhs ; 0 ] */
+  gsl_vector *work;    /* workspace, length p */
+  gsl_permutation *perm;
+  gsl_vector *tau_Q;
+  gsl_vector *tau_Z;
+  gsl_vector *residual;
 
   gsl_multifit_linear_workspace *multifit_p;
   pca_workspace *pca_workspace_p;
@@ -59,7 +70,7 @@ static int pcafit_reset(void * vstate);
 static size_t pcafit_ncoeff(void * vstate);
 static int pcafit_add_datum(const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
-static int pcafit_fit(void * vstate);
+static int pcafit_fit(double * rnorm, double * snorm, void * vstate);
 static int pcafit_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int pcafit_eval_J(const double r, const double theta, const double phi,
@@ -102,8 +113,47 @@ pcafit_alloc(const void * params)
   state->wts = gsl_vector_alloc(state->nmax);
   state->cov = gsl_matrix_alloc(state->p, state->p);
   state->multifit_p = gsl_multifit_linear_alloc(state->nmax, state->p);
+  state->L = gsl_vector_alloc(state->p);
+
+  state->X_aug = gsl_matrix_alloc(state->nmax + state->p, state->p);
+  state->rhs_aug = gsl_vector_alloc(state->nmax + state->p);
+  state->work = gsl_vector_alloc(state->p);
+  state->tau_Q = gsl_vector_alloc(state->p);
+  state->tau_Z = gsl_vector_alloc(state->p);
+  state->residual = gsl_vector_alloc(state->nmax);
+  state->perm = gsl_permutation_alloc(state->p);
 
   state->pca_workspace_p = pca_alloc();
+
+  /*
+   * 9 January 2017: after testing many different regularition schemes:
+   *
+   * 1. No damping until pmin = p / 2, then linear damping from pmin to p
+   * 2. Damping all modes equally
+   *
+   * I found that option 2 worked best (ie: even the lower/principal modes
+   * have to be damped to get a realistic current system). This corresponds
+   * to L = I.
+   */
+  {
+    const double alpha = M_PI / (2.0 * state->p);
+    const size_t pmin = state->p / 2;
+    size_t i;
+
+    gsl_vector_set_zero(state->L);
+
+    for (i = pmin + 1; i < state->p; ++i)
+      {
+        double si = (double) (i - pmin) / (state->p - pmin - 1.0);
+        double Li = pow(si, 2.0);
+        gsl_vector_set(state->L, i, Li);
+      }
+
+#if 1
+    /* 2 Jan 2017: it doesn't look like the above L is any better than L = I */
+    gsl_vector_set_all(state->L, 1.0);
+#endif
+  }
 
   fprintf(stderr, "pca_alloc: number of modes = %zu\n", state->p);
 
@@ -129,6 +179,30 @@ pcafit_free(void * vstate)
 
   if (state->cov)
     gsl_matrix_free(state->cov);
+
+  if (state->L)
+    gsl_vector_free(state->L);
+
+  if (state->X_aug)
+    gsl_matrix_free(state->X_aug);
+
+  if (state->rhs_aug)
+    gsl_vector_free(state->rhs_aug);
+
+  if (state->work)
+    gsl_vector_free(state->work);
+
+  if (state->tau_Q)
+    gsl_vector_free(state->tau_Q);
+
+  if (state->tau_Z)
+    gsl_vector_free(state->tau_Z);
+
+  if (state->residual)
+    gsl_vector_free(state->residual);
+
+  if (state->perm)
+    gsl_permutation_free(state->perm);
 
   if (state->multifit_p)
     gsl_multifit_linear_free(state->multifit_p);
@@ -210,7 +284,9 @@ pcafit_add_datum(const double r, const double theta, const double phi,
 pcafit_fit()
   Fit model to previously added tracks
 
-Inputs: vstate - state
+Inputs: rnorm  - residual norm || y - A x ||
+        snorm  - solution norm || L x ||
+        vstate - state
 
 Return: success/error
 
@@ -219,11 +295,15 @@ Notes:
 */
 
 static int
-pcafit_fit(void * vstate)
+pcafit_fit(double * rnorm, double * snorm, void * vstate)
 {
   pca_state_t *state = (pca_state_t *) vstate;
   const size_t npts = 200;
+#if 0
   const double tol = 0.5; /* lower bound on damping parameter */
+#else
+  const double tol = 1.0e-1; /* lower bound on damping parameter */
+#endif
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);
   gsl_vector *eta = gsl_vector_alloc(npts);
@@ -231,8 +311,7 @@ pcafit_fit(void * vstate)
   gsl_matrix_view A = gsl_matrix_submatrix(state->X, 0, 0, state->n, state->p);
   gsl_vector_view b = gsl_vector_subvector(state->rhs, 0, state->n);
   gsl_vector_view wts = gsl_vector_subvector(state->wts, 0, state->n);
-  double lambda_gcv, lambda_l, G_gcv;
-  double rnorm, snorm;
+  double lambda_gcv, lambda_l, lambda, G_gcv;
   size_t i;
   const char *lambda_file = "lambda.dat";
   FILE *fp = fopen(lambda_file, "w");
@@ -241,8 +320,55 @@ pcafit_fit(void * vstate)
   if (state->n < state->p)
     return -1;
 
+#if 0
+
+  /* form and solve augmented system [ A ; lambda*L ] c = [ b ; 0 ]; this is useful if
+   * L is singular */
+  {
+    gsl_matrix_view m;
+    gsl_vector_view v;
+    gsl_vector_view res = gsl_vector_subvector(state->residual, 0, state->n + state->p);
+    size_t rank;
+
+#if 0
+    lambda = 8.0e1;
+#else
+    lambda = 323.5;
+#endif
+
+    /* apply weights */
+    gsl_multifit_linear_applyW(&A.matrix, &wts.vector, &b.vector, &A.matrix, &b.vector);
+
+    print_octave(&A.matrix, "A");
+    printv_octave(&b.vector, "b");
+    printv_octave(state->L, "L");
+
+    m = gsl_matrix_submatrix(state->X_aug, 0, 0, state->n, state->p);
+    gsl_matrix_memcpy(&m.matrix, &A.matrix);
+
+    m = gsl_matrix_submatrix(state->X_aug, state->n, 0, state->p, state->p);
+    gsl_matrix_set_zero(&m.matrix);
+    v = gsl_matrix_diagonal(&m.matrix);
+    gsl_vector_memcpy(&v.vector, state->L);
+    gsl_vector_scale(&v.vector, lambda);
+
+    gsl_vector_set_zero(state->rhs_aug);
+
+    v = gsl_vector_subvector(state->rhs_aug, 0, state->n);
+    gsl_vector_memcpy(&v.vector, &b.vector);
+
+    m = gsl_matrix_submatrix(state->X_aug, 0, 0, state->n + state->p, state->p);
+    v = gsl_vector_subvector(state->rhs_aug, 0, state->n + state->p);
+
+    /* solve augmented system via COD */
+    gsl_linalg_COD_decomp(&m.matrix, state->tau_Q, state->tau_Z, state->perm, &rank, state->work);
+    gsl_linalg_COD_lssolve(&m.matrix, state->tau_Q, state->tau_Z, state->perm, rank, &v.vector, state->c, &res.vector);
+  }
+
+#else
+
   /* convert to standard form */
-  gsl_multifit_linear_applyW(&A.matrix, &wts.vector, &b.vector, &A.matrix, &b.vector);
+  gsl_multifit_linear_wstdform1(state->L, &A.matrix, &wts.vector, &b.vector, &A.matrix, &b.vector, state->multifit_p);
 
   /* compute SVD of A */
   gsl_multifit_linear_svd(&A.matrix, state->multifit_p);
@@ -256,17 +382,29 @@ pcafit_fit(void * vstate)
   /* compute GCV curve */
   gsl_multifit_linear_gcv(&b.vector, reg_param, G, &lambda_gcv, &G_gcv, state->multifit_p);
 
-#if 0
+#if 1
   /* sometimes L-corner method underdamps; for single satellite fit, disable this;
    * for 2-3 satellites, enable this check */
   lambda_l = GSL_MAX(lambda_l, tol * s0);
+#if 0
+  {
+    const double t = 0.7;
+    lambda = t * lambda_gcv + (1.0 - t) * lambda_l;
+  }
 #else
-  lambda_l = GSL_MIN(lambda_l, 2.0e-3 * s0);
-  lambda_l = lambda_gcv;
+  lambda = lambda_l;
+#endif
+#else
+  /* single satellite fit: GCV seems to work better (less damping) */
+  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
+  lambda = lambda_gcv;
 #endif
 
-  /* solve regularized system with lambda_l */
-  gsl_multifit_linear_solve(lambda_l, &A.matrix, &b.vector, state->c, &rnorm, &snorm, state->multifit_p);
+  /* solve regularized system with lambda */
+  gsl_multifit_linear_solve(lambda, &A.matrix, &b.vector, state->c, rnorm, snorm, state->multifit_p);
+
+  /* convert solution vector to general form */
+  gsl_multifit_linear_genform1(state->L, state->c, state->c, state->multifit_p);
 
   fprintf(stderr, "\n");
   fprintf(stderr, "\t n = %zu\n", state->n);
@@ -274,8 +412,9 @@ pcafit_fit(void * vstate)
   fprintf(stderr, "\t s0 = %g\n", s0);
   fprintf(stderr, "\t lambda_l = %g\n", lambda_l);
   fprintf(stderr, "\t lambda_gcv = %g\n", lambda_gcv);
-  fprintf(stderr, "\t rnorm = %g\n", rnorm);
-  fprintf(stderr, "\t snorm = %g\n", snorm);
+  fprintf(stderr, "\t lambda = %g\n", lambda);
+  fprintf(stderr, "\t rnorm = %g\n", *rnorm);
+  fprintf(stderr, "\t snorm = %g\n", *snorm);
   fprintf(stderr, "\t cond(X) = %g\n", 1.0 / gsl_multifit_linear_rcond(state->multifit_p));
 
   fprintf(stderr, "pcafit_fit: writing %s...", lambda_file);
@@ -290,6 +429,10 @@ pcafit_fit(void * vstate)
     }
 
   fprintf(stderr, "done\n");
+
+#endif
+
+  printv_octave(state->c, "c");
 
   gsl_vector_free(reg_param);
   gsl_vector_free(rho);

@@ -2,6 +2,17 @@
  * tiegcm_read.c
  *
  * This module contains routines to read tiegcm NetCDF files
+ *
+ * Required fields in TIEGCM files:
+ * time
+ * glon
+ * glat
+ * year
+ * doy
+ * ut
+ * Bn_grd
+ * Be_grd
+ * Bu_grd
  */
 
 #include <stdio.h>

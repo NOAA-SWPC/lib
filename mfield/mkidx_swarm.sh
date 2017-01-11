@@ -15,7 +15,7 @@ function dosat
   echo "sat = ${sat_name}"
 
   # loop over years
-  for year in $(seq 2013 2016); do
+  for year in $(seq 2013 2017); do
     echo "year = ${year}"
 
     # loop over months

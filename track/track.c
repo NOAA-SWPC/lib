@@ -490,7 +490,7 @@ track_find()
 of specified values
 
 Inputs: t_eq   - timestamp of equator crossing (CDF_EPOCH)
-        phi    - longitude of equator crossing (degrees)
+        phi_eq - longitude of equator crossing (degrees)
         dt_min - allowed dt difference in minutes
         dphi   - allowed longitude difference in degrees
         idx    - (output) index of track if found

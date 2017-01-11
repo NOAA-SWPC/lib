@@ -8,6 +8,8 @@
  * 1. 1D SECS
  * 2. 2D SECS (DF only)
  * 3. PCA
+ * 4. Internal potential field (gaussint)
+ * 5. Simple ring current model (rc)
  */
 
 #include <stdio.h>
@@ -94,6 +96,8 @@ magfit_default_parameters(void)
 
   params.pca_modes = 16;
 
+  params.qdmax = 40.0;
+
   return params;
 }
 
@@ -136,7 +140,7 @@ magfit_add_track(const track_data *tptr, const satdata_mag *data,
         continue;
 
       /* fit only low-latitude data */
-      if (fabs(qdlat) > MAGFIT_QDMAX)
+      if (fabs(qdlat) > w->params.qdmax)
         continue;
 
       B[0] = tptr->Bx[i];
@@ -160,7 +164,9 @@ magfit_add_track(const track_data *tptr, const satdata_mag *data,
 magfit_fit()
   Fit magnetic model to previously added tracks
 
-Inputs: w - workspace
+Inputs: rnorm - residual norm || y - A x ||
+        snorm - solution norm || L x ||
+        w     - workspace
 
 Return: success/error
 
@@ -169,10 +175,52 @@ Notes:
 */
 
 int
-magfit_fit(magfit_workspace *w)
+magfit_fit(double * rnorm, double * snorm, magfit_workspace *w)
 {
-  int status = (w->type->fit)(w->state);
+  int status = (w->type->fit)(rnorm, snorm, w->state);
   return status;
+}
+
+/*
+magfit_apply_track()
+  Subtract previously fitted model from a track
+
+Inputs: tptr - track pointer
+        data - satellite data
+        w    - workspace
+
+Return: number of data added
+*/
+
+int
+magfit_apply_track(track_data *tptr, satdata_mag *data, magfit_workspace *w)
+{
+  int s = 0;
+  size_t i;
+
+  for (i = 0; i < tptr->n; ++i)
+    {
+      size_t didx = i + tptr->start_idx;
+      double r = data->r[didx];
+      double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+      double phi = data->longitude[didx] * M_PI / 180.0;
+      double B[3];
+
+      if (!SATDATA_AvailableData(data->flags[didx]))
+        continue;
+
+      magfit_eval_B(r, theta, phi, B, w);
+
+      /* add RC correction model to data->B_ext */
+      SATDATA_VEC_X(data->B_ext, didx) += B[0];
+      SATDATA_VEC_Y(data->B_ext, didx) += B[1];
+      SATDATA_VEC_Z(data->B_ext, didx) += B[2];
+    }
+
+  /* recalculate track residuals */
+  track_calc_residuals(tptr, (const satdata_mag *) data);
+
+  return s;
 }
 
 /*
@@ -243,6 +291,7 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
        * invert for internal gauss coefficients. Then we can use standard formulas to
        * determine stream function chi
        */
+      double rnorm, snorm;
 
       gaussint_p = magfit_alloc(magfit_gaussint, &(w->params));
 
@@ -262,14 +311,17 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
 
               /* add B to gaussint workspace */
               (gaussint_p->type->add_datum)(r, theta, phi, 0.0, B, gaussint_p->state);
+
+              printf("%f %f %f %f %f\n", lon, lat, B[0], B[1], B[2]);
             }
+          printf("\n");
         }
 
       fprintf(stderr, "done\n");
 
       /* fit internal gauss coefficients to magnetic field data */
       fprintf(stderr, "magfit_print_map: inverting for gauss coefficients...");
-      magfit_fit(gaussint_p);
+      magfit_fit(&rnorm, &snorm, gaussint_p);
       fprintf(stderr, "done\n");
 
       eval_chi = gaussint_p->type->eval_chi;
@@ -368,7 +420,7 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
         continue;
 
       /* fit only low-latitude data */
-      if (fabs(data->qdlat[didx]) > MAGFIT_QDMAX)
+      if (fabs(data->qdlat[didx]) > w->params.qdmax)
         continue;
 
       /* compute model prediction */
@@ -440,7 +492,7 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
         continue;
 
       /* use only low-latitude data */
-      if (fabs(data->qdlat[didx]) > MAGFIT_QDMAX)
+      if (fabs(data->qdlat[didx]) > w->params.qdmax)
         continue;
 
       /* compute model prediction */

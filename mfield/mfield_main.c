@@ -50,7 +50,7 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              25
+#define NMAX_MF              65
 #define NMAX_SV              15
 #define NMAX_SA              15
 
@@ -941,6 +941,8 @@ main(int argc, char *argv[])
   initial_guess(coeffs, mfield_workspace_p);
   fprintf(stderr, "done\n");
 
+  gettimeofday(&tv0, NULL);
+
   while (iter++ < maxit)
     {
       fprintf(stderr, "main: ROBUST ITERATION %zu/%zu\n", iter, maxit);
@@ -954,6 +956,10 @@ main(int argc, char *argv[])
       /* reset workspace for a new iteration */
       mfield_reset(mfield_workspace_p);
     }
+
+  gettimeofday(&tv1, NULL);
+
+  fprintf(stderr, "main: total time for inversion: %.2f seconds\n", time_diff(tv0, tv1));
 
   /* calculate errors in coefficients */
   fprintf(stderr, "main: calculating coefficient uncertainties...");

@@ -32,10 +32,12 @@
 #include <gsl/gsl_blas.h>
 
 #include "apex.h"
+#include "bsearch.h"
 #include "common.h"
 #include "geo.h"
 #include "green.h"
 #include "lapack_wrapper.h"
+#include "oct.h"
 #include "magdata.h"
 #include "poltor.h"
 
@@ -45,7 +47,15 @@
 
 #include "pca_common.c"
 
-#define USE_SYNTH_DATA              0
+/* maximum external spherical harmonic degree and order for TIEGCM map inversion */
+#define NMAX_EXT                    60
+#define MMAX_EXT                    30
+
+/* maximum internal spherical harmonic degree and order for TIEGCM map inversion */
+#define NMAX_INT                    0
+#define MMAX_INT                    0
+
+#define TAPER_COEFFS                0
 
 /*
 print_residuals()
@@ -56,19 +66,20 @@ Inputs: filename - where to store residuals
         A        - model matrix
         c        - model coefficients
         data     - TIEGCM data
-        green_p  - green workspace
+        green_ext - green workspace for external source
 */
 
 double
 print_residuals(const char *filename, const size_t tidx,
                 const gsl_matrix *A, const gsl_vector *c,
-                const tiegcm_data *data, green_workspace *green_p)
+                const tiegcm_data *data, green_workspace *green_ext)
 {
   FILE *fp;
   gsl_vector *b = gsl_vector_alloc(A->size1); /* model prediction */
   size_t bidx = 0;
   size_t ilon, ilat, j;
   double rnorm = 0.0;
+  const double eps = 1.0e-4;
 
   fp = fopen(filename, "w");
   if (!fp)
@@ -103,6 +114,12 @@ print_residuals(const char *filename, const size_t tidx,
           double B_model[3], B_data[3], chi;
           double theta = M_PI / 2.0 - data->glat[ilat] * M_PI / 180.0;
 
+          /* exclude poles */
+          if (theta < eps)
+            continue;
+          if (theta > M_PI - eps)
+            continue;
+
           B_data[0] = data->Bx[idx] * 1.0e9;
           B_data[1] = data->By[idx] * 1.0e9;
           B_data[2] = data->Bz[idx] * 1.0e9;
@@ -115,7 +132,7 @@ print_residuals(const char *filename, const size_t tidx,
               rnorm = gsl_hypot(rnorm, B_data[j] - B_model[j]);
             }
 
-          chi = green_eval_chi_ext(green_p->R + 110.0, theta, phi, c, green_p);
+          chi = green_eval_chi_ext(green_ext->R + 110.0, theta, phi, c, green_ext);
 
           fprintf(fp, "%8.4f %8.4f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n",
                   wrap180(data->glon[ilon]),
@@ -202,12 +219,14 @@ tiegcm_magdata(const size_t tidx, tiegcm_data *data)
   return mdata;
 }
 
-int
-main_build_matrix(const magdata *mdata, green_workspace *green_p,
-                  gsl_matrix *A)
+size_t
+main_build_matrix(const magdata *mdata, green_workspace *green_ext,
+                  green_workspace *green_int, gsl_matrix *A)
 {
   const size_t n = A->size1;
-  const double eps = 1.0e-6;
+  const size_t p_ext = green_ext->nnm;
+  const size_t p_int = green_int->nnm;
+  const double eps = 1.0e-4;
   size_t rowidx = 0;
   size_t i;
 
@@ -218,26 +237,35 @@ main_build_matrix(const magdata *mdata, green_workspace *green_p,
       double phi = mdata->phi[i];
       gsl_vector_view vx, vy, vz;
 
+      /* exclude poles from fit */
       if (theta < eps)
-        theta = eps;
+        continue;
       if (theta > M_PI - eps)
-        theta = M_PI - eps;
+        continue;
 
-      vx = gsl_matrix_row(A, rowidx++);
-      vy = gsl_matrix_row(A, rowidx++);
-      vz = gsl_matrix_row(A, rowidx++);
+      vx = gsl_matrix_subrow(A, rowidx, 0, p_ext);
+      vy = gsl_matrix_subrow(A, rowidx + 1, 0, p_ext);
+      vz = gsl_matrix_subrow(A, rowidx + 2, 0, p_ext);
 
       /* compute external Green's functions */
-      green_calc_ext(r, theta, phi,
-                     vx.vector.data,
-                     vy.vector.data,
-                     vz.vector.data,
-                     green_p);
+      green_calc_ext(r, theta, phi, vx.vector.data,
+                     vy.vector.data, vz.vector.data, green_ext);
+
+      if (p_int > 0)
+        {
+          vx = gsl_matrix_subrow(A, rowidx, p_ext, p_int);
+          vy = gsl_matrix_subrow(A, rowidx + 1, p_ext, p_int);
+          vz = gsl_matrix_subrow(A, rowidx + 2, p_ext, p_int);
+
+          /* compute internal Green's functions */
+          green_calc_int(r, theta, phi, vx.vector.data,
+                         vy.vector.data, vz.vector.data, green_int);
+        }
+
+      rowidx += 3;
     }
 
-  assert(rowidx == n);
-
-  return 0;
+  return rowidx;
 }
 
 /*
@@ -245,29 +273,57 @@ main_build_rhs()
   Construct RHS vector for a given time index
 */
 
-int
-main_build_rhs(const size_t tidx, const tiegcm_data *data,
-               gsl_vector *b)
+size_t
+main_build_rhs(const size_t tidx, const tiegcm_data *data, gsl_vector *b)
 {
   const size_t n = b->size;
+  const double eps = 1.0e-4;
   size_t ilon, ilat;
   size_t rowidx = 0;
+  green_workspace *green_p = green_alloc(1, 1, R_EARTH_KM);
 
   for (ilon = 0; ilon < data->nlon; ++ilon)
     {
       for (ilat = 0; ilat < data->nlat; ++ilat)
         {
           size_t idx = TIEGCM_BIDX(tidx, ilat, ilon, data);
+          double theta = M_PI / 2.0 - data->glat[ilat] * M_PI / 180.0;
 
+          /* exclude poles from fit */
+          if (theta < eps)
+            continue;
+          if (theta > M_PI - eps)
+            continue;
+
+#if 0 /* XXX */
+          {
+            double phi = data->glon[ilon] * M_PI / 180.0;
+            double q11 = 1.0;
+            double q10 = 5.0;
+            double k11 = -2.3;
+            double X[3], Y[3], Z[3];
+            size_t idx11 = green_nmidx(1, 1, green_p);
+            size_t idx10 = green_nmidx(1, 0, green_p);
+            size_t idx1m1 = green_nmidx(1, -1, green_p);
+
+            green_calc_ext(R_EARTH_KM, theta, phi, X, Y, Z, green_p);
+
+            gsl_vector_set(b, rowidx++, q11 * X[idx11] + q10 * X[idx10] + k11 * X[idx1m1]);
+            gsl_vector_set(b, rowidx++, q11 * Y[idx11] + q10 * Y[idx10] + k11 * Y[idx1m1]);
+            gsl_vector_set(b, rowidx++, q11 * Z[idx11] + q10 * Z[idx10] + k11 * Z[idx1m1]);
+          }
+
+#else
           gsl_vector_set(b, rowidx++, data->Bx[idx] * 1.0e9);
           gsl_vector_set(b, rowidx++, data->By[idx] * 1.0e9);
           gsl_vector_set(b, rowidx++, data->Bz[idx] * 1.0e9);
+#endif
         }
     }
 
-  assert(rowidx == n);
+  green_free(green_p);
 
-  return 0;
+  return rowidx;
 }
 
 /*
@@ -318,26 +374,36 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   const char *spectrum_taper_file = "spectrum_taper.s";
   const char *spectrum_azim_file = "spectrum_azim.s";
   const char *datamap_file = "datamap.dat";
-  const size_t nmax = 60;
-  const size_t mmax = GSL_MIN(nmax, 30);
+  const size_t nmax_ext = NMAX_EXT;
+  const size_t mmax_ext = GSL_MIN(nmax_ext, MMAX_EXT);
+  const size_t nmax_int = NMAX_INT;
+  const size_t mmax_int = GSL_MIN(nmax_int, MMAX_INT);
   const double R = R_EARTH_KM;
-  green_workspace *green_p = green_alloc(nmax, mmax, R);
-  const size_t n = 3 * data->nlon * data->nlat; /* number of residuals */
-  const size_t p = green_p->nnm;                /* number of external coefficients */
+  green_workspace *green_ext = green_alloc(nmax_ext, mmax_ext, R);
+  green_workspace *green_int = green_alloc(nmax_int, mmax_int, R);
+  const size_t n = 3 * data->nlon * data->nlat; /* number of total residuals */
+  const size_t p_ext = green_ext->nnm;          /* number of external coefficients */
+  const size_t p_int = green_int->nnm;          /* number of internal coefficients */
+  const size_t p = p_ext + p_int;               /* number of total coefficients */
   const size_t nrhs = data->nt;                 /* number of right hand sides */
   gsl_matrix *A = gsl_matrix_alloc(n, p);       /* least squares matrix */
   gsl_matrix *B = gsl_matrix_alloc(n, nrhs);    /* right hand sides */
   gsl_matrix *X = gsl_matrix_alloc(p, nrhs);    /* solution vectors */
   gsl_matrix *X_taper = gsl_matrix_alloc(p, nrhs);  /* tapered solution vectors to reduce ringing */
   gsl_vector *r = gsl_vector_alloc(n);          /* residual vector */
+  gsl_vector *rnorm = gsl_vector_alloc(nrhs);   /* vector of residual norms */
   magdata *mdata;
+  size_t ndata;                                 /* number of residuals after excluding poles */
+  gsl_matrix_view AA, BB;
   size_t k;
   FILE *fp;
   struct timeval tv0, tv1;
   int rank;
 
   fprintf(stderr, "main_proc: %zu observations per grid\n", n);
-  fprintf(stderr, "main_proc: %zu SH model coefficients\n", p);
+  fprintf(stderr, "main_proc: %zu external SH model coefficients\n", p_ext);
+  fprintf(stderr, "main_proc: %zu internal SH model coefficients\n", p_int);
+  fprintf(stderr, "main_proc: %zu total SH model coefficients\n", p);
   fprintf(stderr, "main_proc: %zu timestamps\n", nrhs);
 
   /* store spatial locations in magdata structure - grid points are
@@ -352,11 +418,9 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   /* construct least squares matrix (common for all timestamps) */
   fprintf(stderr, "main_proc: building least squares matrix A...");
   gettimeofday(&tv0, NULL);
-  status = main_build_matrix(mdata, green_p, A);
-  if (status)
-    return status;
+  ndata = main_build_matrix(mdata, green_ext, green_int, A);
   gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+  fprintf(stderr, "done (%g seconds, %zu total data)\n", time_diff(tv0, tv1), ndata);
 
   fp = fopen(filename, "w");
 
@@ -367,44 +431,55 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   for (k = 0; k < data->nt; ++k)
     {
       gsl_vector_view b = gsl_matrix_column(B, k);
+      size_t nrows;
 
       /* construct rhs vector for time t_k */
-      main_build_rhs(k, data, &b.vector);
+      nrows = main_build_rhs(k, data, &b.vector);
+
+      assert(nrows == ndata);
     }
 
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   /* solve least squares system for all rhs vectors */
-  fprintf(stderr, "main_proc: solving LS system with QR decomposition of A...");
+  AA = gsl_matrix_submatrix(A, 0, 0, ndata, p);
+  BB = gsl_matrix_submatrix(B, 0, 0, ndata, nrhs);
+
+  fprintf(stderr, "main_proc: solving LS system with QR decomposition of A (%zu-by-%zu)...", ndata, p);
   gettimeofday(&tv0, NULL);
-  status = lapack_lls(A, B, X, &rank);
+  status = lapack_lls(&AA.matrix, &BB.matrix, X, &rank, rnorm);
   gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds, s = %d, rank = %d)\n",
-          time_diff(tv0, tv1), status, rank);
+  fprintf(stderr, "done (%g seconds, s = %d, rank = %d, residual = %.12e)\n",
+          time_diff(tv0, tv1), status, rank, gsl_blas_dnrm2(rnorm));
 
   /* taper high degree coefficients to correct TIEGCM ringing */
   {
     gsl_matrix_memcpy(X_taper, X);
-    taper_knm(30, X_taper, green_p);
+
+#if TAPER_COEFFS
+    taper_knm(30, X_taper, green_ext);
+#endif
   }
 
-  /* print spectrum of coefficients at time t_0 */
+  /* print spectrum of external coefficients at time t_0 */
   {
     const size_t k = 0;
     gsl_vector_view x = gsl_matrix_column(X, k);
 
+    printv_octave(&x.vector, "c");
+
     fprintf(stderr, "main_proc: writing spectrum at t0 to %s...", spectrum_file);
-    green_print_spectrum(spectrum_file, &x.vector, green_p);
+    green_print_spectrum(spectrum_file, &x.vector, green_ext);
     fprintf(stderr, "done\n");
 
     fprintf(stderr, "main_proc: writing azimuth spectrum at t0 to %s...", spectrum_azim_file);
-    green_print_spectrum_azim(spectrum_azim_file, &x.vector, green_p);
+    green_print_spectrum_azim(spectrum_azim_file, &x.vector, green_ext);
     fprintf(stderr, "done\n");
 
     x = gsl_matrix_column(X_taper, k);
     fprintf(stderr, "main_proc: writing tapered spectrum at t0 to %s...", spectrum_taper_file);
-    green_print_spectrum(spectrum_taper_file, &x.vector, green_p);
+    green_print_spectrum(spectrum_taper_file, &x.vector, green_ext);
     fprintf(stderr, "done\n");
   }
 
@@ -417,7 +492,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
     double rnorm;
 
     fprintf(stderr, "main_proc: writing residuals to %s...", res_file);
-    rnorm = print_residuals(res_file, k, A, &x.vector, data, green_p);
+    rnorm = print_residuals(res_file, k, &AA.matrix, &x.vector, data, green_ext);
     fprintf(stderr, "done (|| b - A x || = %.12e)\n", rnorm);
   }
 
@@ -468,7 +543,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
           for (m = 0; m <= M; ++m)
             {
-              size_t cidx = green_nmidx(N, m, green_p);
+              size_t cidx = green_nmidx(N, m, green_ext);
               double knm = gsl_matrix_get(X, cidx, k);
 
               fprintf(fp, "%f ", knm);
@@ -485,14 +560,15 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   fprintf(stderr, "done\n");
 
   fprintf(stderr, "main_proc: writing misc data to %s...", PCA_STAGE1_DATA);
-  pca_write_data(PCA_STAGE1_DATA, nmax, mmax);
+  pca_write_data(PCA_STAGE1_DATA, nmax_ext, mmax_ext);
   fprintf(stderr, "done\n");
 
-  green_free(green_p);
+  green_free(green_ext);
   gsl_matrix_free(A);
   gsl_matrix_free(B);
   gsl_matrix_free(X);
   gsl_matrix_free(X_taper);
+  gsl_vector_free(rnorm);
 
   fclose(fp);
 

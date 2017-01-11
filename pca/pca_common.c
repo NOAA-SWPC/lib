@@ -3,13 +3,15 @@
 taper_knm()
   Taper high degree knm coefficients to try to reduce ringing.
 We use a cosine taper set to 1 at nmin, and going to 0 at
-nmax
+nmax + 1. Don't make it go to 0 at nmax or the spectrum will
+suddenly drop many orders of magnitude between nmax-1 and nmax
 */
 
 static int
 taper_knm(const size_t nmin, gsl_matrix * K, green_workspace * green_p)
 {
   const size_t nmax = green_p->nmax;
+  const double fac = M_PI / (2.0 * (nmax + 1 - nmin));
   size_t n;
 
   for (n = 1; n <= nmax; ++n)
@@ -20,7 +22,10 @@ taper_knm(const size_t nmin, gsl_matrix * K, green_workspace * green_p)
 
       /* compute taper weight */
       if (n > nmin)
-        wn = cos((n - nmin) * M_PI / (double)nmax);
+        {
+          double val = cos(fac * (n - nmin));
+          wn = val * val;
+        }
 
       for (m = -M; m <= M; ++m)
         {

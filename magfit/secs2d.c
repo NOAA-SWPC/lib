@@ -24,12 +24,13 @@
 
 #include "common.h"
 #include "interp.h"
+#include "oct.h"
 #include "track.h"
 
 #include "magfit.h"
 
 /* define to use uniform pole spacing in latitude */
-#define SECS2D_UNIFORM_THETA         0
+#define SECS2D_UNIFORM_THETA         1
 
 typedef struct
 {
@@ -69,7 +70,7 @@ static int secs2d_reset(void * vstate);
 static size_t secs2d_ncoeff(void * vstate);
 static int secs2d_add_datum(const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
-static int secs2d_fit(void * vstate);
+static int secs2d_fit(double * rnorm, double * snorm, void * vstate);
 static int secs2d_eval_B(const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs2d_eval_J(const double r, const double theta, const double phi,
@@ -314,7 +315,9 @@ secs2d_add_datum(const double r, const double theta, const double phi,
 secs2d_fit()
   Fit 1D SECS to previously added tracks
 
-Inputs: vstate - state
+Inputs: rnorm  - residual norm || y - A x ||
+        snorm  - solution norm || y - A x ||
+        vstate - state
 
 Return: success/error
 
@@ -324,13 +327,13 @@ secs2d_add_datum()
 */
 
 static int
-secs2d_fit(void * vstate)
+secs2d_fit(double * rnorm, double * snorm, void * vstate)
 {
   secs2d_state_t *state = (secs2d_state_t *) vstate;
   const size_t npts = 200;
   /* Note: to get a reasonable current map, use tol = 3e-1 */
 #if 1
-  const double tol = 1.5e-1;
+  const double tol = 2.0e-1;
 #else
   const double tol = 3.0e-1;
 #endif
@@ -341,8 +344,7 @@ secs2d_fit(void * vstate)
   gsl_matrix_view A = gsl_matrix_submatrix(state->X, 0, 0, state->n, state->p);
   gsl_vector_view b = gsl_vector_subvector(state->rhs, 0, state->n);
   gsl_vector_view wts = gsl_vector_subvector(state->wts, 0, state->n);
-  double lambda_gcv, lambda_l, G_gcv;
-  double rnorm, snorm;
+  double lambda_gcv, lambda_l, lambda, G_gcv;
   size_t i;
   const char *lambda_file = "lambda.dat";
   FILE *fp = fopen(lambda_file, "w");
@@ -355,7 +357,7 @@ secs2d_fit(void * vstate)
   fprintf(stderr, "\t n = %zu\n", state->n);
   fprintf(stderr, "\t p = %zu\n", state->p);
 
-#if 1 /* TSVD */
+#if 0 /* TSVD */
 
   {
     double chisq;
@@ -364,8 +366,8 @@ secs2d_fit(void * vstate)
     gsl_multifit_wlinear_tsvd(&A.matrix, &wts.vector, &b.vector, tol, state->c, state->cov,
                               &chisq, &rank, state->multifit_p);
 
-    rnorm = sqrt(chisq);
-    snorm = gsl_blas_dnrm2(state->c);
+    *rnorm = sqrt(chisq);
+    *snorm = gsl_blas_dnrm2(state->c);
 
     fprintf(stderr, "secs2d_fit: rank = %zu/%zu\n", rank, state->p);
   }
@@ -406,19 +408,22 @@ secs2d_fit(void * vstate)
   lambda_l = gsl_vector_get(reg_param, i);
 
   /* lower bound on lambda */
-  lambda_l = GSL_MAX(lambda_l, tol * s0);
+  lambda = GSL_MAX(lambda_l, tol * s0);
 
-  /* solve regularized system with lambda_l */
-  gsl_multifit_linear_solve(lambda_l, &A.matrix, &b.vector, state->c, &rnorm, &snorm, state->multifit_p);
+  /* solve regularized system with lambda */
+  gsl_multifit_linear_solve(lambda, &A.matrix, &b.vector, state->c, rnorm, snorm, state->multifit_p);
 
   fprintf(stderr, "\t s0 = %.12e\n", s0);
   fprintf(stderr, "\t lambda_l = %.12e\n", lambda_l);
   fprintf(stderr, "\t lambda_gcv = %.12e\n", lambda_gcv);
-  fprintf(stderr, "\t rnorm = %.12e\n", rnorm);
-  fprintf(stderr, "\t snorm = %.12e\n", snorm);
+  fprintf(stderr, "\t lambda = %.12e\n", lambda);
+  fprintf(stderr, "\t rnorm = %.12e\n", *rnorm);
+  fprintf(stderr, "\t snorm = %.12e\n", *snorm);
   fprintf(stderr, "\t cond(X) = %.12e\n", 1.0 / gsl_multifit_linear_rcond(state->multifit_p));
 
 #endif
+
+  printv_octave(state->c, "c");
 
   gsl_vector_free(reg_param);
   gsl_vector_free(rho);

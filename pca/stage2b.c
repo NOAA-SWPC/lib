@@ -36,6 +36,10 @@
 /* define to subtract mean from knm(t) time series prior to SVD */
 #define SUBTRACT_MEAN           1
 
+/* define to taper the high degree SH coefficients with a cosine taper (to correct
+ * TIEGCM ringing issue) */
+#define TAPER_COEFFS            0
+
 /* define to construct and output covariance matrix
  * 2 Jan 2017: after plotting covariance and correlation matrix,
  * there isn't much structure to see */
@@ -142,6 +146,8 @@ main(int argc, char *argv[])
   nnm = K->size1;
   nt = K->size2;
 
+#if TAPER_COEFFS
+
   /* taper spherical harmonic coefficients to eliminate ringing effect from TIEGCM */
   {
     green_workspace *green_p = green_alloc(60, 30, R_EARTH_KM);
@@ -149,7 +155,7 @@ main(int argc, char *argv[])
     gsl_vector_view x = gsl_matrix_column(K, 0);
 
     fprintf(stderr, "main: tapering knm coefficients...");
-    taper_knm(30, K, green_p);
+    taper_knm(20, K, green_p);
     fprintf(stderr, "done\n");
 
     fprintf(stderr, "main: writing tapered spectrum to %s...", spectrum_file);
@@ -158,6 +164,8 @@ main(int argc, char *argv[])
 
     green_free(green_p);
   }
+
+#endif
 
 #if SUBTRACT_MEAN
   fprintf(stderr, "main: subtracting mean from each knm time series...");

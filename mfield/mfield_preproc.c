@@ -53,13 +53,17 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 /* use SMDL index for filtering instead of WMM criteria */
 #define MFIELD_FILTER_SMDL         0
 
-/* local-time range for main field modeling */
-#define MFIELD_LT_MIN              (5.0)
-#define MFIELD_LT_MAX              (22.0)
+/*
+ * local-time range for main field modeling; the (mod 24) issue is handled
+ * in check_lt(), so if you want to select data between 10pm and 5am, set
+ * [min,max] = [22,5]
+ */
+#define MFIELD_LT_MIN              (0.0)
+#define MFIELD_LT_MAX              (5.0)
 
 /* local-time range for Euler angle fitting */
-#define MFIELD_EULER_LT_MIN        (6.0)
-#define MFIELD_EULER_LT_MAX        (18.0)
+#define MFIELD_EULER_LT_MIN        (18.0)
+#define MFIELD_EULER_LT_MAX        (6.0)
 
 /* number of seconds for computing along-track differences */
 #define MFIELD_GRAD_DT             (40.0)
@@ -273,6 +277,37 @@ read_champ(const char *filename)
 } /* read_champ() */
 
 /*
+check_lt()
+  Check if a given LT is within [lt_min,lt_max] accounting for mod 24. So it
+is possible to have input lt_min < lt_max in order to select data across midnight.
+
+Example: [lt_min,lt_max] = [6,18] will select daytime data between 6am and 6pm
+         [lt_min,lt_max] = [18,6] will select nighttime data between 6pm and 6am
+         [lt_min,lt_max] = [22,5] will select nighttime data between 10pm and 5am
+         [lt_min,lt_max] = [0,5] will select data between midnight and 5am
+*/
+
+static int
+check_lt(const double lt, const double lt_min, const double lt_max)
+{
+  double a, b;
+
+  b = fmod(lt_max - lt_min, 24.0);
+  if (b < 0.0)
+    b += 24.0;
+
+  a = fmod(lt - lt_min, 24.0);
+  if (a < 0.0)
+    a += 24.0;
+
+  if (a > b)
+    return 0; /* invalid local time */
+
+  /* valid local time */
+  return 1;
+}
+
+/*
 model_flags()
   Check an individual data point to determine if it will be used to
 fit various model parameters.
@@ -304,11 +339,13 @@ model_flags(const size_t magdata_flags, const double t,
   const time_t unix_time = satdata_epoch2timet(t);
   const double lt = get_localtime(unix_time, phi);
   const double lat_deg = 90.0 - theta * 180.0 / M_PI;
+  int status;
 
   /* check if we should fit Euler angles to this data point */
-  if (magdata_flags & MAGDATA_GLOBFLG_EULER &&
-      fabs(qdlat) <= MFIELD_EULER_QDLAT &&
-      (lt >= MFIELD_EULER_LT_MAX || lt <= MFIELD_EULER_LT_MIN))
+  status = check_lt(lt, MFIELD_EULER_LT_MIN, MFIELD_EULER_LT_MAX);
+  if ((status == 1) &&
+      (magdata_flags & MAGDATA_GLOBFLG_EULER) &&
+      (fabs(qdlat) <= MFIELD_EULER_QDLAT))
     {
       flags |= MAGDATA_FLG_FIT_EULER;
     }
@@ -316,7 +353,9 @@ model_flags(const size_t magdata_flags, const double t,
   /* check if we should fit main field model to this data point */
   if (fabs(lat_deg) <= MFIELD_HIGH_LATITUDE)
     {
-      if (lt >= MFIELD_LT_MAX || lt <= MFIELD_LT_MIN)
+      status = check_lt(lt, MFIELD_LT_MIN, MFIELD_LT_MAX);
+
+      if (status == 1)
         flags |= MAGDATA_FLG_FIT_MF;
     }
   else
@@ -393,7 +432,14 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
     {
       const char *rmsfile = "satrms.dat";
       size_t nrms;
+#if 0
       double thresh[] = { 20.0, 25.0, 15.0, 15.0 };
+#else
+      /* 2 Jan 2017: since the main field model used for rms is out of date,
+       * need to increase thresholds to prevent throwing out good data
+       */
+      double thresh[] = { 30.0, 30.0, 30.0, 30.0 };
+#endif
 
       nrms = track_flag_rms(rmsfile, thresh, NULL, data, track_p);
       fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",

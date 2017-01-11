@@ -12,9 +12,6 @@
 /* mu_0 in units of: nT / (kA km^{-1}) */
 #define MAGFIT_MU_0                       (400.0 * M_PI)
 
-/* maximum QD latitude for fitting */
-#define MAGFIT_QDMAX                      (40.0)
-
 /* SECS flags */
 #define MAGFIT_SECS_FLG_FIT_DF            (1 << 0) /* fit divergence-free SECS */
 #define MAGFIT_SECS_FLG_FIT_CF            (1 << 1) /* fit curl-free SECS */
@@ -38,6 +35,8 @@ typedef struct
 
   /* PCA parameters */
   size_t pca_modes;     /* number of PCA modes to use */
+
+  double qdmax;         /* latitude range for fitting data: [-qdmax,qdmax] */
 } magfit_parameters;
 
 typedef struct
@@ -48,7 +47,7 @@ typedef struct
   size_t (*ncoeff) (void * state);
   int (*add_datum) (const double r, const double theta, const double phi, const double qdlat,
                     const double B[3], void * state);
-  int (*fit) (void * state);
+  int (*fit) (double * rnorm, double * snorm, void * state);
   int (*eval_B) (const double r, const double theta, const double phi, double B[3], void * state);
   int (*eval_J) (const double r, const double theta, const double phi, double J[3], void * state);
   double (*eval_chi) (const double theta, const double phi, void * state);
@@ -66,6 +65,7 @@ const magfit_type * magfit_secs1d;
 const magfit_type * magfit_secs2d;
 const magfit_type * magfit_pca;
 const magfit_type * magfit_gaussint;
+const magfit_type * magfit_rc;
 
 /*
  * Prototypes
@@ -76,7 +76,8 @@ void magfit_free(magfit_workspace *w);
 magfit_parameters magfit_default_parameters(void);
 int magfit_reset(magfit_workspace *w);
 size_t magfit_add_track(const track_data *tptr, const satdata_mag *data, magfit_workspace *w);
-int magfit_fit(magfit_workspace *w);
+int magfit_fit(double * rnorm, double * snorm, magfit_workspace *w);
+int magfit_apply_track(track_data *tptr, satdata_mag *data, magfit_workspace *w);
 int magfit_eval_B(const double r, const double theta, const double phi, double B[3], magfit_workspace *w);
 int magfit_eval_J(const double r, const double theta, const double phi, double J[3], magfit_workspace *w);
 int magfit_print_track(const int header, FILE *fp, const track_data *tptr, const satdata_mag *data,
