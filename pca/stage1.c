@@ -135,7 +135,11 @@ print_residuals(const char *filename, const size_t tidx,
           chi = green_eval_chi_ext(green_ext->R + 110.0, theta, phi, c, green_ext);
 
           fprintf(fp, "%8.4f %8.4f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n",
+#if 0
                   wrap180(data->glon[ilon]),
+#else
+                  data->glon[ilon],
+#endif
                   data->glat[ilat],
                   data->Bx[idx] * 1.0e9,
                   data->By[idx] * 1.0e9,
@@ -400,6 +404,8 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   struct timeval tv0, tv1;
   int rank;
 
+  fprintf(stderr, "main_proc: %zu longitude grid points\n", data->nlon);
+  fprintf(stderr, "main_proc: %zu latitude grid points\n", data->nlat);
   fprintf(stderr, "main_proc: %zu observations per grid\n", n);
   fprintf(stderr, "main_proc: %zu external SH model coefficients\n", p_ext);
   fprintf(stderr, "main_proc: %zu internal SH model coefficients\n", p_int);

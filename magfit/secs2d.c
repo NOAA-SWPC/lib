@@ -333,7 +333,7 @@ secs2d_fit(double * rnorm, double * snorm, void * vstate)
   const size_t npts = 200;
   /* Note: to get a reasonable current map, use tol = 3e-1 */
 #if 1
-  const double tol = 2.0e-1;
+  const double tol = 3.0e-1;
 #else
   const double tol = 3.0e-1;
 #endif

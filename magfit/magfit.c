@@ -311,10 +311,7 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
 
               /* add B to gaussint workspace */
               (gaussint_p->type->add_datum)(r, theta, phi, 0.0, B, gaussint_p->state);
-
-              printf("%f %f %f %f %f\n", lon, lat, B[0], B[1], B[2]);
             }
-          printf("\n");
         }
 
       fprintf(stderr, "done\n");

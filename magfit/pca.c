@@ -386,14 +386,8 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
   /* sometimes L-corner method underdamps; for single satellite fit, disable this;
    * for 2-3 satellites, enable this check */
   lambda_l = GSL_MAX(lambda_l, tol * s0);
-#if 0
-  {
-    const double t = 0.7;
-    lambda = t * lambda_gcv + (1.0 - t) * lambda_l;
-  }
-#else
+
   lambda = lambda_l;
-#endif
 #else
   /* single satellite fit: GCV seems to work better (less damping) */
   lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);

@@ -290,7 +290,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
     }
   else if (T == magfit_pca)
     {
-      magfit_params.pca_modes = 10;
+      magfit_params.pca_modes = 11;
 
       if (data[1] == NULL)
         {
@@ -362,6 +362,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
         {
           /* find Swarm B crossing */
           s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);
+          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);*/
           if (s)
             continue;
 
@@ -499,7 +500,8 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
 #endif
 
 /*XXX*/
-if (idx == 5) {
+if (idx == 5)
+{
       fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track[0]->n, idx);
       gettimeofday(&tv0, NULL);
       s = magfit_fit(&rnorm, &snorm, magfit_p);

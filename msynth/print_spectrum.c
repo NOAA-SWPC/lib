@@ -47,7 +47,7 @@ main(int argc, char *argv[])
   size_t nmax = 0;
   double epoch = -1.0;
 
-  while ((c = getopt(argc, argv, "a:b:c:e:f:m:w:o:h:p:zn:i:d")) != (-1))
+  while ((c = getopt(argc, argv, "a:b:c:e:f:m:w:o:h:p:zn:i:dt:")) != (-1))
     {
       switch (c)
         {
@@ -120,6 +120,13 @@ main(int argc, char *argv[])
               }
             break;
 
+          case 't':
+            if (!msynth1)
+              msynth1 = msynth_tgcm_read(optarg);
+            else
+              msynth2 = msynth_tgcm_read(optarg);
+            break;
+
           case 'z':
             print_azim = 1;
             break;
@@ -144,7 +151,7 @@ main(int argc, char *argv[])
 
   if (!msynth1)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h chaos_file] [-p pomme_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-e epoch] [-o output_file] [-d]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h chaos_file] [-p pomme_file] [-t tgcm_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-e epoch] [-o output_file] [-d]\n", argv[0]);
       exit(1);
     }
 
