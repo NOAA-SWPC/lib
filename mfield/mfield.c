@@ -178,6 +178,8 @@ mfield_alloc(const mfield_parameters *params)
 
           w->offset_euler[i] = 3 * sum;
           sum += w->nbins_euler[i];
+
+          fprintf(stderr, "mfield_alloc: number of Euler bins for satellite %zu: %zu\n", i, w->nbins_euler[i]);
         }
 
       w->neuler = 3 * sum;

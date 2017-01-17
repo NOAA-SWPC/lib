@@ -35,7 +35,7 @@
 #endif
 
 /* fit Euler angles to data */
-#define MFIELD_FIT_EULER       0
+#define MFIELD_FIT_EULER       1
 
 /* fit external field model to data */
 #define MFIELD_FIT_EXTFIELD    0

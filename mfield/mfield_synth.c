@@ -11,6 +11,8 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_sf_legendre.h>
 
+#include "euler.h"
+
 #include "mfield.h"
 #include "mfield_synth.h"
 
@@ -27,6 +29,9 @@ static mfield_synth_coeff test_gnm[] = {
 
   { 0, 0, 0.0, 0.0, 0.0 }
 };
+
+static int mfield_synth_calc(const double t, const double r, const double theta, const double phi,
+                             const gsl_vector * g, double B[3], mfield_workspace *w);
 
 /* fill in internal coefficient vector of synthetic gauss coefficients */
 int
@@ -55,14 +60,8 @@ mfield_synth_g(gsl_vector * g, mfield_workspace * w)
 int
 mfield_synth_replace(mfield_workspace *w)
 {
-  const size_t nmax = w->nmax_mf;
-  const double t0 = w->epoch;
   size_t i, j;
-  size_t plm_size = gsl_sf_legendre_array_n(nmax);
-  double *Plm = malloc(plm_size * sizeof(double));
-  double *dPlm = malloc(plm_size * sizeof(double));
-  size_t c_size = w->p;
-  gsl_vector *g = gsl_vector_alloc(c_size);
+  gsl_vector *g = gsl_vector_alloc(w->p_int);
 
 #if MFIELD_FIT_EULER
   /* Euler angles */
@@ -81,60 +80,21 @@ mfield_synth_replace(mfield_workspace *w)
       for (j = 0; j < mptr->n; ++j)
         {
           double t = satdata_epoch2year(mptr->t[j]);
-          double t1 = t - t0;
-          double t2 = 0.5 * t1 * t1;
           double r = mptr->r[j];
           double theta = mptr->theta[j];
           double phi = mptr->phi[j];
-          double sint = sin(theta);
-          double cost = cos(theta);
-          double X = 0.0, Y = 0.0, Z = 0.0;
-          double ratio = w->R / r;
-          size_t n;
-          int m;
+          double B[3];
 
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
-          gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, nmax,
-                                          cost, Plm, dPlm);
+          /* synthesize magnetic field vector */
+          mfield_synth_calc(t, r, theta, phi, g, B, w);
 
-          for (n = 1; n <= nmax; ++n)
-            {
-              int ni = (int) n;
-              double rterm = pow(ratio, n + 2.0);
-
-              for (m = 0; m <= ni; ++m)
-                {
-                  double c = cos(m * phi);
-                  double s = sin(m * phi);
-                  size_t pidx = gsl_sf_legendre_array_index(n, m);
-                  size_t cidx = mfield_coeff_nmidx(n, m);
-                  double gnm, hnm = 0.0;
-
-                  gnm = mfield_get_mf(g, cidx, w) +
-                        mfield_get_sv(g, cidx, w) * t1 +
-                        mfield_get_sa(g, cidx, w) * t2;
-
-                  if (m > 0)
-                    {
-                      cidx = mfield_coeff_nmidx(n, -m);
-                      hnm = mfield_get_mf(g, cidx, w) +
-                            mfield_get_sv(g, cidx, w) * t1 +
-                            mfield_get_sa(g, cidx, w) * t2;
-                    }
-
-                  X += rterm * (gnm * c + hnm * s) * dPlm[pidx];
-                  Y += rterm / sint * m * (gnm * s - hnm * c) * Plm[pidx];
-                  Z -= (n + 1.0) * rterm *
-                       (gnm * c + hnm * s) * Plm[pidx];
-                }
-            }
-
-          mptr->Bx_nec[j] = X;
-          mptr->By_nec[j] = Y;
-          mptr->Bz_nec[j] = Z;
-          mptr->F[j] = gsl_hypot3(X, Y, Z);
+          mptr->Bx_nec[j] = B[0];
+          mptr->By_nec[j] = B[1];
+          mptr->Bz_nec[j] = B[2];
+          mptr->F[j] = gsl_hypot3(B[0], B[1], B[2]);
 
           /* no crustal/external field for synthetic data */
           mptr->Bx_model[j] = 0.0;
@@ -145,25 +105,107 @@ mfield_synth_replace(mfield_workspace *w)
           /* rotate NEC vector to VFM frame */
           {
             double *q = &(mptr->q[4*j]);
-            double B_nec[3], B_vfm[3];
+            double B_vfm[3];
 
-            B_nec[0] = X;
-            B_nec[1] = Y;
-            B_nec[2] = Z;
-
-            euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B_nec, B_vfm);
+            euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
 
             mptr->Bx_vfm[j] = B_vfm[0];
             mptr->By_vfm[j] = B_vfm[1];
             mptr->Bz_vfm[j] = B_vfm[2];
           }
 #endif
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS))
+            {
+              t = satdata_epoch2year(mptr->t_ns[j]);
+              mfield_synth_calc(t, mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], g, B, w);
+
+              mptr->Bx_nec_ns[j] = B[0];
+              mptr->By_nec_ns[j] = B[1];
+              mptr->Bz_nec_ns[j] = B[2];
+              mptr->F_ns[j] = gsl_hypot3(B[0], B[1], B[2]);
+
+              mptr->Bx_model_ns[j] = 0.0;
+              mptr->By_model_ns[j] = 0.0;
+              mptr->Bz_model_ns[j] = 0.0;
+
+#if MFIELD_FIT_EULER
+              /* rotate NEC vector to VFM frame */
+              {
+                double *q = &(mptr->q_ns[4*j]);
+                double B_vfm[3];
+
+                euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
+
+                mptr->Bx_vfm_ns[j] = B_vfm[0];
+                mptr->By_vfm_ns[j] = B_vfm[1];
+                mptr->Bz_vfm_ns[j] = B_vfm[2];
+              }
+#endif
+            }
+
         }
     }
 
-  free(Plm);
-  free(dPlm);
   gsl_vector_free(g);
 
   return 0;
+}
+
+/* compute B(r,theta,phi) using Gauss coefficients 'g' */
+static int
+mfield_synth_calc(const double t, const double r, const double theta, const double phi, const gsl_vector * g,
+                  double B[3], mfield_workspace *w)
+{
+  int s = 0;
+  const double t0 = w->epoch;
+  const double t1 = t - t0;
+  const double t2 = 0.5 * t1 * t1;
+  const size_t nmax = w->nmax_mf;
+  const double ratio = w->R / r;
+  const double sint = sin(theta);
+  const double cost = cos(theta);
+  double *Plm = w->Plm;
+  double *dPlm = w->dPlm;
+  size_t n;
+
+  B[0] = 0.0;
+  B[1] = 0.0;
+  B[2] = 0.0;
+
+  gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, nmax, cost, Plm, dPlm);
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int ni = (int) n;
+      int m;
+      double rterm = pow(ratio, n + 2.0);
+
+      for (m = 0; m <= ni; ++m)
+        {
+          double c = cos(m * phi);
+          double s = sin(m * phi);
+          size_t pidx = gsl_sf_legendre_array_index(n, m);
+          size_t cidx = mfield_coeff_nmidx(n, m);
+          double gnm, hnm = 0.0;
+
+          gnm = mfield_get_mf(g, cidx, w) +
+                mfield_get_sv(g, cidx, w) * t1 +
+                mfield_get_sa(g, cidx, w) * t2;
+
+          if (m > 0)
+            {
+              cidx = mfield_coeff_nmidx(n, -m);
+              hnm = mfield_get_mf(g, cidx, w) +
+                    mfield_get_sv(g, cidx, w) * t1 +
+                    mfield_get_sa(g, cidx, w) * t2;
+            }
+
+          B[0] += rterm * (gnm * c + hnm * s) * dPlm[pidx];
+          B[1] += rterm / sint * m * (gnm * s - hnm * c) * Plm[pidx];
+          B[2] -= (n + 1.0) * rterm * (gnm * c + hnm * s) * Plm[pidx];
+        }
+    }
+
+  return s;
 }

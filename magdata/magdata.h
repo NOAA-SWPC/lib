@@ -48,12 +48,10 @@
 /* scalar measurement available */
 #define MAGDATA_ExistScalar(x)        (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_F))
 
-/* check if fitting Euler angles to this data point */
-#define MAGDATA_FitEuler(x)           (MAGDATA_ExistVector(x) && \
-                                       ((x) & MAGDATA_FLG_FIT_EULER))
-
-/* check if fitting MF model to this data point */
-#define MAGDATA_FitMF(x)              ((x) & MAGDATA_FLG_FIT_MF)
+#define MAGDATA_ExistVectorNS(x)       (!MAGDATA_Discarded(x) && \
+                                       ((x) & MAGDATA_FLG_DX_NS) && \
+                                       ((x) & MAGDATA_FLG_DY_NS) && \
+                                       ((x) & MAGDATA_FLG_DZ_NS))
 
 /* vector north-south gradient X/Y/Z measurements available */
 #define MAGDATA_ExistDX_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DX_NS))
@@ -62,6 +60,13 @@
 
 /* scalar north-south gradient measurement available */
 #define MAGDATA_ExistDF_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DF_NS))
+
+/* check if fitting Euler angles to this data point */
+#define MAGDATA_FitEuler(x)           ((MAGDATA_ExistVector(x) || MAGDATA_ExistVectorNS(x)) && \
+                                       ((x) & MAGDATA_FLG_FIT_EULER))
+
+/* check if fitting MF model to this data point */
+#define MAGDATA_FitMF(x)              ((x) & MAGDATA_FLG_FIT_MF)
 
 typedef struct
 {

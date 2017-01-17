@@ -395,15 +395,6 @@ mfield_init_nonlinear(mfield_workspace *w)
     gsl_multifit_nlinear_parameters fdf_params =
       gsl_multifit_nlinear_default_parameters();
 
-    /*XXX*/
-    {
-      gsl_vector *f = gsl_vector_alloc(nres);
-      gsl_vector *x = gsl_vector_alloc(p);
-      mfield_synth_g(x, w);
-      mfield_calc_f(x, (void *) w, f);
-      exit(1);
-    }
-
     fdf_params.solver = gsl_multifit_nlinear_solver_cholesky;
     fdf_params.scale = gsl_multifit_nlinear_scale_levenberg;
     fdf_params.trs = gsl_multifit_nlinear_trs_dogleg;

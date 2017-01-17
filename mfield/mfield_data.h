@@ -15,8 +15,8 @@
 #define MFIELD_FIT_Y          0
 #define MFIELD_FIT_Z          0
 #define MFIELD_FIT_F          0
-#define MFIELD_FIT_DX_NS      0
-#define MFIELD_FIT_DY_NS      0
+#define MFIELD_FIT_DX_NS      1
+#define MFIELD_FIT_DY_NS      1
 #define MFIELD_FIT_DZ_NS      1
 
 typedef struct
