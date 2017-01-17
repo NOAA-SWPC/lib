@@ -55,6 +55,14 @@
 /* check if fitting MF model to this data point */
 #define MAGDATA_FitMF(x)              ((x) & MAGDATA_FLG_FIT_MF)
 
+/* vector north-south gradient X/Y/Z measurements available */
+#define MAGDATA_ExistDX_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DX_NS))
+#define MAGDATA_ExistDY_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DY_NS))
+#define MAGDATA_ExistDZ_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DZ_NS))
+
+/* scalar north-south gradient measurement available */
+#define MAGDATA_ExistDF_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DF_NS))
+
 typedef struct
 {
   double t;              /* timestamp (CDF_EPOCH) */
@@ -70,6 +78,7 @@ typedef struct
   double ne;             /* electron density cm^{-3} */
   int satdir;            /* +1 north, -1 south */
 
+  double t_ns;           /* timestamp for along-track point (CDF_EPOCH) */
   double r_ns;           /* radius for along-track point (km) */
   double theta_ns;       /* geocentric (or QD) colatitude for along-track point (radians) */
   double phi_ns;         /* longitude for along-track point (radians) */
@@ -78,6 +87,7 @@ typedef struct
   double B_vfm_ns[3];    /* along-track magnetic field vector in VFM frame (nT) */
   double B_model_ns[3];  /* along-track main/crustal/external field model in NEC frame (nT) */
   double F_ns;           /* along-track magnetic field scalar measurement (nT) */
+  double q_ns[4];        /* along-track quaternions */
 
   size_t flags;          /* MAGDATA_FLG_xxx flags */
 } magdata_datum;
@@ -106,6 +116,8 @@ typedef struct
 
   double *ne;          /* electron density cm^{-3} */
 
+  double *t_ns;        /* timestamp for along-track point (CDF_EPOCH) */
+  double *ts_ns;       /* along-track scaled timestamp for MF modeling (dimensionless), not written to output file */
   double *r_ns;        /* radius for along-track point (km) */
   double *theta_ns;    /* geocentric colatitude for along-track point (radians) */
   double *phi_ns;      /* longitude for along-track point (radians) */
@@ -113,10 +125,14 @@ typedef struct
   double *Bx_nec_ns;   /* NEC along-track X measurement (nT) */
   double *By_nec_ns;   /* NEC along-track Y measurement (nT) */
   double *Bz_nec_ns;   /* NEC along-track Z measurement (nT) */
+  double *Bx_vfm_ns;   /* VFM along-track X measurement (nT) */
+  double *By_vfm_ns;   /* VFM along-track Y measurement (nT) */
+  double *Bz_vfm_ns;   /* VFM along-track Z measurement (nT) */
   double *Bx_model_ns; /* NEC along-track X main/crustal/external field (nT) */
   double *By_model_ns; /* NEC along-track Y main/crustal/external field (nT) */
   double *Bz_model_ns; /* NEC along-track Z main/crustal/external field (nT) */
   double *F_ns;        /* along-track scalar measurement (nT) */
+  double *q_ns;        /* along-track quaternions */
 
   size_t *flags;       /* MAGDATA_FLG_xxx flags */
 

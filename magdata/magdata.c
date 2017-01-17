@@ -109,6 +109,8 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   data->satdir = realloc(data->satdir, n * sizeof(int));
   data->ne = realloc(data->ne, n * sizeof(double));
 
+  data->t_ns = realloc(data->t_ns, n * sizeof(double));
+  data->ts_ns = realloc(data->ts_ns, n * sizeof(double));
   data->r_ns = realloc(data->r_ns, n * sizeof(double));
   data->theta_ns = realloc(data->theta_ns, n * sizeof(double));
   data->phi_ns = realloc(data->phi_ns, n * sizeof(double));
@@ -116,10 +118,14 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   data->Bx_nec_ns = realloc(data->Bx_nec_ns, n * sizeof(double));
   data->By_nec_ns = realloc(data->By_nec_ns, n * sizeof(double));
   data->Bz_nec_ns = realloc(data->Bz_nec_ns, n * sizeof(double));
+  data->Bx_vfm_ns = realloc(data->Bx_vfm_ns, n * sizeof(double));
+  data->By_vfm_ns = realloc(data->By_vfm_ns, n * sizeof(double));
+  data->Bz_vfm_ns = realloc(data->Bz_vfm_ns, n * sizeof(double));
   data->Bx_model_ns = realloc(data->Bx_model_ns, n * sizeof(double));
   data->By_model_ns = realloc(data->By_model_ns, n * sizeof(double));
   data->Bz_model_ns = realloc(data->Bz_model_ns, n * sizeof(double));
   data->F_ns = realloc(data->F_ns, n * sizeof(double));
+  data->q_ns = realloc(data->q_ns, 4 * n * sizeof(double));
 
   data->flags = realloc(data->flags, n * sizeof(size_t));
   data->index = realloc(data->index, n * sizeof(size_t));
@@ -128,10 +134,11 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   if (!data->t || !data->ts || !data->r || !data->theta || !data->phi || !data->qdlat || !data->flags ||
       !data->Bx_nec || !data->By_nec || !data->Bz_nec || !data->Bx_vfm || !data->By_vfm ||
       !data->Bz_vfm || !data->Bx_model || !data->By_model || !data->Bz_model ||
-      !data->F || !data->q || !data->weights || !data->r_ns || !data->index ||
+      !data->F || !data->q || !data->weights || !data->t_ns || !data->ts_ns || !data->r_ns || !data->index ||
       !data->theta_ns || !data->phi_ns || !data->qdlat_ns || !data->satdir || !data->ne ||
       !data->Bx_nec_ns || !data->By_nec_ns || !data->Bz_nec_ns ||
-      !data->Bx_model_ns || !data->By_model_ns || !data->Bz_model_ns || !data->F_ns)
+      !data->Bx_vfm_ns || !data->By_vfm_ns || !data->Bz_vfm_ns ||
+      !data->Bx_model_ns || !data->By_model_ns || !data->Bz_model_ns || !data->F_ns || !data->q_ns)
     {
       magdata_free(data);
       fprintf(stderr, "magdata_realloc: error reallocating variables\n");
@@ -194,6 +201,12 @@ magdata_free(magdata *data)
   if (data->ne)
     free(data->ne);
 
+  if (data->t_ns)
+    free(data->t_ns);
+
+  if (data->ts_ns)
+    free(data->ts_ns);
+
   if (data->r_ns)
     free(data->r_ns);
 
@@ -215,6 +228,15 @@ magdata_free(magdata *data)
   if (data->Bz_nec_ns)
     free(data->Bz_nec_ns);
 
+  if (data->Bx_vfm_ns)
+    free(data->Bx_vfm_ns);
+
+  if (data->By_vfm_ns)
+    free(data->By_vfm_ns);
+
+  if (data->Bz_vfm_ns)
+    free(data->Bz_vfm_ns);
+
   if (data->Bx_model_ns)
     free(data->Bx_model_ns);
 
@@ -226,6 +248,9 @@ magdata_free(magdata *data)
 
   if (data->F_ns)
     free(data->F_ns);
+
+  if (data->q_ns)
+    free(data->q_ns);
 
   if (data->F)
     free(data->F);
@@ -266,6 +291,7 @@ magdata_datum_init(magdata_datum *datum)
   datum->ne = 0.0;
   datum->satdir = 0;
 
+  datum->t_ns = 0.0;
   datum->r_ns = 0.0;
   datum->theta_ns = 0.0;
   datum->phi_ns = 0.0;
@@ -285,7 +311,10 @@ magdata_datum_init(magdata_datum *datum)
     }
 
   for (i = 0; i < 4; ++i)
-    datum->q[i] = 0.0;
+    {
+      datum->q[i] = 0.0;
+      datum->q_ns[i] = 0.0;
+    }
 
   return s;
 } /* magdata_datum_init() */
@@ -306,6 +335,7 @@ magdata_add(const magdata_datum *datum, magdata *data)
   int s = 0;
   const size_t n = data->n;
   double *q = &(data->q[4 * n]);
+  double *q_ns = &(data->q_ns[4 * n]);
   size_t i;
 
   if (n >= data->ntot)
@@ -337,12 +367,17 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->weights[n] = 1.0; /* computed in magdata_calc() */
 
   for (i = 0; i < 4; ++i)
-    q[i] = datum->q[i];
+    {
+      q[i] = datum->q[i];
+      q_ns[i] = datum->q_ns[i];
+    }
 
   /*
    * add along-track gradient information; if not available the fields
    * of datum should be 0
    */
+  data->t_ns[n] = datum->t_ns;
+  data->ts_ns[n] = 0.0; /* filled in later */
   data->r_ns[n] = datum->r_ns;
   data->theta_ns[n] = datum->theta_ns;
   data->phi_ns[n] = datum->phi_ns;
@@ -351,6 +386,9 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->Bx_nec_ns[n] = datum->B_nec_ns[0];
   data->By_nec_ns[n] = datum->B_nec_ns[1];
   data->Bz_nec_ns[n] = datum->B_nec_ns[2];
+  data->Bx_vfm_ns[n] = datum->B_vfm_ns[0];
+  data->By_vfm_ns[n] = datum->B_vfm_ns[1];
+  data->Bz_vfm_ns[n] = datum->B_vfm_ns[2];
   data->Bx_model_ns[n] = datum->B_model_ns[0];
   data->By_model_ns[n] = datum->B_model_ns[1];
   data->Bz_model_ns[n] = datum->B_model_ns[2];
@@ -885,6 +923,7 @@ magdata_write(const char *filename, magdata *data)
       fwrite(data->q, sizeof(double), 4 * data->n, fp);
       fwrite(data->satdir, sizeof(int), data->n, fp);
 
+      fwrite(data->t_ns, sizeof(double), data->n, fp);
       fwrite(data->r_ns, sizeof(double), data->n, fp);
       fwrite(data->theta_ns, sizeof(double), data->n, fp);
       fwrite(data->phi_ns, sizeof(double), data->n, fp);
@@ -892,9 +931,13 @@ magdata_write(const char *filename, magdata *data)
       fwrite(data->Bx_nec_ns, sizeof(double), data->n, fp);
       fwrite(data->By_nec_ns, sizeof(double), data->n, fp);
       fwrite(data->Bz_nec_ns, sizeof(double), data->n, fp);
+      fwrite(data->Bx_vfm_ns, sizeof(double), data->n, fp);
+      fwrite(data->By_vfm_ns, sizeof(double), data->n, fp);
+      fwrite(data->Bz_vfm_ns, sizeof(double), data->n, fp);
       fwrite(data->Bx_model_ns, sizeof(double), data->n, fp);
       fwrite(data->By_model_ns, sizeof(double), data->n, fp);
       fwrite(data->Bz_model_ns, sizeof(double), data->n, fp);
+      fwrite(data->q_ns, sizeof(double), 4 * data->n, fp);
     }
 
   fwrite(data->flags, sizeof(size_t), data->n, fp);
@@ -972,6 +1015,7 @@ magdata_read(const char *filename, magdata *data)
       fread(&(data->q[4 * data->n]), sizeof(double), 4 * n, fp);
       fread(&(data->satdir[data->n]), sizeof(int), n, fp);
 
+      fread(&(data->t_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->r_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->theta_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->phi_ns[data->n]), sizeof(double), n, fp);
@@ -979,9 +1023,13 @@ magdata_read(const char *filename, magdata *data)
       fread(&(data->Bx_nec_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->By_nec_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->Bz_nec_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bx_vfm_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->By_vfm_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->Bz_vfm_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->Bx_model_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->By_model_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->Bz_model_ns[data->n]), sizeof(double), n, fp);
+      fread(&(data->q_ns[4 * data->n]), sizeof(double), 4 * n, fp);
     }
 
   fread(&(data->flags[data->n]), sizeof(size_t), n, fp);
@@ -1197,6 +1245,9 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
             /* set flag to indicate scalar gradient information available */
             flags |= MAGDATA_FLG_DF_NS;
 
+            for (k = 0; k < 4; ++k)
+              datum.q_ns[k] = data->q[4 * j + k];
+
             /* store along-track scalar measurement */
             datum.F_ns = data->F[j];
 
@@ -1205,6 +1256,7 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
               {
                 assert(data->flags[j] == 0 || data->flags[j] == SATDATA_FLG_DOWNSAMPLE ||
                        data->flags[j] == SATDATA_FLG_FILTER);
+
                 flags |= MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS;
 
                 datum.B_nec_ns[0] = SATDATA_VEC_X(data->B, j);
@@ -1236,6 +1288,7 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
                 datum.B_model_ns[2] += SATDATA_VEC_Z(data->B_ext, j);
               }
 
+            datum.t_ns = data->t[j];
             datum.r_ns = data->altitude[j] + data->R;
             datum.theta_ns = M_PI / 2.0 - data->latitude[j] * M_PI / 180.0;
             datum.phi_ns = data->longitude[j] * M_PI / 180.0;

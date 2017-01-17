@@ -22,7 +22,7 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      0
+#define MFIELD_SYNTH_DATA      1
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
@@ -35,10 +35,10 @@
 #endif
 
 /* fit Euler angles to data */
-#define MFIELD_FIT_EULER       1
+#define MFIELD_FIT_EULER       0
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    1
+#define MFIELD_FIT_EXTFIELD    0
 
 /* epoch to define SV and SA terms in fit */
 #define MFIELD_EPOCH          (2016.0)
@@ -145,7 +145,6 @@ typedef struct
   size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
   size_t nres_vec;         /* number of vector residuals to minimize */
-  size_t nres_scal;        /* number of scalar residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   gsl_vector *LTL;         /* L^T L regularization matrix */
@@ -189,6 +188,9 @@ typedef struct
   gsl_matrix *omp_dX;      /* dX/dg max_threads-by-nnm_mf */
   gsl_matrix *omp_dY;      /* dY/dg max_threads-by-nnm_mf */
   gsl_matrix *omp_dZ;      /* dZ/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dX_grad; /* gradient dX/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dY_grad; /* gradient dY/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dZ_grad; /* gradient dZ/dg max_threads-by-nnm_mf */
   gsl_matrix **omp_J;      /* max_threads matrices, each 4*data_block-by-p_int */
   size_t *omp_rowidx;      /* row indices for omp_J */
   gsl_matrix **omp_GTG;    /* max_threads matrices, each nnm_mf-by-nnm_mf */

@@ -2,7 +2,7 @@ bin_PROGRAMS = mfield mfield_preproc
 
 check_PROGRAMS = mfield_emag mfield_ascii mfield_covar mfield_eval_main mfield_residuals mfield_compare mfield_plot
 
-mfield_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_main.c
+mfield_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_main.c mfield_synth.c
 mfield_CFLAGS = -fopenmp
 mfield_LDFLAGS = -fopenmp
 mfield_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la $(top_builddir)/common/libcommon.la $(top_builddir)/green/libgreen.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib

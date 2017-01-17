@@ -10,6 +10,15 @@
 
 #include "magdata.h"
 
+/* selectively fit different components if needed for testing */
+#define MFIELD_FIT_X          0
+#define MFIELD_FIT_Y          0
+#define MFIELD_FIT_Z          0
+#define MFIELD_FIT_F          0
+#define MFIELD_FIT_DX_NS      0
+#define MFIELD_FIT_DY_NS      0
+#define MFIELD_FIT_DZ_NS      1
+
 typedef struct
 {
   size_t nsources;   /* number of data sources (satellites) */
@@ -39,6 +48,7 @@ int mfield_data_copy(const size_t sat_idx, satdata_mag *data,
 size_t mfield_data_filter_time(const double tmin, const double tmax,
                                mfield_data_workspace *w);
 size_t mfield_data_filter_euler(mfield_data_workspace *w);
+size_t mfield_data_filter_comp(mfield_data_workspace *w);
 int mfield_data_init(mfield_data_workspace *w);
 double mfield_data_epoch(mfield_data_workspace *w);
 int mfield_data_map(const char *filename, const mfield_data_workspace *w);

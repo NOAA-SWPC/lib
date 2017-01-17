@@ -334,6 +334,9 @@ mfield_alloc(const mfield_parameters *params)
   w->omp_dX = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
   w->omp_dY = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
   w->omp_dZ = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dX_grad = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dY_grad = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dZ_grad = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
 
   /* initialize green workspaces and omp_J */
   {
@@ -468,6 +471,15 @@ mfield_free(mfield_workspace *w)
   if (w->omp_dZ)
     gsl_matrix_free(w->omp_dZ);
 
+  if (w->omp_dX_grad)
+    gsl_matrix_free(w->omp_dX_grad);
+
+  if (w->omp_dY_grad)
+    gsl_matrix_free(w->omp_dY_grad);
+
+  if (w->omp_dZ_grad)
+    gsl_matrix_free(w->omp_dZ_grad);
+
   if (w->fp_dX)
     fclose(w->fp_dX);
 
@@ -601,9 +613,11 @@ mfield_init(mfield_workspace *w)
       for (j = 0; j < mptr->n; ++j)
         {
           const double u = satdata_epoch2year(mptr->t[j]) - w->epoch;
+          const double v = satdata_epoch2year(mptr->t_ns[j]) - w->epoch;
 
           /* center and scale time */
           mptr->ts[j] = (u - w->t_mu) / w->t_sigma;
+          mptr->ts_ns[j] = (v - w->t_mu) / w->t_sigma;
 
           if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
             continue;

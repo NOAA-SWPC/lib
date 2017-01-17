@@ -12,6 +12,13 @@ typedef struct
   double gnm;   /* static */
   double dgnm;  /* SV */
   double ddgnm; /* SA */
-} mfield_test_coeff;
+} mfield_synth_coeff;
+
+/*
+ * Prototypes
+ */
+
+int mfield_synth_g(gsl_vector * g, mfield_workspace * w);
+int mfield_synth_replace(mfield_workspace *w);
 
 #endif /* INCLUDED_mfield_test_h */

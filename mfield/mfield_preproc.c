@@ -88,7 +88,18 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 #define MFIELD_HIGH_LATITUDE      (60.0)
 
 /* define to fit Z component at high latitudes instead of F */
-#define MFIELD_FIT_Z_HIGHLAT      0
+#define MFIELD_FIT_Z_HIGHLAT      1
+
+#define MFIELD_IDX_X              0
+#define MFIELD_IDX_Y              1
+#define MFIELD_IDX_Z              2
+#define MFIELD_IDX_F              3
+#define MFIELD_IDX_DX_NS          4
+#define MFIELD_IDX_DY_NS          5
+#define MFIELD_IDX_DZ_NS          6
+#define MFIELD_IDX_DF_NS          7
+#define MFIELD_IDX_B_EULER        8
+#define MFIELD_IDX_END            9
 
 /* Global */
 solarpos_workspace *solarpos_workspace_p = NULL;
@@ -108,7 +119,7 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
   magdata_params params;
   size_t i;
   size_t npts[4] = { 0, 0, 0, 0 };
-  size_t nmodel[5] = { 0, 0, 0, 0, 0 };
+  size_t nmodel[MFIELD_IDX_END];
 
   params.grad_dt_ns = MFIELD_GRAD_DT;
   params.model_main = 0;
@@ -120,6 +131,10 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
 #endif
   /* subtract external field from data prior to modeling */
   params.model_ext = 1;
+
+  /* initialize arrays */
+  for (i = 0; i < MFIELD_IDX_END; ++i)
+    nmodel[i] = 0;
 
   /*
    * for some reason, the loop below adds more than 'ndata'
@@ -160,42 +175,55 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
             {
               /* don't fit scalar data at low latitudes if vector is available */
               if (MAGDATA_ExistVector(mdata->flags[i]))
-                mdata->flags[i] &= ~MAGDATA_FLG_F;
+                mdata->flags[i] &= ~(MAGDATA_FLG_F | MAGDATA_FLG_DF_NS);
             }
           else
             {
 #if MFIELD_FIT_Z_HIGHLAT
               /* only fit Z data at high latitudes */
               mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_F);
+              mdata->flags[i] &= ~(MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DF_NS);
 #else
               /* only fit F data at high latitudes */
               mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z);
+              mdata->flags[i] &= ~(MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS);
 #endif
             }
 
 #if MFIELD_FIT_Z_HIGHLAT
           /*XXX: sometimes there is a scalar measurement but no vector -
            * forcably discard all scalar measurements */
-          mdata->flags[i] &= ~MAGDATA_FLG_F;
+          mdata->flags[i] &= ~(MAGDATA_FLG_F | MAGDATA_FLG_DF_NS);
 #endif
 
           if (MAGDATA_ExistX(mdata->flags[i]))
-            ++(nmodel[0]);
+            ++(nmodel[MFIELD_IDX_X]);
 
           if (MAGDATA_ExistY(mdata->flags[i]))
-            ++(nmodel[1]);
+            ++(nmodel[MFIELD_IDX_Y]);
 
           if (MAGDATA_ExistZ(mdata->flags[i]))
-            ++(nmodel[2]);
+            ++(nmodel[MFIELD_IDX_Z]);
 
           if (MAGDATA_ExistScalar(mdata->flags[i]))
-            ++(nmodel[3]);
+            ++(nmodel[MFIELD_IDX_F]);
 
+          if (MAGDATA_ExistDX_NS(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DX_NS]);
+
+          if (MAGDATA_ExistDY_NS(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DY_NS]);
+
+          if (MAGDATA_ExistDZ_NS(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DZ_NS]);
+
+          if (MAGDATA_ExistDF_NS(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DF_NS]);
         }
 
       if ((fitting_flags & MAGDATA_FLG_FIT_EULER) &&
           MAGDATA_ExistVector(mdata->flags[i]))
-        ++(nmodel[4]);
+        ++(nmodel[MFIELD_IDX_B_EULER]);
 
       mdata->flags[i] |= fitting_flags;
     }
@@ -211,15 +239,23 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
           npts[3], mdata->n, (double) npts[3] / (double) mdata->n * 100.0);
 
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) X vector measurements selected for MF modeling\n",
-          nmodel[0], mdata->n, (double) nmodel[0] / (double) mdata->n * 100.0);
+          nmodel[MFIELD_IDX_X], mdata->n, (double) nmodel[MFIELD_IDX_X] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) Y vector measurements selected for MF modeling\n",
-          nmodel[1], mdata->n, (double) nmodel[1] / (double) mdata->n * 100.0);
+          nmodel[MFIELD_IDX_Y], mdata->n, (double) nmodel[MFIELD_IDX_Y] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) Z vector measurements selected for MF modeling\n",
-          nmodel[2], mdata->n, (double) nmodel[2] / (double) mdata->n * 100.0);
+          nmodel[MFIELD_IDX_Z], mdata->n, (double) nmodel[MFIELD_IDX_Z] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) scalar measurements selected for MF modeling\n",
-          nmodel[3], mdata->n, (double) nmodel[3] / (double) mdata->n * 100.0);
+          nmodel[MFIELD_IDX_F], mdata->n, (double) nmodel[MFIELD_IDX_F] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements selected for Euler angle modeling\n",
-          nmodel[4], mdata->n, (double) nmodel[4] / (double) mdata->n * 100.0);
+          nmodel[MFIELD_IDX_B_EULER], mdata->n, (double) nmodel[MFIELD_IDX_B_EULER] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) North/South dX vector measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DX_NS], mdata->n, (double) nmodel[MFIELD_IDX_DX_NS] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) North/South dY vector measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DY_NS], mdata->n, (double) nmodel[MFIELD_IDX_DY_NS] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) North/South dZ vector measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DZ_NS], mdata->n, (double) nmodel[MFIELD_IDX_DZ_NS] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) North/South dF scalar measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DF_NS], mdata->n, (double) nmodel[MFIELD_IDX_DF_NS] / (double) mdata->n * 100.0);
 
   return mdata;
 }

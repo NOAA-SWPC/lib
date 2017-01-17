@@ -177,6 +177,56 @@ mfield_data_filter_euler(mfield_data_workspace *w)
 } /* mfield_data_filter_euler() */
 
 /*
+mfield_data_filter_comp()
+  Discard any data according to the MFIELD_FIT_xxx flags
+
+Inputs: w    - workspace
+
+Return: number of data flagged
+*/
+
+size_t
+mfield_data_filter_comp(mfield_data_workspace *w)
+{
+  size_t cnt = 0;
+  size_t i, j;
+
+  for (i = 0; i < w->nsources; ++i)
+    {
+      magdata *mptr = mfield_data_ptr(i, w);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+#if !MFIELD_FIT_X
+          mptr->flags[j] &= ~MAGDATA_FLG_X;
+#endif
+
+#if !MFIELD_FIT_Y
+          mptr->flags[j] &= ~MAGDATA_FLG_Y;
+#endif
+
+#if !MFIELD_FIT_Z
+          mptr->flags[j] &= ~MAGDATA_FLG_Z;
+#endif
+
+#if !MFIELD_FIT_DX_NS
+          mptr->flags[j] &= ~MAGDATA_FLG_DX_NS;
+#endif
+
+#if !MFIELD_FIT_DY_NS
+          mptr->flags[j] &= ~MAGDATA_FLG_DY_NS;
+#endif
+
+#if !MFIELD_FIT_DZ_NS
+          mptr->flags[j] &= ~MAGDATA_FLG_DZ_NS;
+#endif
+        }
+    }
+
+  return cnt;
+}
+
+/*
 mfield_data_init()
   Compute mean and stddev of timestamps minus epoch for later time scaling
 
