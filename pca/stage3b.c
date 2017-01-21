@@ -134,7 +134,6 @@ solve_PCA(const size_t P, const gsl_matrix * knm,
   gsl_matrix *R;                /* R = knm - U*alpha */
   struct timeval tv0, tv1;
   double residual;           /* || knm - U*alpha || */
-  gsl_vector *rnorm = gsl_vector_alloc(nt);
   int rank;
 
   /* select largest P eigenvectors of SDM */
@@ -143,7 +142,7 @@ solve_PCA(const size_t P, const gsl_matrix * knm,
   /* solve: U*alpha = Q */
   fprintf(stderr, "solve_PCA: solving PCA problem for alpha...");
   gettimeofday(&tv0, NULL);
-  status = lapack_lls(&Uv.matrix, knm, alpha, &rank, rnorm);
+  status = lapack_lls(&Uv.matrix, knm, alpha, &rank);
   gettimeofday(&tv1, NULL);
 
   /* compute: knm~ = U*alpha */
@@ -160,7 +159,6 @@ solve_PCA(const size_t P, const gsl_matrix * knm,
           time_diff(tv0, tv1), status, rank, residual);
 
   gsl_matrix_free(R);
-  gsl_vector_free(rnorm);
 
   return status;
 }

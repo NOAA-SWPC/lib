@@ -14,13 +14,13 @@
 
 /* minimize || A X - B ||
  *
- * Inputs: rank  - (output) effective rank of A
- *         rnorm - vector of residual norms: || b_k - A x_k ||
- *                 for k = 1,...,nrhs
+ * Inputs: A    - least squares matrix
+ *         B    - right hand sides
+ *         X    - solution matrix
+ *         rank - (output) effective rank of A
  */
 int
-lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
-           int *rank, gsl_vector *rnorm)
+lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X, int *rank)
 {
   int s;
   lapack_int m = A->size1;
@@ -55,6 +55,9 @@ lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
     gsl_matrix_transpose_memcpy(X, &m.matrix);
   }
 
+#if 0
+  /* 21 Jan 2017: computing all residual norms is way too slow */
+
   /* compute residual norms */
   {
     int i;
@@ -73,6 +76,7 @@ lapack_lls(const gsl_matrix * A, const gsl_matrix * B, gsl_matrix * X,
         gsl_vector_set(rnorm, i, norm);
       }
   }
+#endif
 
   *rank = lrank;
 

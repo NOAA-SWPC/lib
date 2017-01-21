@@ -395,7 +395,6 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   gsl_matrix *X = gsl_matrix_alloc(p, nrhs);    /* solution vectors */
   gsl_matrix *X_taper = gsl_matrix_alloc(p, nrhs);  /* tapered solution vectors to reduce ringing */
   gsl_vector *r = gsl_vector_alloc(n);          /* residual vector */
-  gsl_vector *rnorm = gsl_vector_alloc(nrhs);   /* vector of residual norms */
   magdata *mdata;
   size_t ndata;                                 /* number of residuals after excluding poles */
   gsl_matrix_view AA, BB;
@@ -454,10 +453,10 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
   fprintf(stderr, "main_proc: solving LS systems with QR decomposition of A (%zu-by-%zu)...", ndata, p);
   gettimeofday(&tv0, NULL);
-  status = lapack_lls(&AA.matrix, &BB.matrix, X, &rank, rnorm);
+  status = lapack_lls(&AA.matrix, &BB.matrix, X, &rank);
   gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds, s = %d, rank = %d, max residual = %.12e)\n",
-          time_diff(tv0, tv1), status, rank, gsl_vector_max(rnorm));
+  fprintf(stderr, "done (%g seconds, s = %d, rank = %d)\n",
+          time_diff(tv0, tv1), status, rank);
 
   /* taper high degree coefficients to correct TIEGCM ringing */
   {
@@ -491,13 +490,16 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
   /* print residuals for a given timestamp */
   {
+#if 0
     const time_t unix_time = 1240660800; /* Apr 25 2009 12:00:00 UTC */
     const size_t k = bsearch_timet(data->t, unix_time, 0, data->nt - 1);
-    /*const size_t k = 0;*/
+#else
+    const size_t k = 0;
+#endif
     gsl_vector_view x = gsl_matrix_column(X_taper, k);
     double rnorm;
 
-    fprintf(stderr, "main_proc: writing residuals to %s...", res_file);
+    fprintf(stderr, "main_proc: writing residuals for timestamp %ld to %s...", data->t[k], res_file);
     rnorm = print_residuals(res_file, k, &AA.matrix, &x.vector, data, green_ext);
     fprintf(stderr, "done (|| b - A x || = %.12e)\n", rnorm);
   }
@@ -574,7 +576,6 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   gsl_matrix_free(B);
   gsl_matrix_free(X);
   gsl_matrix_free(X_taper);
-  gsl_vector_free(rnorm);
 
   fclose(fp);
 
