@@ -452,12 +452,12 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   AA = gsl_matrix_submatrix(A, 0, 0, ndata, p);
   BB = gsl_matrix_submatrix(B, 0, 0, ndata, nrhs);
 
-  fprintf(stderr, "main_proc: solving LS system with QR decomposition of A (%zu-by-%zu)...", ndata, p);
+  fprintf(stderr, "main_proc: solving LS systems with QR decomposition of A (%zu-by-%zu)...", ndata, p);
   gettimeofday(&tv0, NULL);
   status = lapack_lls(&AA.matrix, &BB.matrix, X, &rank, rnorm);
   gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds, s = %d, rank = %d, residual = %.12e)\n",
-          time_diff(tv0, tv1), status, rank, gsl_blas_dnrm2(rnorm));
+  fprintf(stderr, "done (%g seconds, s = %d, rank = %d, max residual = %.12e)\n",
+          time_diff(tv0, tv1), status, rank, gsl_vector_max(rnorm));
 
   /* taper high degree coefficients to correct TIEGCM ringing */
   {
@@ -566,7 +566,7 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   fprintf(stderr, "done\n");
 
   fprintf(stderr, "main_proc: writing misc data to %s...", PCA_STAGE1_DATA);
-  pca_write_data(PCA_STAGE1_DATA, nmax_ext, mmax_ext);
+  pca_write_data(PCA_STAGE1_DATA, nmax_ext, mmax_ext, data);
   fprintf(stderr, "done\n");
 
   green_free(green_ext);

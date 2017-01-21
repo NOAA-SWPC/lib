@@ -14,11 +14,12 @@
 #include <gsl/gsl_matrix.h>
 
 #include "io.h"
+#include "tiegcm.h"
 
 static int matlab_dlmwrite_complex(FILE * fp, const gsl_matrix_complex * A);
 
 int
-pca_write_data(const char *filename, const size_t nmax, const size_t mmax)
+pca_write_data(const char *filename, const size_t nmax, const size_t mmax, const tiegcm_data *data)
 {
   FILE *fp;
 
@@ -32,6 +33,8 @@ pca_write_data(const char *filename, const size_t nmax, const size_t mmax)
 
   fwrite(&nmax, sizeof(size_t), 1, fp);
   fwrite(&mmax, sizeof(size_t), 1, fp);
+  fwrite(&(data->nt), sizeof(size_t), 1, fp);
+  fwrite(data->ut, sizeof(double), data->nt, fp);
 
   fclose(fp);
 
@@ -39,7 +42,7 @@ pca_write_data(const char *filename, const size_t nmax, const size_t mmax)
 }
 
 int
-pca_read_data(const char *filename, size_t *nmax, size_t *mmax)
+pca_read_data(const char *filename, size_t *nmax, size_t *mmax, size_t *nt, double *ut)
 {
   FILE *fp;
 
@@ -53,6 +56,12 @@ pca_read_data(const char *filename, size_t *nmax, size_t *mmax)
 
   fread(nmax, sizeof(size_t), 1, fp);
   fread(mmax, sizeof(size_t), 1, fp);
+
+  if (nt && ut)
+    {
+      fread(nt, sizeof(size_t), 1, fp);
+      fread(ut, sizeof(double), *nt, fp);
+    }
 
   fclose(fp);
 

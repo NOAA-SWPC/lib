@@ -12,6 +12,7 @@
 #include <math.h>
 #include <sys/time.h>
 #include <getopt.h>
+#include <assert.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
@@ -98,13 +99,51 @@ correlation_matrix(gsl_matrix * A)
 }
 
 int
+calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
+{
+  int s = 0;
+  const size_t nnm = K->size1;
+  const size_t nt = K->size2;
+  size_t i;
+  size_t idx = 0;
+  gsl_matrix *A = gsl_matrix_alloc(nnm, nt);
+
+  fprintf(stderr, "calc_pca: finding knm coefficients corresponding to %zu UT...", ut);
+
+  for (i = 0; i < nt; ++i)
+    {
+      size_t uti = (size_t) ut_array[i];
+
+      if (ut == uti)
+        {
+          gsl_vector_const_view v = gsl_matrix_const_column(K, i);
+          gsl_vector_view w = gsl_matrix_column(A, idx);
+
+          /* copy set of knm coefficients for this UT hour into the A matrix */
+          gsl_vector_memcpy(&w.vector, &v.vector);
+
+          ++idx;
+        }
+    }
+
+  fprintf(stderr, "done (%zu timestamps found)\n", idx);
+
+  gsl_matrix_free(A);
+
+  return s;
+}
+
+int
 main(int argc, char *argv[])
 {
-  size_t nnm;                             /* number of spherical harmonic time series */
-  size_t nt;                              /* number of time steps */
+  size_t nnm;                      /* number of spherical harmonic time series */
+  size_t nt;                       /* number of time steps */
   char *infile = PCA_STAGE1_KNM;
   gsl_matrix *K;
   struct timeval tv0, tv1;
+  size_t ut;                       /* UT hour */
+  double *ut_array;                /* array of UT hours, size nt */
+  size_t nmax, mmax;
 
   while (1)
     {
@@ -146,6 +185,10 @@ main(int argc, char *argv[])
   nnm = K->size1;
   nt = K->size2;
 
+  ut_array = malloc(nt * sizeof(double));
+  pca_read_data(PCA_STAGE1_DATA, &nmax, &mmax, &nt, ut_array);
+  assert(nt == K->size2);
+
 #if TAPER_COEFFS
 
   /* taper spherical harmonic coefficients to eliminate ringing effect from TIEGCM */
@@ -166,6 +209,15 @@ main(int argc, char *argv[])
   }
 
 #endif
+
+  /* loop over UT and compute PCA modes for each UT hour */
+  for (ut = 0; ut < 24; ++ut)
+    {
+      calc_pca(ut, K, ut_array);
+      exit(1);
+    }
+
+  exit(1);
 
 #if SUBTRACT_MEAN
   fprintf(stderr, "main: subtracting mean from each knm time series...");
@@ -262,6 +314,7 @@ main(int argc, char *argv[])
   }
 
   gsl_matrix_free(K);
+  free(ut_array);
 
   return 0;
 }

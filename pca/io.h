@@ -9,12 +9,14 @@
 #include <gsl/gsl_complex.h>
 #include <gsl/gsl_matrix.h>
 
+#include "tiegcm.h"
+
 /*
  * Prototypes
  */
 
-int pca_write_data(const char *filename, const size_t nmax, const size_t mmax);
-int pca_read_data(const char *filename, size_t *nmax, size_t *mmax);
+int pca_write_data(const char *filename, const size_t nmax, const size_t mmax, const tiegcm_data *data);
+int pca_read_data(const char *filename, size_t *nmax, size_t *mmax, size_t *nt, double *ut);
 int pca_write_vector(const char *filename, const gsl_vector *v);
 gsl_vector *pca_read_vector(const char *filename);
 int pca_write_matrix(const char *filename, const gsl_matrix *m);

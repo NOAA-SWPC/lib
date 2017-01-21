@@ -36,7 +36,7 @@ pca_alloc()
     return 0;
 
   fprintf(stderr, "pca_alloc: reading %s...", PCA_STAGE1_DATA);
-  pca_read_data(PCA_STAGE1_DATA, &(w->nmax), &(w->mmax));
+  pca_read_data(PCA_STAGE1_DATA, &(w->nmax), &(w->mmax), NULL, NULL);
   fprintf(stderr, "done (nmax = %zu mmax = %zu)\n", w->nmax, w->mmax);
 
   fprintf(stderr, "pca_alloc: reading %s...", PCA_STAGE1_KNM);

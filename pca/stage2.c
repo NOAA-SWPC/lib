@@ -358,7 +358,7 @@ main(int argc, char *argv[])
     }
 
   fprintf(stderr, "main: reading %s...", PCA_STAGE1_DATA);
-  pca_read_data(PCA_STAGE1_DATA, &nmax, &mmax);
+  pca_read_data(PCA_STAGE1_DATA, &nmax, &mmax, NULL, NULL);
   fprintf(stderr, "done (nmax = %zu mmax = %zu)\n", nmax, mmax);
 
   green_p = green_alloc(nmax, mmax, R);
