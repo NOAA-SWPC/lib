@@ -44,6 +44,7 @@ typedef struct
   size_t n;            /* total number of measurements in system */
   size_t p;            /* number of coefficients */
   size_t nmax;         /* maximum number of measurements in LS system */
+  int UT;              /* UT hour for current fit */
 
   gsl_matrix *X;       /* LS matrix */
   gsl_vector *rhs;     /* rhs vector */
@@ -68,7 +69,7 @@ static void *pcafit_alloc(const void * params);
 static void pcafit_free(void * vstate);
 static int pcafit_reset(void * vstate);
 static size_t pcafit_ncoeff(void * vstate);
-static int pcafit_add_datum(const double r, const double theta, const double phi,
+static int pcafit_add_datum(const double t, const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
 static int pcafit_fit(double * rnorm, double * snorm, void * vstate);
 static int pcafit_eval_B(const double r, const double theta, const double phi,
@@ -106,6 +107,7 @@ pcafit_alloc(const void * params)
   state->nmax = 30000;
   state->n = 0;
   state->p = mparams->pca_modes;
+  state->UT = -1;
 
   state->X = gsl_matrix_alloc(state->nmax, state->p);
   state->c = gsl_vector_alloc(state->p);
@@ -126,34 +128,15 @@ pcafit_alloc(const void * params)
   state->pca_workspace_p = pca_alloc();
 
   /*
-   * 9 January 2017: after testing many different regularition schemes:
+   * 23 January 2017:
    *
-   * 1. No damping until pmin = p / 2, then linear damping from pmin to p
-   * 2. Damping all modes equally
+   * The optimal interpolation (OI) method suggests L = diag(1/s_i) where
+   * s_i is the singular value of the ith PC. This seems to work well so far;
    *
-   * I found that option 2 worked best (ie: even the lower/principal modes
-   * have to be damped to get a realistic current system). This corresponds
-   * to L = I.
+   * Since the singular values depend on the UT of the event under study,
+   * we set the L matrix later in pcafit_fit()
    */
-  {
-    const double alpha = M_PI / (2.0 * state->p);
-    const size_t pmin = state->p / 2;
-    size_t i;
-
-    gsl_vector_set_zero(state->L);
-
-    for (i = pmin + 1; i < state->p; ++i)
-      {
-        double si = (double) (i - pmin) / (state->p - pmin - 1.0);
-        double Li = pow(si, 2.0);
-        gsl_vector_set(state->L, i, Li);
-      }
-
-#if 1
-    /* 2 Jan 2017: it doesn't look like the above L is any better than L = I */
-    gsl_vector_set_all(state->L, 1.0);
-#endif
-  }
+  gsl_vector_set_all(state->L, 1.0);
 
   fprintf(stderr, "pca_alloc: number of modes = %zu\n", state->p);
 
@@ -219,6 +202,7 @@ pcafit_reset(void * vstate)
 {
   pca_state_t *state = (pca_state_t *) vstate;
   state->n = 0;
+  state->UT = -1;
   return 0;
 }
 
@@ -233,7 +217,8 @@ pcafit_ncoeff(void * vstate)
 pcafit_add_datum()
   Add single vector measurement to LS system
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         qdlat  - QD latitude (degrees)
@@ -247,7 +232,7 @@ Notes:
 */
 
 static int
-pcafit_add_datum(const double r, const double theta, const double phi,
+pcafit_add_datum(const double t, const double r, const double theta, const double phi,
                  const double qdlat, const double B[3], void * vstate)
 {
   pca_state_t *state = (pca_state_t *) vstate;
@@ -256,6 +241,14 @@ pcafit_add_datum(const double r, const double theta, const double phi,
   gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
   gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
+
+  if (state->UT < 0)
+    {
+      /* set UT hour for this data point */
+      state->UT = (int) round(get_ut(satdata_epoch2timet(t)));
+      pca_set_UT(state->UT, state->pca_workspace_p);
+      fprintf(stderr, "pca_add_datum: set UT to %02d\n", state->UT);
+    }
 
   /* upweight equatorial data */
   if (fabs(qdlat) <= 10.0)
@@ -367,6 +360,15 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
 
 #else
 
+  /* construct L = diag(1/s_i) */
+  pca_sval(state->L, state->pca_workspace_p);
+
+  for (i = 0; i < state->p; ++i)
+    {
+      double si = gsl_vector_get(state->L, i);
+      gsl_vector_set(state->L, i, 1.0 / si);
+    }
+
   /* convert to standard form */
   gsl_multifit_linear_wstdform1(state->L, &A.matrix, &wts.vector, &b.vector, &A.matrix, &b.vector, state->multifit_p);
 
@@ -385,9 +387,7 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
 #if 1
   /* sometimes L-corner method underdamps; for single satellite fit, disable this;
    * for 2-3 satellites, enable this check */
-  lambda_l = GSL_MAX(lambda_l, tol * s0);
-
-  lambda = lambda_l;
+  lambda = GSL_MAX(lambda_l, tol * s0);
 #else
   /* single satellite fit: GCV seems to work better (less damping) */
   lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);

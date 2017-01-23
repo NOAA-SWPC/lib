@@ -45,7 +45,7 @@ typedef struct
   void * (*alloc)(const void * params);
   int (*reset) (void * state);
   size_t (*ncoeff) (void * state);
-  int (*add_datum) (const double r, const double theta, const double phi, const double qdlat,
+  int (*add_datum) (const double t, const double r, const double theta, const double phi, const double qdlat,
                     const double B[3], void * state);
   int (*fit) (double * rnorm, double * snorm, void * state);
   int (*eval_B) (const double r, const double theta, const double phi, double B[3], void * state);

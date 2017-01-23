@@ -490,8 +490,12 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
   /* print residuals for a given timestamp */
   {
+#if 1
 #if 0
     const time_t unix_time = 1240660800; /* Apr 25 2009 12:00:00 UTC */
+#else
+    const time_t unix_time = 1240617600; /* Apr 25 2009 12:00:00 UTC */
+#endif
     const size_t k = bsearch_timet(data->t, unix_time, 0, data->nt - 1);
 #else
     const size_t k = 0;

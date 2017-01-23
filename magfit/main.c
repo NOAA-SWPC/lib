@@ -261,7 +261,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
   int s = 0;
   size_t i, j, k;
   size_t nflagged, nunflagged;
-  const magfit_type *T = magfit_secs2d;
+  const magfit_type *T = magfit_pca;
   magfit_parameters magfit_params = magfit_default_parameters();
   magfit_workspace *magfit_p;
   const char *file1 = "data1.txt";
@@ -290,7 +290,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
     }
   else if (T == magfit_pca)
     {
-      magfit_params.pca_modes = 11;
+      magfit_params.pca_modes = 7;
 
       if (data[1] == NULL)
         {
@@ -361,8 +361,8 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
       if (track[2])
         {
           /* find Swarm B crossing */
-          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);
-          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);*/
+          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);*/
+          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);
           if (s)
             continue;
 
@@ -434,38 +434,6 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
           magfit_params.lon_max = tptr[0]->lon_eq + dlon;
         }
 
-#if 0 /*XXX*/
-      {
-        size_t p;
-
-        for (p = 3; p <= 60; ++p)
-          {
-            magfit_params.pca_modes = p;
-
-            magfit_p = magfit_alloc(T, &magfit_params);
-
-            fprintf(stderr, "main_proc: adding data for satellite 1 track %zu/%zu to LS system...", i + 1, track[0]->n);
-            gettimeofday(&tv0, NULL);
-            ndata = magfit_add_track(tptr[0], data[0], magfit_p);
-            gettimeofday(&tv1, NULL);
-            fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
-
-            fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track[0]->n, idx);
-            gettimeofday(&tv0, NULL);
-            s = magfit_fit(&rnorm, &snorm, magfit_p);
-            gettimeofday(&tv1, NULL);
-            fprintf(stderr, "done (s = %d, %g seconds)\n", s, time_diff(tv0, tv1));
-
-            printf("%zu %.12e %.12e %.12e\n", p, rnorm, snorm, gsl_hypot(rnorm, snorm));
-            fflush(stdout);
-
-            magfit_free(magfit_p);
-          }
-
-        exit(1);
-      }
-#endif
-
       magfit_params.lon_min = tptr[0]->lon_eq - dlon;
       magfit_p = magfit_alloc(T, &magfit_params);
 
@@ -500,7 +468,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
 #endif
 
 /*XXX*/
-if (idx == 5)
+if (idx == 1)
 {
       fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track[0]->n, idx);
       gettimeofday(&tv0, NULL);

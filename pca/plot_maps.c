@@ -26,6 +26,7 @@ main(int argc, char *argv[])
   char buf[2048];
   size_t i;
   double r = R_EARTH_KM + 0.0; /* radius for magnetic field maps */
+  size_t ut = 0;               /* UT hour for maps */
 
   while (1)
     {
@@ -36,7 +37,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -46,8 +47,13 @@ main(int argc, char *argv[])
             r = R_EARTH_KM + atof(optarg);
             break;
 
+          case 't':
+            ut = (size_t) atoi(optarg);
+            break;
+
           default:
-            fprintf(stderr, "Usage: %s [-a altitude]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-a altitude] [-t UT]\n", argv[0]);
+            exit(1);
             break;
         }
     }
@@ -55,10 +61,11 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: radius = %g [km]\n", r);
 
   pca_workspace_p = pca_alloc();
+  pca_set_UT(ut, pca_workspace_p);
   
   for (i = 0; i < 40; ++i)
     {
-      sprintf(buf, "maps/map%02zu.dat", i + 1);
+      sprintf(buf, "maps/map_%02zuUT_%02zu.dat", ut, i + 1);
 
       fprintf(stderr, "main: printing principle component %zu map to %s...",
               i + 1, buf);

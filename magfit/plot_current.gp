@@ -10,12 +10,12 @@ set cbtics 5
 
 set cntrparam levels inc -40,2,40
 
-#lonA = -46.017235
-#lonB = -26.378850
-#lonC = -44.581345
-lonA = -10.549855
-lonB = 36.054322
-lonC = -9.123493
+lonA = -46.017235
+lonB = -26.378850
+lonC = -44.581345
+#lonA = -10.549855
+#lonB = 36.054322
+#lonC = -9.123493
 
 idx=0
 

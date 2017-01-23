@@ -35,7 +35,7 @@
 #include "pca_common.c"
 
 /* define to subtract mean from knm(t) time series prior to SVD */
-#define SUBTRACT_MEAN           1
+#define SUBTRACT_MEAN           0
 
 /* define to taper the high degree SH coefficients with a cosine taper (to correct
  * TIEGCM ringing issue) */
@@ -47,15 +47,15 @@
 #define PLOT_COVAR              0
 
 int
-subtract_mean(gsl_matrix * K)
+subtract_mean(gsl_matrix * A)
 {
-  const size_t N = K->size1;
-  const size_t M = K->size2;
+  const size_t N = A->size1;
+  const size_t M = A->size2;
   size_t i;
 
   for (i = 0; i < N; ++i)
     {
-      gsl_vector_view v = gsl_matrix_row(K, i);
+      gsl_vector_view v = gsl_matrix_row(A, i);
       double mean = gsl_stats_mean(v.vector.data, v.vector.stride, M);
       gsl_vector_add_constant(&v.vector, -mean);
     }
@@ -103,30 +103,86 @@ calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
 {
   int s = 0;
   const size_t nnm = K->size1;
-  const size_t nt = K->size2;
+  const size_t nt_all = K->size2;
   size_t i;
-  size_t idx = 0;
-  gsl_matrix *A = gsl_matrix_alloc(nnm, nt);
+  size_t nt = 0; /* number of timestamps for this UT */
+  gsl_matrix *A = gsl_matrix_alloc(nnm, nt_all);
+  gsl_matrix_view m;
+  struct timeval tv0, tv1;
 
   fprintf(stderr, "calc_pca: finding knm coefficients corresponding to %zu UT...", ut);
 
-  for (i = 0; i < nt; ++i)
+  for (i = 0; i < nt_all; ++i)
     {
       size_t uti = (size_t) ut_array[i];
 
       if (ut == uti)
         {
           gsl_vector_const_view v = gsl_matrix_const_column(K, i);
-          gsl_vector_view w = gsl_matrix_column(A, idx);
+          gsl_vector_view w = gsl_matrix_column(A, nt);
 
           /* copy set of knm coefficients for this UT hour into the A matrix */
           gsl_vector_memcpy(&w.vector, &v.vector);
 
-          ++idx;
+          ++nt;
         }
     }
 
-  fprintf(stderr, "done (%zu timestamps found)\n", idx);
+  fprintf(stderr, "done (%zu timestamps found)\n", nt);
+
+  m = gsl_matrix_submatrix(A, 0, 0, nnm, nt);
+
+#if SUBTRACT_MEAN
+  fprintf(stderr, "calc_pca: subtracting mean from each %zu UT knm time series...", ut);
+  subtract_mean(&m.matrix);
+  fprintf(stderr, "done\n");
+#endif
+
+  /* compute 1/sqrt(nt) A for SVD computation */
+  gsl_matrix_scale(&m.matrix, 1.0 / sqrt((double) nt));
+
+  {
+    char sval_txt_file[2048], sval_file[2048], U_file[2048], V_file[2048];
+    gsl_vector *S = gsl_vector_alloc(GSL_MIN(nnm, nt));
+    gsl_matrix *U = gsl_matrix_alloc(nnm, nnm);
+    gsl_matrix *V = gsl_matrix_alloc(nt, nt);
+    int status;
+    FILE *fp;
+
+    sprintf(sval_txt_file, "%s_%02zuUT.txt", PCA_STAGE2B_SVAL_TXT, ut);
+    sprintf(sval_file, "%s_%02zuUT.dat", PCA_STAGE2B_SVAL, ut);
+    sprintf(U_file, "%s_%02zuUT.dat", PCA_STAGE2B_U, ut);
+    sprintf(V_file, "%s_%02zuUT.dat", PCA_STAGE2B_V, ut);
+
+    fprintf(stderr, "\t performing SVD of matrix for %zu UT (%zu-by-%zu)...", ut, nnm, nt);
+    gettimeofday(&tv0, NULL);
+    status = lapack_svd(&m.matrix, S, U, V);
+    gettimeofday(&tv1, NULL);
+    fprintf(stderr, "done (%g seconds, status = %d)\n",
+            time_diff(tv0, tv1), status);
+
+    fprintf(stderr, "\t writing singular values in text format to %s...", sval_txt_file);
+    fp = fopen(sval_txt_file, "w");
+    gsl_vector_fprintf(fp, S, "%.12e");
+    fclose(fp);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "\t writing singular values in binary format to %s...", sval_file);
+    pca_write_vector(sval_file, S);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "\t writing left singular vectors in binary format to %s...", U_file);
+    pca_write_matrix(U_file, U);
+    fprintf(stderr, "done\n");
+
+    fprintf(stderr, "\t writing right singular vectors in binary format to %s...", V_file);
+    pca_write_matrix(V_file, V);
+    fprintf(stderr, "done\n");
+
+    gsl_matrix_free(U);
+    gsl_matrix_free(V);
+    gsl_vector_free(S);
+  }
 
   gsl_matrix_free(A);
 
@@ -210,14 +266,14 @@ main(int argc, char *argv[])
 
 #endif
 
+#if 1
   /* loop over UT and compute PCA modes for each UT hour */
   for (ut = 0; ut < 24; ++ut)
     {
       calc_pca(ut, K, ut_array);
-      exit(1);
     }
-
   exit(1);
+#endif
 
 #if SUBTRACT_MEAN
   fprintf(stderr, "main: subtracting mean from each knm time series...");

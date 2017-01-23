@@ -2,6 +2,8 @@
 #
 # Plot current stream function with contour lines
 
+UT = 15
+
 set term pngcairo enh col size 800,600
 
 unset key
@@ -23,9 +25,9 @@ tfile = 'test.dat'
 cfile = 'cont.dat'
 
 do for [pcidx=1:40] {
-  file = sprintf('maps/map%02d.dat', pcidx)
+  file = sprintf('maps/map_%02dUT_%02d.dat', UT, pcidx)
 
-  outfile = sprintf('maps/current%02d.png', pcidx)
+  outfile = sprintf('maps/current_%02dUT_%02d.png', UT, pcidx)
   set output outfile
 
   str = sprintf('Generating %s...', outfile)

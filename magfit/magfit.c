@@ -130,6 +130,7 @@ magfit_add_track(const track_data *tptr, const satdata_mag *data,
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
+      double t = data->t[didx];
       double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
@@ -147,7 +148,7 @@ magfit_add_track(const track_data *tptr, const satdata_mag *data,
       B[1] = tptr->By[i];
       B[2] = tptr->Bz[i];
 
-      s = (w->type->add_datum)(r, theta, phi, qdlat, B, w->state);
+      s = (w->type->add_datum)(t, r, theta, phi, qdlat, B, w->state);
       if (s)
         {
           fprintf(stderr, "magfit_add_track: error adding data\n");
@@ -310,7 +311,7 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
               s += (w->type->eval_B)(r, theta, phi, B, w->state);
 
               /* add B to gaussint workspace */
-              (gaussint_p->type->add_datum)(r, theta, phi, 0.0, B, gaussint_p->state);
+              (gaussint_p->type->add_datum)(0.0, r, theta, phi, 0.0, B, gaussint_p->state);
             }
         }
 
@@ -463,17 +464,29 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
                  const satdata_mag *data, magfit_workspace *w)
 {
   size_t i;
-  double rms[3] = { 0.0, 0.0, 0.0 };
-  size_t n = 0;
+  double rms10[3] = { 0.0, 0.0, 0.0 };
+  double rms20[3] = { 0.0, 0.0, 0.0 };
+  double rms30[3] = { 0.0, 0.0, 0.0 };
+  double rms40[3] = { 0.0, 0.0, 0.0 };
+  size_t n10 = 0, n20 = 0, n30 = 0, n40 = 0;
 
   if (header)
     {
       i = 1;
       fprintf(fp, "# Field %zu: timestamp of equator crossing\n", i++);
       fprintf(fp, "# Field %zu: dlon (degrees)\n", i++);
-      fprintf(fp, "# Field %zu: X rms (nT)\n", i++);
-      fprintf(fp, "# Field %zu: Y rms (nT)\n", i++);
-      fprintf(fp, "# Field %zu: Z rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 10 deg X rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 10 deg Y rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 10 deg Z rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 20 deg X rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 20 deg Y rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 20 deg Z rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 30 deg X rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 30 deg Y rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 30 deg Z rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 40 deg X rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 40 deg Y rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: 40 deg Z rms (nT)\n", i++);
       return 0;
     }
 
@@ -484,35 +497,117 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
       double B_model[3];
+      double Xsq, Ysq, Zsq;
 
       if (!SATDATA_AvailableData(data->flags[didx]))
-        continue;
-
-      /* use only low-latitude data */
-      if (fabs(data->qdlat[didx]) > w->params.qdmax)
         continue;
 
       /* compute model prediction */
       magfit_eval_B(r, theta, phi, B_model, w);
 
-      rms[0] += pow(tptr->Bx[i] - B_model[0], 2.0);
-      rms[1] += pow(tptr->By[i] - B_model[1], 2.0);
-      rms[2] += pow(tptr->Bz[i] - B_model[2], 2.0);
-      ++n;
+      Xsq = pow(tptr->Bx[i] - B_model[0], 2.0);
+      Ysq = pow(tptr->By[i] - B_model[1], 2.0);
+      Zsq = pow(tptr->Bz[i] - B_model[2], 2.0);
+
+      if (fabs(data->qdlat[didx]) <= 10.0)
+        {
+          rms10[0] += Xsq;
+          rms10[1] += Ysq;
+          rms10[2] += Zsq;
+          ++n10;
+
+          rms20[0] += Xsq;
+          rms20[1] += Ysq;
+          rms20[2] += Zsq;
+          ++n20;
+
+          rms30[0] += Xsq;
+          rms30[1] += Ysq;
+          rms30[2] += Zsq;
+          ++n30;
+
+          rms40[0] += Xsq;
+          rms40[1] += Ysq;
+          rms40[2] += Zsq;
+          ++n40;
+        }
+      else if (fabs(data->qdlat[didx]) <= 20.0)
+        {
+          rms20[0] += Xsq;
+          rms20[1] += Ysq;
+          rms20[2] += Zsq;
+          ++n20;
+
+          rms30[0] += Xsq;
+          rms30[1] += Ysq;
+          rms30[2] += Zsq;
+          ++n30;
+
+          rms40[0] += Xsq;
+          rms40[1] += Ysq;
+          rms40[2] += Zsq;
+          ++n40;
+        }
+      else if (fabs(data->qdlat[didx]) <= 30.0)
+        {
+          rms30[0] += Xsq;
+          rms30[1] += Ysq;
+          rms30[2] += Zsq;
+          ++n30;
+
+          rms40[0] += Xsq;
+          rms40[1] += Ysq;
+          rms40[2] += Zsq;
+          ++n40;
+        }
+      else if (fabs(data->qdlat[didx]) <= 40.0)
+        {
+          rms40[0] += Xsq;
+          rms40[1] += Ysq;
+          rms40[2] += Zsq;
+          ++n40;
+        }
     }
 
-  if (n > 0)
+  if (n10 > 0)
     {
       for (i = 0; i < 3; ++i)
-        rms[i] = sqrt(rms[i] / (double)n);
+        rms10[i] = sqrt(rms10[i] / (double)n10);
     }
 
-  fprintf(fp, "%ld %.4f %.2f %.2f %.2f\n",
+  if (n20 > 0)
+    {
+      for (i = 0; i < 3; ++i)
+        rms20[i] = sqrt(rms20[i] / (double)n20);
+    }
+
+  if (n30 > 0)
+    {
+      for (i = 0; i < 3; ++i)
+        rms30[i] = sqrt(rms30[i] / (double)n30);
+    }
+
+  if (n40 > 0)
+    {
+      for (i = 0; i < 3; ++i)
+        rms40[i] = sqrt(rms40[i] / (double)n40);
+    }
+
+  fprintf(fp, "%ld %.4f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
           satdata_epoch2timet(tptr->t_eq),
           wrap180(tptr->lon_eq - lon0),
-          rms[0],
-          rms[1],
-          rms[2]);
+          rms10[0],
+          rms10[1],
+          rms10[2],
+          rms20[0],
+          rms20[1],
+          rms20[2],
+          rms30[0],
+          rms30[1],
+          rms30[2],
+          rms40[0],
+          rms40[1],
+          rms40[2]);
   fflush(fp);
 
   return 0;

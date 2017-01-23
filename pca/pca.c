@@ -13,6 +13,7 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_sf_legendre.h>
+#include <gsl/gsl_errno.h>
 
 #include "green.h"
 
@@ -30,10 +31,16 @@ pca_workspace *
 pca_alloc()
 {
   pca_workspace *w;
+  char buf[2048];
+  size_t i;
 
   w = calloc(1, sizeof(pca_workspace));
   if (!w)
     return 0;
+
+  w->R = R_EARTH_KM;
+  w->ut = 0;
+  w->b = w->R + 110.0;
 
   fprintf(stderr, "pca_alloc: reading %s...", PCA_STAGE1_DATA);
   pca_read_data(PCA_STAGE1_DATA, &(w->nmax), &(w->mmax), NULL, NULL);
@@ -43,28 +50,30 @@ pca_alloc()
   w->K = pca_read_matrix(PCA_STAGE1_KNM);
   fprintf(stderr, "done (%zu-by-%zu matrix)\n", w->K->size1, w->K->size2);
 
-  fprintf(stderr, "pca_alloc: reading singular values from %s...", PCA_STAGE2B_SVAL);
-  w->S = pca_read_vector(PCA_STAGE2B_SVAL);
-  fprintf(stderr, "done (%zu singular values read)\n", w->S->size);
-
-  fprintf(stderr, "pca_alloc: reading left singular vectors from %s...", PCA_STAGE2B_U);
-  w->U = pca_read_matrix(PCA_STAGE2B_U);
-  fprintf(stderr, "done (%zu-by-%zu matrix read)\n", w->U->size1, w->U->size2);
-
-  w->R = R_EARTH_KM;
-
   w->green_workspace_p = green_alloc(w->nmax, w->mmax, w->R);
-
   w->nnm = green_nnm(w->green_workspace_p);
-  w->b = w->R + 110.0;
+
+  /* read SVD components for each UT hour */
+  fprintf(stderr, "pca_alloc: reading singular values and left singular vectors...");
+
+  for (i = 0; i < 24; ++i)
+    {
+      sprintf(buf, "%s_%02zuUT.dat", PCA_STAGE2B_SVAL, i);
+      w->S[i] = pca_read_vector(buf);
+
+      sprintf(buf, "%s_%02zuUT.dat", PCA_STAGE2B_U, i);
+      w->U[i] = pca_read_matrix(buf);
+
+      w->G[i] = gsl_matrix_alloc(w->nnm, w->nnm);
+    }
+
+  fprintf(stderr, "done\n");
 
   w->X = malloc(w->nnm * sizeof(double));
   w->Y = malloc(w->nnm * sizeof(double));
   w->Z = malloc(w->nnm * sizeof(double));
 
   w->work = gsl_vector_alloc(w->nnm);
-
-  w->G = gsl_matrix_alloc(w->nnm, w->nnm);
 
   pca_calc_G(w->b, w);
 
@@ -74,20 +83,22 @@ pca_alloc()
 void
 pca_free(pca_workspace *w)
 {
+  size_t i;
+
   if (w->K)
     gsl_matrix_free(w->K);
 
-  if (w->G)
-    gsl_matrix_free(w->G);
+  for (i = 0; i < 24; ++i)
+    {
+      if (w->S[i])
+        gsl_vector_free(w->S[i]);
 
-  if (w->S)
-    gsl_vector_free(w->S);
+      if (w->U[i])
+        gsl_matrix_free(w->U[i]);
 
-  if (w->U)
-    gsl_matrix_free(w->U);
-
-  if (w->V)
-    gsl_matrix_free(w->V);
+      if (w->G[i])
+        gsl_matrix_free(w->G[i]);
+    }
 
   if (w->green_workspace_p)
     green_free(w->green_workspace_p);
@@ -108,6 +119,54 @@ pca_free(pca_workspace *w)
 }
 
 /*
+pca_set_UT()
+  Set UT hour for PCA modes
+
+Inputs: ut - UT hour in [0,23]
+        w  - workspace
+*/
+
+int
+pca_set_UT(const size_t ut, pca_workspace *w)
+{
+  w->ut = ut;
+
+  if (w->ut >= 24)
+    w->ut -= 24;
+
+  return 0;
+}
+
+/*
+pca_sval()
+  Return some singular values for current UT hour in a vector
+
+Inputs: T - (output) vector of singular values, length of vector
+            determines how many singular values are returned,
+            sorted largest to smallest
+        w - workspace
+*/
+
+int
+pca_sval(gsl_vector * T, pca_workspace *w)
+{
+  const gsl_vector *S = w->S[w->ut];
+  const size_t nsing = T->size; /* number of requested singular values */
+
+  if (nsing > S->size)
+    {
+      GSL_ERROR ("T has wrong size", GSL_EBADLEN);
+    }
+  else
+    {
+      /* copy largest nsing singular values into T */
+      gsl_vector_const_view v = gsl_vector_const_subvector(S, 0, nsing);
+      gsl_vector_memcpy(T, &v.vector);
+      return GSL_SUCCESS;
+    }
+}
+
+/*
 pca_variance()
   Print cumulative variance based on singular values to a file.
 Also determine number of singular vectors required to explain
@@ -125,7 +184,7 @@ pca_variance(const char *filename, const double thresh, size_t * nsing,
              pca_workspace *w)
 {
   int s = 0;
-  const gsl_vector *S = w->S;
+  const gsl_vector *S = w->S[w->ut];
   const size_t n = S->size;
   FILE *fp = fopen(filename, "w");
   size_t i;
@@ -134,6 +193,7 @@ pca_variance(const char *filename, const double thresh, size_t * nsing,
   size_t nvec = 0;
 
   i = 1;
+  fprintf(fp, "# %02zu UT\n", w->ut);
   fprintf(fp, "# Field %zu: eigenvalue number i\n", i++);
   fprintf(fp, "# Field %zu: ( sum_{j=1}^i lambda_j ) / ( sum_j lambda_j )\n", i++);
 
@@ -332,7 +392,7 @@ pca_pc_B(const size_t pcidx, const double r, const double theta, const double ph
    */
   if (r <= w->b)
     {
-      gsl_vector_const_view pc_knm = gsl_matrix_const_column(w->U, pcidx);
+      gsl_vector_const_view pc_knm = gsl_matrix_const_column(w->U[w->ut], pcidx);
 
       green_calc_ext(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
 
@@ -342,7 +402,7 @@ pca_pc_B(const size_t pcidx, const double r, const double theta, const double ph
     }
   else
     {
-      gsl_vector_const_view pc_gnm = gsl_matrix_const_column(w->G, pcidx);
+      gsl_vector_const_view pc_gnm = gsl_matrix_const_column(w->G[w->ut], pcidx);
 
       green_calc_int(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
 
@@ -390,13 +450,13 @@ pca_B(const gsl_vector *alpha, const double r, const double theta, const double 
   if (r <= w->b)
     {
       /* external current source, use U matrix and external Green's functions */
-      U = w->U;
+      U = w->U[w->ut];
       green_calc_ext(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
     }
   else
     {
       /* internal current source, use G matrix and internal Green's functions */
-      U = w->G;
+      U = w->G[w->ut];
       green_calc_int(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
     }
 
@@ -444,7 +504,7 @@ pca_K(const gsl_vector *alpha, const double theta, const double phi, double K[3]
   for (i = 0; i < p; ++i)
     {
       double ai = gsl_vector_get(alpha, i);
-      gsl_vector_view Gi = gsl_matrix_column(w->G, i);
+      gsl_vector_view Gi = gsl_matrix_column(w->G[w->ut], i);
 
       gsl_blas_daxpy(ai, &Gi.vector, w->work);
     }
@@ -484,7 +544,7 @@ pca_chi(const gsl_vector *alpha, const double theta, const double phi, pca_works
   for (i = 0; i < p; ++i)
     {
       double ai = gsl_vector_get(alpha, i);
-      gsl_vector_view Ui = gsl_matrix_column(w->U, i);
+      gsl_vector_view Ui = gsl_matrix_column(w->U[w->ut], i);
 
       gsl_blas_daxpy(ai, &Ui.vector, w->work);
     }
@@ -509,24 +569,27 @@ Inputs: b - radius of current shell (km)
 static int
 pca_calc_G(const double b, pca_workspace *w)
 {
-  size_t n;
+  size_t n, ut;
   green_workspace *green_p = w->green_workspace_p;
 
-  for (n = 1; n <= w->nmax; ++n)
+  for (ut = 0; ut < 24; ++ut)
     {
-      int M = (int) GSL_MIN(n, w->mmax);
-      int m;
-      double nfac = -(double)n / (n + 1.0);
-      double rfac = pow(b / w->R, 2.0*n + 1.0);
-
-      for (m = -M; m <= M; ++m)
+      for (n = 1; n <= w->nmax; ++n)
         {
-          size_t cidx = green_nmidx(n, m, green_p);
-          gsl_vector_view k = gsl_matrix_row(w->U, cidx);
-          gsl_vector_view g = gsl_matrix_row(w->G, cidx);
+          int M = (int) GSL_MIN(n, w->mmax);
+          int m;
+          double nfac = -(double)n / (n + 1.0);
+          double rfac = pow(b / w->R, 2.0*n + 1.0);
 
-          gsl_vector_memcpy(&g.vector, &k.vector);
-          gsl_vector_scale(&g.vector, nfac * rfac);
+          for (m = -M; m <= M; ++m)
+            {
+              size_t cidx = green_nmidx(n, m, green_p);
+              gsl_vector_view k = gsl_matrix_row(w->U[ut], cidx);
+              gsl_vector_view g = gsl_matrix_row(w->G[ut], cidx);
+
+              gsl_vector_memcpy(&g.vector, &k.vector);
+              gsl_vector_scale(&g.vector, nfac * rfac);
+            }
         }
     }
 
@@ -546,7 +609,7 @@ Inputs: pcidx - index of PC
 static double
 pca_pc_chi(const size_t pcidx, const double theta, const double phi, pca_workspace *w)
 {
-  gsl_vector_const_view pc = gsl_matrix_const_column(w->U, pcidx);
+  gsl_vector_const_view pc = gsl_matrix_const_column(w->U[w->ut], pcidx);
   return pca_pc_calc_chi(w->b, theta, phi, &pc.vector, w);
 }
 

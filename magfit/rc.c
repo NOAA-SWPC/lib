@@ -56,13 +56,13 @@ static void *rc_alloc(const void * params);
 static void rc_free(void * vstate);
 static int rc_reset(void * vstate);
 static size_t rc_ncoeff(void * vstate);
-static int rc_add_datum(const double r, const double theta, const double phi,
-                            const double qdlat, const double B[3], void * vstate);
+static int rc_add_datum(const double t, const double r, const double theta, const double phi,
+                        const double qdlat, const double B[3], void * vstate);
 static int rc_fit(double * rnorm, double * snorm, void * vstate);
 static int rc_eval_B(const double r, const double theta, const double phi,
-                         double B[3], void * vstate);
+                     double B[3], void * vstate);
 static int rc_eval_J(const double r, const double theta, const double phi,
-                         double J[3], void * vstate);
+                     double J[3], void * vstate);
 static double rc_eval_chi(const double theta, const double phi, void * vstate);
 
 static int build_matrix_row(const double r, const double theta, const double phi,
@@ -154,7 +154,8 @@ rc_ncoeff(void * vstate)
 rc_add_datum()
   Add single vector measurement to LS system
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         qdlat  - QD latitude (degrees)
@@ -168,8 +169,8 @@ Notes:
 */
 
 static int
-rc_add_datum(const double r, const double theta, const double phi,
-                   const double qdlat, const double B[3], void * vstate)
+rc_add_datum(const double t, const double r, const double theta, const double phi,
+             const double qdlat, const double B[3], void * vstate)
 {
   rc_state_t *state = (rc_state_t *) vstate;
   size_t rowidx = state->n;
@@ -178,6 +179,7 @@ rc_add_datum(const double r, const double theta, const double phi,
   gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
 
+  (void) t;
   (void) qdlat;
 
   /* set rhs vector */
