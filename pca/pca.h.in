@@ -1,5 +1,7 @@
 /*
- * pca.h
+ * pca.h.in
+ *
+ * XXX URGENT XXX: do not edit pca.h directly. Edit pca.h.in instead
  */
 
 #ifndef INCLUDED_pca_h
@@ -23,23 +25,29 @@
 #define PCA_STAGE2B_U          "@abs_top_builddir@/pca/data/stage2b_U"
 #define PCA_STAGE2B_V          "@abs_top_builddir@/pca/data/stage2b_V"
 
+/* Stage3b: cumulative variance file prefix */
+#define PCA_STAGE3B_VAR        "@abs_top_builddir@/pca/data/stage3b_var"
+
 typedef struct
 {
-  size_t nmax;     /* maximum spherical harmonic degree */
-  size_t mmax;     /* maximum spherical harmonic order */
-  size_t nnm;      /* number of spherical harmonic coefficients */
-  double R;        /* reference radius (km) */
-  double b;        /* current shell radius (km) */
-  gsl_matrix *K;   /* knm matrix, nnm-by-nt */
-  gsl_vector *S;   /* singular values */
-  gsl_matrix *U;   /* left singular vectors in terms of knm, nnm-by-nnm */
-  gsl_matrix *V;   /* right singular vectors in terms of knm, nt-by-nt */
-  gsl_matrix *G;   /* left singular vectors in terms of gnm, nnm-by-nnm */
+  size_t nmax;        /* maximum spherical harmonic degree */
+  size_t mmax;        /* maximum spherical harmonic order */
+  size_t nnm;         /* number of spherical harmonic coefficients */
+  double R;           /* reference radius (km) */
+  double b;           /* current shell radius (km) */
+  gsl_matrix *K;      /* knm matrix, nnm-by-nt */
 
-  double *X;       /* temporary workspace, size nnm */
+  /* these arrays contain PC components for each UT hour [0,23] */
+  gsl_vector *S[24];  /* singular values */
+  gsl_matrix *U[24];  /* left singular vectors in terms of knm, nnm-by-nnm */
+  gsl_matrix *G[24];  /* left singular vectors in terms of gnm, nnm-by-nnm */
+
+  size_t ut;          /* current UT hour in [0,23] */
+
+  double *X;          /* temporary workspace, size nnm */
   double *Y;
   double *Z;
-  gsl_vector *work; /* size nnm */
+  gsl_vector *work;   /* size nnm */
 
   green_workspace *green_workspace_p;
 } pca_workspace;
@@ -50,6 +58,8 @@ typedef struct
 
 pca_workspace *pca_alloc();
 void pca_free(pca_workspace *w);
+int pca_set_UT(const size_t ut, pca_workspace *w);
+int pca_sval(gsl_vector * T, pca_workspace *w);
 int pca_variance(const char *filename, const double thresh, size_t * nsing,
                  pca_workspace *w);
 int pca_print_map(FILE *fp, const double r, const gsl_vector * alpha,

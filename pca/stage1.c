@@ -57,6 +57,11 @@
 
 #define TAPER_COEFFS                0
 
+/* fine-tune which components of the surface B maps to fit */
+#define FIT_X                       0
+#define FIT_Y                       0
+#define FIT_Z                       1
+
 /*
 print_residuals()
   Print model residuals for a given timestamp
@@ -111,7 +116,8 @@ print_residuals(const char *filename, const size_t tidx,
       for (ilat = 0; ilat < data->nlat; ++ilat)
         {
           size_t idx = TIEGCM_BIDX(tidx, ilat, ilon, data);
-          double B_model[3], B_data[3], chi;
+          double B_model[3] = { 0.0, 0.0, 0.0 };
+          double B_data[3], chi;
           double theta = M_PI / 2.0 - data->glat[ilat] * M_PI / 180.0;
 
           /* exclude poles */
@@ -124,13 +130,20 @@ print_residuals(const char *filename, const size_t tidx,
           B_data[1] = data->By[idx] * 1.0e9;
           B_data[2] = data->Bz[idx] * 1.0e9;
 
-          for (j = 0; j < 3; ++j)
-            {
-              B_model[j] = gsl_vector_get(b, bidx++);
+#if FIT_X
+          B_model[0] = gsl_vector_get(b, bidx++);
+          rnorm = gsl_hypot(rnorm, B_data[0] - B_model[0]);
+#endif
 
-              /* update residual norm */
-              rnorm = gsl_hypot(rnorm, B_data[j] - B_model[j]);
-            }
+#if FIT_Y
+          B_model[1] = gsl_vector_get(b, bidx++);
+          rnorm = gsl_hypot(rnorm, B_data[1] - B_model[1]);
+#endif
+
+#if FIT_Z
+          B_model[2] = gsl_vector_get(b, bidx++);
+          rnorm = gsl_hypot(rnorm, B_data[2] - B_model[2]);
+#endif
 
           chi = green_eval_chi_ext(green_ext->R + 110.0, theta, phi, c, green_ext);
 
@@ -227,19 +240,29 @@ size_t
 main_build_matrix(const magdata *mdata, green_workspace *green_ext,
                   green_workspace *green_int, gsl_matrix *A)
 {
-  const size_t n = A->size1;
   const size_t p_ext = green_ext->nnm;
   const size_t p_int = green_int->nnm;
   const double eps = 1.0e-4;
+  gsl_vector *X_ext = gsl_vector_alloc(p_ext);
+  gsl_vector *Y_ext = gsl_vector_alloc(p_ext);
+  gsl_vector *Z_ext = gsl_vector_alloc(p_ext);
+  gsl_vector *X_int, *Y_int, *Z_int;
   size_t rowidx = 0;
   size_t i;
+
+  if (p_int > 0)
+    {
+      X_int = gsl_vector_alloc(p_int);
+      Y_int = gsl_vector_alloc(p_int);
+      Z_int = gsl_vector_alloc(p_int);
+    }
 
   for (i = 0; i < mdata->n; ++i)
     {
       double r = mdata->r[i];
       double theta = mdata->theta[i];
       double phi = mdata->phi[i];
-      gsl_vector_view vx, vy, vz;
+      gsl_vector_view v;
 
       /* exclude poles from fit */
       if (theta < eps)
@@ -247,26 +270,62 @@ main_build_matrix(const magdata *mdata, green_workspace *green_ext,
       if (theta > M_PI - eps)
         continue;
 
-      vx = gsl_matrix_subrow(A, rowidx, 0, p_ext);
-      vy = gsl_matrix_subrow(A, rowidx + 1, 0, p_ext);
-      vz = gsl_matrix_subrow(A, rowidx + 2, 0, p_ext);
-
       /* compute external Green's functions */
-      green_calc_ext(r, theta, phi, vx.vector.data,
-                     vy.vector.data, vz.vector.data, green_ext);
+      green_calc_ext(r, theta, phi, X_ext->data, Y_ext->data, Z_ext->data, green_ext);
+
+      /* compute internal Green's functions */
+      if (p_int > 0)
+        green_calc_int(r, theta, phi, X_int->data, Y_int->data, Z_int->data, green_int);
+
+#if FIT_X
+      v = gsl_matrix_subrow(A, rowidx, 0, p_ext);
+      gsl_vector_memcpy(&v.vector, X_ext);
 
       if (p_int > 0)
         {
-          vx = gsl_matrix_subrow(A, rowidx, p_ext, p_int);
-          vy = gsl_matrix_subrow(A, rowidx + 1, p_ext, p_int);
-          vz = gsl_matrix_subrow(A, rowidx + 2, p_ext, p_int);
-
-          /* compute internal Green's functions */
-          green_calc_int(r, theta, phi, vx.vector.data,
-                         vy.vector.data, vz.vector.data, green_int);
+          v = gsl_matrix_subrow(A, rowidx, p_ext, p_int);
+          gsl_vector_memcpy(&v.vector, X_int);
         }
 
-      rowidx += 3;
+      ++rowidx;
+#endif
+
+#if FIT_Y
+      v = gsl_matrix_subrow(A, rowidx, 0, p_ext);
+      gsl_vector_memcpy(&v.vector, Y_ext);
+
+      if (p_int > 0)
+        {
+          v = gsl_matrix_subrow(A, rowidx, p_ext, p_int);
+          gsl_vector_memcpy(&v.vector, Y_int);
+        }
+
+      ++rowidx;
+#endif
+
+#if FIT_Z
+      v = gsl_matrix_subrow(A, rowidx, 0, p_ext);
+      gsl_vector_memcpy(&v.vector, Z_ext);
+
+      if (p_int > 0)
+        {
+          v = gsl_matrix_subrow(A, rowidx, p_ext, p_int);
+          gsl_vector_memcpy(&v.vector, Z_int);
+        }
+
+      ++rowidx;
+#endif
+    }
+
+  gsl_vector_free(X_ext);
+  gsl_vector_free(Y_ext);
+  gsl_vector_free(Z_ext);
+
+  if (p_int > 0)
+    {
+      gsl_vector_free(X_int);
+      gsl_vector_free(Y_int);
+      gsl_vector_free(Z_int);
     }
 
   return rowidx;
@@ -280,7 +339,6 @@ main_build_rhs()
 size_t
 main_build_rhs(const size_t tidx, const tiegcm_data *data, gsl_vector *b)
 {
-  const size_t n = b->size;
   const double eps = 1.0e-4;
   size_t ilon, ilat;
   size_t rowidx = 0;
@@ -299,27 +357,15 @@ main_build_rhs(const size_t tidx, const tiegcm_data *data, gsl_vector *b)
           if (theta > M_PI - eps)
             continue;
 
-#if 0 /* XXX */
-          {
-            double phi = data->glon[ilon] * M_PI / 180.0;
-            double q11 = 1.0;
-            double q10 = 5.0;
-            double k11 = -2.3;
-            double X[3], Y[3], Z[3];
-            size_t idx11 = green_nmidx(1, 1, green_p);
-            size_t idx10 = green_nmidx(1, 0, green_p);
-            size_t idx1m1 = green_nmidx(1, -1, green_p);
-
-            green_calc_ext(R_EARTH_KM, theta, phi, X, Y, Z, green_p);
-
-            gsl_vector_set(b, rowidx++, q11 * X[idx11] + q10 * X[idx10] + k11 * X[idx1m1]);
-            gsl_vector_set(b, rowidx++, q11 * Y[idx11] + q10 * Y[idx10] + k11 * Y[idx1m1]);
-            gsl_vector_set(b, rowidx++, q11 * Z[idx11] + q10 * Z[idx10] + k11 * Z[idx1m1]);
-          }
-
-#else
+#if FIT_X
           gsl_vector_set(b, rowidx++, data->Bx[idx] * 1.0e9);
+#endif
+
+#if FIT_Y
           gsl_vector_set(b, rowidx++, data->By[idx] * 1.0e9);
+#endif
+
+#if FIT_Z
           gsl_vector_set(b, rowidx++, data->Bz[idx] * 1.0e9);
 #endif
         }
@@ -458,6 +504,32 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   fprintf(stderr, "done (%g seconds, s = %d, rank = %d)\n",
           time_diff(tv0, tv1), status, rank);
 
+  /* form residual matrix R = B - A*X */
+  {
+    gsl_matrix *R = gsl_matrix_alloc(ndata, nrhs);
+    double rnorm_max = 0.0;
+
+    gsl_matrix_memcpy(R, &BB.matrix);
+
+    fprintf(stderr, "main_proc: computing residual matrix R = B - AX...");
+    gettimeofday(&tv0, NULL);
+    gsl_blas_dgemm(CblasNoTrans, CblasNoTrans, 1.0, &AA.matrix, X, -1.0, R);
+    gettimeofday(&tv1, NULL);
+    fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+    for (k = 0; k < nrhs; ++k)
+      {
+        gsl_vector_view v = gsl_matrix_column(R, k);
+        double norm = gsl_blas_dnrm2(&v.vector);
+        if (norm > rnorm_max)
+          rnorm_max = norm;
+      }
+
+    fprintf(stderr, "main_proc: maximum residual norm = %.12e\n", rnorm_max);
+
+    gsl_matrix_free(R);
+  }
+
   /* taper high degree coefficients to correct TIEGCM ringing */
   {
     gsl_matrix_memcpy(X_taper, X);
@@ -490,14 +562,13 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
 
   /* print residuals for a given timestamp */
   {
-#if 1
 #if 0
     const time_t unix_time = 1240660800; /* Apr 25 2009 12:00:00 UTC */
-#else
+#elif 0
     const time_t unix_time = 1240617600; /* Apr 25 2009 12:00:00 UTC */
-#endif
+#elif 0
     const size_t k = bsearch_timet(data->t, unix_time, 0, data->nt - 1);
-#else
+#elif 1
     const size_t k = 0;
 #endif
     gsl_vector_view x = gsl_matrix_column(X_taper, k);

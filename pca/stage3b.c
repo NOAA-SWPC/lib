@@ -310,14 +310,12 @@ main(int argc, char *argv[])
   const size_t mmax = GSL_MIN(nmax, 30);
   const double R = R_EARTH_KM;
   green_workspace *green_p = green_alloc(nmax, mmax, R);
+  pca_workspace *pca_p = pca_alloc();
   char *knm_file = "data/stage1_knm.dat";
 
-  char *sval_file = "data/stage2b_sval.dat";
-  char *U_file = "data/stage2b_U.dat";
-
-  char *variance_file = "variance_time.txt";
   char *pc_file = "pc_time.txt";
   char *recon_file = "recon_time.txt";
+  char buf[2048];
 
   const double var_thresh = 0.99;
 
@@ -357,19 +355,26 @@ main(int argc, char *argv[])
   knm = pca_read_matrix(knm_file);
   fprintf(stderr, "done (%zu-by-%zu matrix read)\n", knm->size1, knm->size2);
 
-  fprintf(stderr, "main: reading singular values from %s...", sval_file);
-  S = pca_read_vector(sval_file);
-  fprintf(stderr, "done (%zu singular values read)\n", S->size);
+  {
+    size_t i;
 
-  fprintf(stderr, "main: reading left singular vectors from %s...", U_file);
-  U = pca_read_matrix(U_file);
-  fprintf(stderr, "done (%zu-by-%zu matrix read)\n", U->size1, U->size2);
+    /* plot a variance curve for each UT to help decide how many eigenvectors to keep */
+    for (i = 0; i < 24; ++i)
+      {
+        pca_set_UT(i, pca_p);
 
-  /* plot a variance curve to help decide how many eigenvectors to keep */
-  fprintf(stderr, "main: writing variance curve to %s...", variance_file);
-  print_variance(variance_file, S, var_thresh, &P);
-  fprintf(stderr, "done (%zu singular vectors needed to explain %.1f%% of variance)\n",
-          P, var_thresh * 100.0);
+        sprintf(buf, "%s_time_%02zuUT.txt", PCA_STAGE3B_VAR, i);
+
+        fprintf(stderr, "main: writing variance curve for %02zu UT to %s...", i, buf);
+        pca_variance(buf, var_thresh, &P, pca_p);
+        fprintf(stderr, "done (%zu singular vectors needed to explain %.1f%% of variance)\n",
+                P, var_thresh * 100.0);
+      }
+  }
+
+  pca_set_UT(12, pca_p);
+  U = pca_p->U[pca_p->ut];
+  S = pca_p->S[pca_p->ut];
 
   nnm = U->size1;
   nt = knm->size2;
@@ -414,12 +419,11 @@ main(int argc, char *argv[])
   print_pc_maps(pc_file, U, green_p);
   fprintf(stderr, "done\n");
 
-  gsl_matrix_free(U);
   gsl_matrix_free(alpha);
   gsl_matrix_free(knmt);
   gsl_matrix_free(knm);
-  gsl_vector_free(S);
   green_free(green_p);
+  pca_free(pca_p);
 
   return 0;
 }

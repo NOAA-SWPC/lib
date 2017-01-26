@@ -37,7 +37,7 @@
 #define PCA_WEIGHT_Z                 (5.0)
 
 /* assign higher weight to low-latitude data for better EEJ fit */
-#define PCA_WEIGHT_EEJ               (10.0)
+#define PCA_WEIGHT_EEJ               (1.0)
 
 typedef struct
 {
@@ -313,53 +313,6 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
   if (state->n < state->p)
     return -1;
 
-#if 0
-
-  /* form and solve augmented system [ A ; lambda*L ] c = [ b ; 0 ]; this is useful if
-   * L is singular */
-  {
-    gsl_matrix_view m;
-    gsl_vector_view v;
-    gsl_vector_view res = gsl_vector_subvector(state->residual, 0, state->n + state->p);
-    size_t rank;
-
-#if 0
-    lambda = 8.0e1;
-#else
-    lambda = 323.5;
-#endif
-
-    /* apply weights */
-    gsl_multifit_linear_applyW(&A.matrix, &wts.vector, &b.vector, &A.matrix, &b.vector);
-
-    print_octave(&A.matrix, "A");
-    printv_octave(&b.vector, "b");
-    printv_octave(state->L, "L");
-
-    m = gsl_matrix_submatrix(state->X_aug, 0, 0, state->n, state->p);
-    gsl_matrix_memcpy(&m.matrix, &A.matrix);
-
-    m = gsl_matrix_submatrix(state->X_aug, state->n, 0, state->p, state->p);
-    gsl_matrix_set_zero(&m.matrix);
-    v = gsl_matrix_diagonal(&m.matrix);
-    gsl_vector_memcpy(&v.vector, state->L);
-    gsl_vector_scale(&v.vector, lambda);
-
-    gsl_vector_set_zero(state->rhs_aug);
-
-    v = gsl_vector_subvector(state->rhs_aug, 0, state->n);
-    gsl_vector_memcpy(&v.vector, &b.vector);
-
-    m = gsl_matrix_submatrix(state->X_aug, 0, 0, state->n + state->p, state->p);
-    v = gsl_vector_subvector(state->rhs_aug, 0, state->n + state->p);
-
-    /* solve augmented system via COD */
-    gsl_linalg_COD_decomp(&m.matrix, state->tau_Q, state->tau_Z, state->perm, &rank, state->work);
-    gsl_linalg_COD_lssolve(&m.matrix, state->tau_Q, state->tau_Z, state->perm, rank, &v.vector, state->c, &res.vector);
-  }
-
-#else
-
   /* construct L = diag(1/s_i) */
   pca_sval(state->L, state->pca_workspace_p);
 
@@ -423,8 +376,6 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
     }
 
   fprintf(stderr, "done\n");
-
-#endif
 
   printv_octave(state->c, "c");
 

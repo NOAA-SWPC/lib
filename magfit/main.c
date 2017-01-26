@@ -31,7 +31,7 @@
 
 /* define to fit to C/B data */
 #define FIT_SAT_C                  1
-#define FIT_SAT_B                  1
+#define FIT_SAT_B                  0
 
 typedef struct
 {
@@ -261,7 +261,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
   int s = 0;
   size_t i, j, k;
   size_t nflagged, nunflagged;
-  const magfit_type *T = magfit_pca;
+  const magfit_type *T = magfit_secs2d;
   magfit_parameters magfit_params = magfit_default_parameters();
   magfit_workspace *magfit_p;
   const char *file1 = "data1.txt";
@@ -290,12 +290,12 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
     }
   else if (T == magfit_pca)
     {
-      magfit_params.pca_modes = 7;
+      magfit_params.pca_modes = 10;
 
       if (data[1] == NULL)
         {
           /* single satellite fit, use less modes */
-          magfit_params.pca_modes = 17;
+          magfit_params.pca_modes = 10;
         }
     }
 
@@ -361,8 +361,8 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
       if (track[2])
         {
           /* find Swarm B crossing */
-          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);*/
-          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);
+          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);
+          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);*/
           if (s)
             continue;
 
@@ -468,7 +468,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
 #endif
 
 /*XXX*/
-if (idx == 1)
+/*if (idx == 5)*/
 {
       fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track[0]->n, idx);
       gettimeofday(&tv0, NULL);
@@ -505,7 +505,7 @@ if (idx == 1)
               J[1]);
       fflush(fp_current);
 
-#if 1
+#if 0
       /* write current map */
       fprintf(stderr, "main_proc: writing current map for index %zu to %s...", idx, file_chi);
       magfit_print_map(fp_chi, R_EARTH_KM + 450.0, magfit_p);

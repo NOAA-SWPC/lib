@@ -32,6 +32,9 @@
 /* define to use uniform pole spacing in latitude */
 #define SECS2D_UNIFORM_THETA         1
 
+/* define to upweight equatorial data */
+#define SECS2D_WEIGHT_EEJ            (1.0)
+
 typedef struct
 {
   size_t n;         /* total number of measurements in system */
@@ -286,7 +289,7 @@ secs2d_add_datum(const double t, const double r, const double theta, const doubl
     {
       /* upweight equatorial data */
       if (fabs(qdlat) < 10.0)
-        wi *= 10.0;
+        wi = SECS2D_WEIGHT_EEJ;
 
       /* set rhs vector */
       gsl_vector_set(state->rhs, rowidx, B[0]);
@@ -335,10 +338,10 @@ secs2d_fit(double * rnorm, double * snorm, void * vstate)
   secs2d_state_t *state = (secs2d_state_t *) vstate;
   const size_t npts = 200;
   /* Note: to get a reasonable current map, use tol = 3e-1 */
-#if 1
+#if 0
   const double tol = 3.0e-1;
 #else
-  const double tol = 3.0e-1;
+  const double tol = 1.0e-2;
 #endif
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);

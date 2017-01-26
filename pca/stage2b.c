@@ -35,7 +35,7 @@
 #include "pca_common.c"
 
 /* define to subtract mean from knm(t) time series prior to SVD */
-#define SUBTRACT_MEAN           0
+#define SUBTRACT_MEAN           1
 
 /* define to taper the high degree SH coefficients with a cosine taper (to correct
  * TIEGCM ringing issue) */
@@ -132,10 +132,12 @@ calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
 
   m = gsl_matrix_submatrix(A, 0, 0, nnm, nt);
 
+#if 0
 #if SUBTRACT_MEAN
   fprintf(stderr, "calc_pca: subtracting mean from each %zu UT knm time series...", ut);
   subtract_mean(&m.matrix);
   fprintf(stderr, "done\n");
+#endif
 #endif
 
   /* compute 1/sqrt(nt) A for SVD computation */
@@ -266,6 +268,12 @@ main(int argc, char *argv[])
 
 #endif
 
+#if SUBTRACT_MEAN
+  fprintf(stderr, "main: subtracting mean from each knm time series...");
+  subtract_mean(K);
+  fprintf(stderr, "done\n");
+#endif
+
 #if 1
   /* loop over UT and compute PCA modes for each UT hour */
   for (ut = 0; ut < 24; ++ut)
@@ -273,12 +281,6 @@ main(int argc, char *argv[])
       calc_pca(ut, K, ut_array);
     }
   exit(1);
-#endif
-
-#if SUBTRACT_MEAN
-  fprintf(stderr, "main: subtracting mean from each knm time series...");
-  subtract_mean(K);
-  fprintf(stderr, "done\n");
 #endif
 
   /* compute 1/sqrt(nt) K for SVD computation */

@@ -2,7 +2,7 @@
 #
 # Plot current stream function with contour lines
 
-UT = 15
+UT = 12
 
 set term pngcairo enh col size 800,600
 

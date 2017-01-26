@@ -1,5 +1,7 @@
 /*
- * pca.h
+ * pca.h.in
+ *
+ * XXX URGENT XXX: do not edit pca.h directly. Edit pca.h.in instead
  */
 
 #ifndef INCLUDED_pca_h
@@ -23,26 +25,29 @@
 #define PCA_STAGE2B_U          "/data/palken/lib/pca/data/stage2b_U"
 #define PCA_STAGE2B_V          "/data/palken/lib/pca/data/stage2b_V"
 
+/* Stage3b: cumulative variance file prefix */
+#define PCA_STAGE3B_VAR        "/data/palken/lib/pca/data/stage3b_var"
+
 typedef struct
 {
-  size_t nmax;       /* maximum spherical harmonic degree */
-  size_t mmax;       /* maximum spherical harmonic order */
-  size_t nnm;        /* number of spherical harmonic coefficients */
-  double R;          /* reference radius (km) */
-  double b;          /* current shell radius (km) */
-  gsl_matrix *K;     /* knm matrix, nnm-by-nt */
+  size_t nmax;        /* maximum spherical harmonic degree */
+  size_t mmax;        /* maximum spherical harmonic order */
+  size_t nnm;         /* number of spherical harmonic coefficients */
+  double R;           /* reference radius (km) */
+  double b;           /* current shell radius (km) */
+  gsl_matrix *K;      /* knm matrix, nnm-by-nt */
 
   /* these arrays contain PC components for each UT hour [0,23] */
-  gsl_vector *S[24]; /* singular values */
-  gsl_matrix *U[24]; /* left singular vectors in terms of knm, nnm-by-nnm */
-  gsl_matrix *G[24]; /* left singular vectors in terms of gnm, nnm-by-nnm */
+  gsl_vector *S[24];  /* singular values */
+  gsl_matrix *U[24];  /* left singular vectors in terms of knm, nnm-by-nnm */
+  gsl_matrix *G[24];  /* left singular vectors in terms of gnm, nnm-by-nnm */
 
-  size_t ut;         /* current UT hour in [0,23] */
+  size_t ut;          /* current UT hour in [0,23] */
 
-  double *X;         /* temporary workspace, size nnm */
+  double *X;          /* temporary workspace, size nnm */
   double *Y;
   double *Z;
-  gsl_vector *work;  /* size nnm */
+  gsl_vector *work;   /* size nnm */
 
   green_workspace *green_workspace_p;
 } pca_workspace;
@@ -64,8 +69,5 @@ int pca_pc_B(const size_t pcidx, const double r, const double theta, const doubl
 int pca_B(const gsl_vector *alpha, const double r, const double theta, const double phi,
           double B[3], pca_workspace *w);
 double pca_chi(const gsl_vector *alpha, const double theta, const double phi, pca_workspace *w);
-int pca_K(const gsl_vector *alpha, const double theta, const double phi, double K[3], pca_workspace *w);
-int pca_print_pc_map(const char *filename, const double r, const size_t pcidx,
-                     pca_workspace *w);
 
 #endif /* INCLUDED_pca_h */

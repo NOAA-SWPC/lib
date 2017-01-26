@@ -19,6 +19,7 @@ The geomagnetic field can be decomposed into toroidal and poloidal
 components:
 \begin{equation}
 \B = \B_{tor} + \B_{pol}
+\label{eqn:Btot}
 \end{equation}
 where
 \begin{align}
@@ -48,7 +49,7 @@ expand these scalars in a basis of spherical harmonics:
 \begin{align}
 \Phi(r,\theta,\phi) = \sum_{nm} \phi_{nm}(r) Y_{nm}(\theta,\phi) \\
 \Psi(r,\theta,\phi) = R \sum_{nm} \psi_{nm}(r) Y_{nm}(\theta,\phi) \\
-Q(r,\theta,\phi) = \frac{1}{R} \sum_{nm} q_{nm}(r) Y_{nm}(\theta,\phi)
+Q(r,\theta,\phi) = \frac{1}{R} \sum_{nm} q_{nm}(r) Y_{nm}(\theta,\phi) \label{eqn:Q}
 \end{align}
 Here, $R$ is a reference radius introduced so that
 $\phi_{nm}(r),\psi_{nm}(r),q_{nm}(r)$ all have the same units (nT).
@@ -404,6 +405,59 @@ q_{nm}(r) &= q_{nm} \cos{\left[ \frac{\pi}{c-a} \left( r - \frac{1}{2}(c+a) \rig
 q_{nm}(r) &= q_{nm} (r-a)^2 (r-c)^2
 \end{align}
 
+\section{Real case}
+
+When using real-valued spherical harmonic basis functions, Eqs.~\eqref{eqn:Btot}-\eqref{eqn:Q}
+remain the same. But we define a new real-valued basis function
+\begin{equation}
+Y_{nm}(\theta,\phi) = \left\{
+\begin{array}{cc}
+S_{nm}(\cos{\theta}) \cos{(m \phi)} & m \ge 0 \\
+S_{n|m|}(\cos{\theta}) \sin{(|m| \phi)} & m < 0
+\end{array}
+\right.
+\end{equation}
+for the spherical harmonic expansion. For these real-valued functions, we still
+have the identity $r^2 \nabla^2 Y_{nm} = -n(n+1) Y_{nm}$, which is needed to
+derive the magnetic field vectors. They are
+\begin{align}
+\B_{tor} &= \sum_{nm} \phi_{nm}(r)
+\left[
+\begin{array}{c}
+0 \\
+-\frac{1}{\sin{\theta}} \partial_{\phi} Y_{nm} \\
+\partial_{\theta} Y_{nm}
+\end{array}
+\right] \\
+\B_{pol} &= -\frac{R}{r} \sum_{nm}
+\left[
+\begin{array}{c}
+n(n+1) \psi_{nm}(r) Y_{nm} \\
+\partial_r \left( r \psi_{nm}(r) \right) \partial_{\theta} Y_{nm} \\
+\frac{1}{\sin{\theta}} \partial_r \left( r \psi_{nm}(r) \right) \partial_{\phi} Y_{nm}
+\end{array}
+\right]
+\end{align}
+The current densities are
+\begin{align}
+\mu_0 \J_{tor} &= \frac{1}{R} \sum_{nm} q_{nm}(r)
+\left[
+\begin{array}{c}
+0 \\
+-\frac{1}{\sin{\theta}} \partial_{\phi} Y_{nm} \\
+\partial_{\theta} Y_{nm}
+\end{array}
+\right] \\
+\mu_0 \J_{pol} &= -\frac{1}{r} \sum_{nm}
+\left[
+\begin{array}{c}
+n(n+1) \phi_{nm}(r) Y_{nm} \\
+\partial_r \left( r \phi_{nm}(r) \right) \partial_{\theta} Y_{nm} \\
+\frac{1}{\sin{\theta}} \partial_r \left( r \phi_{nm}(r) \right) \partial_{\phi} Y_{nm}
+\end{array}
+\right]
+\end{align}
+
 \section{Identities}
 
 Here are some useful identities involving the toroidal and poloidal differential operators.
@@ -415,7 +469,15 @@ Here are some useful identities involving the toroidal and poloidal differential
 \wedge \cdot \left( \nabla \times \wedge \right) &= 0 \\
 \R \cdot \wedge &= 0 \\
 \nabla \cdot \wedge &= 0 \\
-\nabla \cdot \left( \nabla \times \wedge \right) &= 0
+\nabla \cdot \left( \nabla \times \wedge \right) &= 0 \\
+\wedge f(\theta,\phi) &=
+\left[
+\begin{array}{c}
+0 \\
+-\frac{1}{\sin{\theta}} \partial_{\phi} f \\
+\partial_{\theta} f
+\end{array}
+\right]
 \end{align}
 
 \end{document}
