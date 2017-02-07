@@ -28,6 +28,9 @@
 
 #include "magfit.h"
 
+/* weight factor for low-latitude EEJ region */
+#define SECS1D_WEIGHT_EEJ           (10.0)
+
 typedef struct
 {
   size_t n;         /* total number of measurements in system */
@@ -152,7 +155,7 @@ secs1d_alloc(const void * params)
 
   /* regularization matrix L */
   {
-#if 0
+#if 1
     /* single k-derivative norm */
     const size_t k = 2;
     const size_t m = state->p - k; /* L is m-by-p */
@@ -171,7 +174,7 @@ secs1d_alloc(const void * params)
     state->bs = gsl_vector_alloc(state->nmax);
     state->cs = gsl_vector_alloc(state->p);
 
-#if 0
+#if 1
     gsl_multifit_linear_Lk(state->p, k, state->L);
 #else
     gsl_multifit_linear_Lsobolev(state->p, kmax, &alpha.vector,
@@ -305,14 +308,14 @@ secs1d_add_datum(const double t, const double r, const double theta, const doubl
   (void) t; /* unused parameter */
   (void) phi; /* unused parameter */
 
+  /* upweight equatorial data */
+  if (fabs(qdlat) < 10.0)
+    wi = SECS1D_WEIGHT_EEJ;
+
   if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
     {
       gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
       gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 1);
-
-      /* upweight equatorial data */
-      if (fabs(qdlat) < 10.0)
-        wi *= 10.0;
 
       /* set rhs vector */
       gsl_vector_set(state->rhs, rowidx, B[0]);
@@ -377,7 +380,7 @@ secs1d_fit(double * rnorm, double * snorm, void * vstate)
   gsl_matrix_view A = gsl_matrix_submatrix(state->X, 0, 0, state->n, state->p);
   gsl_vector_view b = gsl_vector_subvector(state->rhs, 0, state->n);
   gsl_vector_view wts = gsl_vector_subvector(state->wts, 0, state->n);
-  double lambda_gcv, lambda_l, G_gcv;
+  double lambda_gcv, lambda_l, lambda, G_gcv;
   size_t i;
   const size_t m = state->L->size1;
   gsl_matrix_view M = gsl_matrix_submatrix(state->M, 0, 0, state->n, state->p);
@@ -385,7 +388,7 @@ secs1d_fit(double * rnorm, double * snorm, void * vstate)
   gsl_vector_view bs = gsl_vector_subvector(state->bs, 0, state->n - state->p + m);
   gsl_vector_view cs = gsl_vector_subvector(state->cs, 0, m);
   const char *lambda_file = "lambda.dat";
-  FILE *fp = fopen(lambda_file, "w");
+  FILE *fp = fopen(lambda_file, "a");
   double s0; /* largest singular value */
 
   if (state->n < state->p)
@@ -408,15 +411,8 @@ secs1d_fit(double * rnorm, double * snorm, void * vstate)
 
 #else /* Tikhonov / L-curve */
 
-#if 0
-  /* convert to standard form */
-  gsl_multifit_linear_applyW(&A.matrix, &wts.vector, &b.vector, &A.matrix, &b.vector);
-#else
-
   gsl_multifit_linear_wstdform2(state->L, state->Ltau, &A.matrix, &wts.vector, &b.vector,
                                 &As.matrix, &bs.vector, &M.matrix, state->multifit_p);
-
-#endif
 
   /* compute SVD of A */
   gsl_multifit_linear_svd(&As.matrix, state->multifit_p);
@@ -430,19 +426,28 @@ secs1d_fit(double * rnorm, double * snorm, void * vstate)
   /* compute GCV curve */
   gsl_multifit_linear_gcv(&bs.vector, reg_param, G, &lambda_gcv, &G_gcv, state->multifit_p);
 
-  /* the L-curve method often overdamps the system, not sure why */
-  lambda_l *= 1.0e-2;
-  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
+  /* the L-curve method often overdamps the system - I think its because some L-curves have
+   * multiple corners and its finding the wrong one */
+#if 1
+  lambda = GSL_MIN(lambda_l, 1.0e-4 * s0);
+#else
+  lambda = lambda_l;
+#endif
 
-  /* solve regularized system with lambda_l */
-  gsl_multifit_linear_solve(lambda_l, &As.matrix, &bs.vector, &cs.vector, rnorm, snorm, state->multifit_p);
+  /* solve regularized system with lambda */
+  gsl_multifit_linear_solve(lambda, &As.matrix, &bs.vector, &cs.vector, rnorm, snorm, state->multifit_p);
 
   /* convert back to general form */
   gsl_multifit_linear_wgenform2(state->L, state->Ltau, &A.matrix, &wts.vector, &b.vector, &cs.vector, &M.matrix,
                                 state->c, state->multifit_p);
 
+  fprintf(stderr, "s0 = %.12e\n", s0);
   fprintf(stderr, "lambda_l = %.12e\n", lambda_l);
   fprintf(stderr, "lambda_gcv = %.12e\n", lambda_gcv);
+  fprintf(stderr, "lambda = %.12e\n", lambda);
+  fprintf(stderr, "rnorm = %.12e\n", *rnorm);
+  fprintf(stderr, "snorm = %.12e\n", *snorm);
+  fprintf(stderr, "cond(X) = %.12e\n", 1.0 / gsl_multifit_linear_rcond(state->multifit_p));
 
   fprintf(stderr, "secs1d_fit: writing %s...", lambda_file);
 
@@ -455,14 +460,11 @@ secs1d_fit(double * rnorm, double * snorm, void * vstate)
               gsl_vector_get(G, i));
     }
 
+  fprintf(fp, "\n\n");
+
   fprintf(stderr, "done\n");
 
 #endif
-
-  fprintf(stderr, "rnorm = %.12e\n", *rnorm);
-  fprintf(stderr, "snorm = %.12e\n", *snorm);
-
-  fprintf(stderr, "cond(X) = %.12e\n", 1.0 / gsl_multifit_linear_rcond(state->multifit_p));
 
   gsl_vector_free(reg_param);
   gsl_vector_free(rho);

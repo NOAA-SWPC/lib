@@ -58,9 +58,9 @@
 #define TAPER_COEFFS                0
 
 /* fine-tune which components of the surface B maps to fit */
-#define FIT_X                       0
-#define FIT_Y                       0
-#define FIT_Z                       1
+#define FIT_X                       1
+#define FIT_Y                       1
+#define FIT_Z                       0
 
 /*
 print_residuals()

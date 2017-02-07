@@ -31,7 +31,7 @@
 
 /* define to fit to C/B data */
 #define FIT_SAT_C                  1
-#define FIT_SAT_B                  0
+#define FIT_SAT_B                  1
 
 typedef struct
 {
@@ -264,10 +264,12 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
   const magfit_type *T = magfit_secs2d;
   magfit_parameters magfit_params = magfit_default_parameters();
   magfit_workspace *magfit_p;
+  const char *lambda_file = "lambda.dat";
   const char *file1 = "data1.txt";
   const char *file2 = "data2.txt";
   const char *file3 = "data3.txt";
   const char *file_chi = "chi.txt";
+  FILE *fp_lambda = fopen(lambda_file, "w");
   FILE *fp1 = fopen(file1, "w");
   FILE *fp2 = fopen(file2, "w");
   FILE *fp3 = fopen(file3, "w");
@@ -282,7 +284,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
 
   if (T == magfit_secs1d)
     {
-      magfit_params.secs_flags = MAGFIT_SECS_FLG_FIT_DF | MAGFIT_SECS_FLG_FIT_CF;
+      magfit_params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
     }
   else if (T == magfit_secs2d)
     {
@@ -300,6 +302,10 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
     }
 
   putenv("TZ=GMT");
+
+  /* the fopen above is just to delete contents of lambda_file - the individual magfit routines will
+   * add L-curve data to the file in the loop below */
+  fclose(fp_lambda);
 
   nflagged = track_nflagged(track[0]);
   nunflagged = track[0]->n - nflagged;
@@ -361,8 +367,8 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
       if (track[2])
         {
           /* find Swarm B crossing */
-          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);
-          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);*/
+          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);*/
+          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);
           if (s)
             continue;
 
@@ -468,7 +474,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
 #endif
 
 /*XXX*/
-/*if (idx == 5)*/
+if (idx == 1)
 {
       fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track[0]->n, idx);
       gettimeofday(&tv0, NULL);
@@ -505,7 +511,7 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
               J[1]);
       fflush(fp_current);
 
-#if 0
+#if 1
       /* write current map */
       fprintf(stderr, "main_proc: writing current map for index %zu to %s...", idx, file_chi);
       magfit_print_map(fp_chi, R_EARTH_KM + 450.0, magfit_p);
