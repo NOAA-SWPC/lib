@@ -65,6 +65,13 @@ pca_alloc()
       w->U[i] = pca_read_matrix(buf);
 
       w->G[i] = gsl_matrix_alloc(w->nnm, w->nnm);
+
+      sprintf(buf, "%s_%02zuUT.dat", PCA_STAGE2B_MU, i);
+      w->mu[i] = pca_read_vector(buf);
+
+      /* convert mu in knm to gnm */
+      w->mu_gnm[i] = gsl_vector_alloc(w->nnm);
+      green_k2g(w->b, w->mu[i], w->mu_gnm[i], w->green_workspace_p);
     }
 
   fprintf(stderr, "done\n");
@@ -98,6 +105,12 @@ pca_free(pca_workspace *w)
 
       if (w->G[i])
         gsl_matrix_free(w->G[i]);
+
+      if (w->mu[i])
+        gsl_vector_free(w->mu[i]);
+
+      if (w->mu_gnm[i])
+        gsl_vector_free(w->mu_gnm[i]);
     }
 
   if (w->green_workspace_p)
@@ -295,6 +308,76 @@ pca_print_pc_map(const char *filename, const double r, const size_t pcidx,
 }
 
 /*
+pca_print_mean_map()
+  Print lat/lon map of mean ionospheric signal
+
+Inputs: filename - output file
+        r        - radius of shell for magnetic field maps
+        w        - workspace
+*/
+
+int
+pca_print_mean_map(const char *filename, const double r, pca_workspace *w)
+{
+  int s = 0;
+  FILE *fp;
+  double lat, lon;
+  size_t i;
+  gsl_vector *mu = w->mu[w->ut];
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "pca_print_mean_map: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  i = 1;
+  fprintf(fp, "# Mean component\n");
+  fprintf(fp, "# Current shell radius: %g km\n", w->b);
+  fprintf(fp, "# Magnetic field shell radius: %g km\n", r);
+  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: chi (kA)\n", i++);
+  fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_y (nT)\n", i++);
+  fprintf(fp, "# Field %zu: B_z (nT)\n", i++);
+
+  for (lon = -180.0; lon <= 180.0; lon += 1.0)
+    {
+      double phi = lon * M_PI / 180.0;
+
+      for (lat = -89.9; lat <= 89.9; lat += 1.0)
+        {
+          double theta = M_PI / 2.0 - lat * M_PI / 180.0;
+          double B[3];
+          double chi;
+
+          /* compute current stream function */
+          chi = pca_pc_calc_chi(w->b, theta, phi, mu, w);
+
+          /* compute magnetic field vector */
+          pca_mean_B(r, theta, phi, B, w);
+
+          fprintf(fp, "%f %f %f %f %f %f\n",
+                  lon,
+                  lat,
+                  chi,
+                  B[0],
+                  B[1],
+                  B[2]);
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  fclose(fp);
+
+  return s;
+}
+
+/*
 pca_print_map()
   Print lat/lon map of linear combination of PCs
 
@@ -478,6 +561,56 @@ pca_B(const gsl_vector *alpha, const double r, const double theta, const double 
 }
 
 /*
+pca_mean_B()
+  Compute the magnetic field vector at a given
+point (r,theta,phi) due to the mean
+
+Inputs: r     - radius (km)
+        theta - colatitude (radians)
+        phi   - longitude (radians)
+        B     - (output) mean magnetic field vector B in NEC (nT)
+        w     - workspace
+*/
+
+int
+pca_mean_B(const double r, const double theta, const double phi,
+           double B[3], pca_workspace *w)
+{
+  int s = 0;
+  const size_t nnm = w->nnm;
+  gsl_vector_view Xv = gsl_vector_view_array(w->X, nnm);
+  gsl_vector_view Yv = gsl_vector_view_array(w->Y, nnm);
+  gsl_vector_view Zv = gsl_vector_view_array(w->Z, nnm);
+  gsl_vector *mu;
+
+  /*
+   * If r < b, the current shell is an external source so
+   * we can directly use the knm coefficients in the U matrix.
+   *
+   * If r > b, the current shell is an internal source, and
+   * we must first compute the gnm coefficients from knm (done
+   * in pca_alloc via pca_calc_G), and then use internal Green's functions
+   * for the dot product
+   */
+  if (r <= w->b)
+    {
+      mu = w->mu[w->ut];
+      green_calc_ext(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
+    }
+  else
+    {
+      mu = w->mu_gnm[w->ut];
+      green_calc_int(r, theta, phi, w->X, w->Y, w->Z, w->green_workspace_p);
+    }
+
+  gsl_blas_ddot(mu, &Xv.vector, &B[0]);
+  gsl_blas_ddot(mu, &Yv.vector, &B[1]);
+  gsl_blas_ddot(mu, &Zv.vector, &B[2]);
+
+  return s;
+}
+
+/*
 pca_K()
   Compute sheet current density at a given point, using
 a linear combination of principal components
@@ -510,6 +643,29 @@ pca_K(const gsl_vector *alpha, const double theta, const double phi, double K[3]
     }
 
   status = green_eval_sheet_int(w->b, theta, phi, w->work, K, w->green_workspace_p);
+
+  return status;
+}
+
+/*
+pca_mean_K()
+  Compute sheet current density at a given point, using mean current
+
+Inputs: theta - colatitude (radians)
+        phi   - longitude (radians)
+        K     - (output) sheet current density in A/km
+        w     - workspace
+
+Return: success/error
+*/
+
+int
+pca_mean_K(const double theta, const double phi, double K[3], pca_workspace *w)
+{
+  int status;
+  gsl_vector *mu = w->mu_gnm[w->ut];
+
+  status = green_eval_sheet_int(w->b, theta, phi, mu, K, w->green_workspace_p);
 
   return status;
 }
@@ -552,6 +708,22 @@ pca_chi(const gsl_vector *alpha, const double theta, const double phi, pca_works
   chi = pca_pc_calc_chi(w->b, theta, phi, w->work, w);
 
   return chi;
+}
+
+/*
+pca_mean_chi()
+  Compute current stream function for mean
+
+Inputs: theta - colatitude (radians)
+        phi   - longitude (radians)
+        w     - workspace
+*/
+
+double
+pca_mean_chi(const double theta, const double phi, pca_workspace *w)
+{
+  gsl_vector *mu = w->mu[w->ut];
+  return pca_pc_calc_chi(w->b, theta, phi, mu, w);
 }
 
 /*

@@ -564,9 +564,12 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   {
 #if 0
     const time_t unix_time = 1240660800; /* Apr 25 2009 12:00:00 UTC */
+    const size_t k = bsearch_timet(data->t, unix_time, 0, data->nt - 1);
 #elif 0
     const time_t unix_time = 1240617600; /* Apr 25 2009 12:00:00 UTC */
-#elif 0
+    const size_t k = bsearch_timet(data->t, unix_time, 0, data->nt - 1);
+#elif 1
+    const time_t unix_time = 1231808400; /* Jan 13 2009 01:00:00 UTC */
     const size_t k = bsearch_timet(data->t, unix_time, 0, data->nt - 1);
 #elif 1
     const size_t k = 0;

@@ -341,7 +341,7 @@ secs2d_fit(double * rnorm, double * snorm, void * vstate)
 #if 0
   const double tol = 3.0e-1;
 #else
-  const double tol = 1.0e-2;
+  const double tol = 1.0e-1;
 #endif
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);

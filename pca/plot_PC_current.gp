@@ -46,6 +46,6 @@ do for [pcidx=1:40] {
   set surface
 
   load 'moreland.pal'
-  set title 'Current stream function, 110 km, PC'.pcidx
+  set title 'Current stream function, 110 km, '.UT.' UT, PC'.pcidx
   plot tfile w image, cfile w li lt -1 lw 1.5
 }

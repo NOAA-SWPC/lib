@@ -6,7 +6,10 @@ AM_FFLAGS = -fno-second-underscore
 
 AM_CPPFLAGS = -I$(top_builddir)/common
 
-check_PROGRAMS = test
+check_PROGRAMS = print_qd test
 
 test_SOURCES = test.c
 test_LDADD = libapex.la $(top_builddir)/common/libcommon.la -lm -lgfortran -lgsl -lgslcblas
+
+print_qd_SOURCES = print_qd.c
+print_qd_LDADD = libapex.la $(top_builddir)/common/libcommon.la -lm -lgfortran -lgsl -lgslcblas

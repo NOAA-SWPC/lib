@@ -26,7 +26,7 @@ main(int argc, char *argv[])
   char buf[2048];
   size_t i;
   double r = R_EARTH_KM + 0.0; /* radius for magnetic field maps */
-  size_t ut = 0;               /* UT hour for maps */
+  size_t ut = 12;              /* UT hour for maps */
 
   while (1)
     {
@@ -63,6 +63,11 @@ main(int argc, char *argv[])
   pca_workspace_p = pca_alloc();
   pca_set_UT(ut, pca_workspace_p);
   
+  sprintf(buf, "maps/map_mean_%02zuUT.dat", ut);
+  fprintf(stderr, "main: printing mean map to %s...", buf);
+  pca_print_mean_map(buf, r, pca_workspace_p);
+  fprintf(stderr, "done\n");
+
   for (i = 0; i < 40; ++i)
     {
       sprintf(buf, "maps/map_%02zuUT_%02zu.dat", ut, i + 1);

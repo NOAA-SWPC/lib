@@ -39,15 +39,19 @@
 
 /* define to taper the high degree SH coefficients with a cosine taper (to correct
  * TIEGCM ringing issue) */
-#define TAPER_COEFFS            0
+#define TAPER_COEFFS            1
 
-/* define to construct and output covariance matrix
- * 2 Jan 2017: after plotting covariance and correlation matrix,
- * there isn't much structure to see */
-#define PLOT_COVAR              0
+/*
+subtract_mean()
+  Subtract mean values from each row of A and store
+means in mu vector
+
+Inputs: A  - N-by-M matrix
+        mu - vector, length N
+*/
 
 int
-subtract_mean(gsl_matrix * A)
+subtract_mean(gsl_matrix * A, gsl_vector * mu)
 {
   const size_t N = A->size1;
   const size_t M = A->size2;
@@ -58,6 +62,7 @@ subtract_mean(gsl_matrix * A)
       gsl_vector_view v = gsl_matrix_row(A, i);
       double mean = gsl_stats_mean(v.vector.data, v.vector.stride, M);
       gsl_vector_add_constant(&v.vector, -mean);
+      gsl_vector_set(mu, i, mean);
     }
 
   return 0;
@@ -98,6 +103,14 @@ correlation_matrix(gsl_matrix * A)
   return 0;
 }
 
+/*
+calc_pca()
+
+Inputs: ut       - UT hour in [0,23]
+        K        - matrix of knm(t), nnm-by-nt
+        ut_array - array of UT values, size nt
+*/
+
 int
 calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
 {
@@ -107,6 +120,7 @@ calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
   size_t i;
   size_t nt = 0; /* number of timestamps for this UT */
   gsl_matrix *A = gsl_matrix_alloc(nnm, nt_all);
+  gsl_vector *mu = gsl_vector_calloc(nnm); /* mean values of knm(t) for this UT */
   gsl_matrix_view m;
   struct timeval tv0, tv1;
 
@@ -135,7 +149,7 @@ calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
 #if 0
 #if SUBTRACT_MEAN
   fprintf(stderr, "calc_pca: subtracting mean from each %zu UT knm time series...", ut);
-  subtract_mean(&m.matrix);
+  subtract_mean(&m.matrix, mu);
   fprintf(stderr, "done\n");
 #endif
 #endif
@@ -144,7 +158,7 @@ calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
   gsl_matrix_scale(&m.matrix, 1.0 / sqrt((double) nt));
 
   {
-    char sval_txt_file[2048], sval_file[2048], U_file[2048], V_file[2048];
+    char sval_txt_file[2048], sval_file[2048], U_file[2048], V_file[2048], mu_file[2048];
     gsl_vector *S = gsl_vector_alloc(GSL_MIN(nnm, nt));
     gsl_matrix *U = gsl_matrix_alloc(nnm, nnm);
     gsl_matrix *V = gsl_matrix_alloc(nt, nt);
@@ -155,6 +169,7 @@ calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
     sprintf(sval_file, "%s_%02zuUT.dat", PCA_STAGE2B_SVAL, ut);
     sprintf(U_file, "%s_%02zuUT.dat", PCA_STAGE2B_U, ut);
     sprintf(V_file, "%s_%02zuUT.dat", PCA_STAGE2B_V, ut);
+    sprintf(mu_file, "%s_%02zuUT.dat", PCA_STAGE2B_MU, ut);
 
     fprintf(stderr, "\t performing SVD of matrix for %zu UT (%zu-by-%zu)...", ut, nnm, nt);
     gettimeofday(&tv0, NULL);
@@ -181,12 +196,17 @@ calc_pca(const size_t ut, const gsl_matrix * K, const double *ut_array)
     pca_write_matrix(V_file, V);
     fprintf(stderr, "done\n");
 
+    fprintf(stderr, "\t writing mean values in binary format to %s...", mu_file);
+    pca_write_vector(mu_file, mu);
+    fprintf(stderr, "done\n");
+
     gsl_matrix_free(U);
     gsl_matrix_free(V);
     gsl_vector_free(S);
   }
 
   gsl_matrix_free(A);
+  gsl_vector_free(mu);
 
   return s;
 }
@@ -269,9 +289,15 @@ main(int argc, char *argv[])
 #endif
 
 #if SUBTRACT_MEAN
-  fprintf(stderr, "main: subtracting mean from each knm time series...");
-  subtract_mean(K);
-  fprintf(stderr, "done\n");
+  {
+    gsl_vector *mu = gsl_vector_alloc(nnm);
+
+    fprintf(stderr, "main: subtracting mean from each knm time series...");
+    subtract_mean(K, mu);
+    fprintf(stderr, "done\n");
+
+    gsl_vector_free(mu);
+  }
 #endif
 
 #if 1
@@ -285,46 +311,6 @@ main(int argc, char *argv[])
 
   /* compute 1/sqrt(nt) K for SVD computation */
   gsl_matrix_scale(K, 1.0 / sqrt((double) nt));
-
-#if PLOT_COVAR
-  /* build and output covariance matrix */
-  {
-    const char *covar_file = "covar.dat";
-    const char *eval_file = "eval_time.txt";
-    gsl_matrix *covar = gsl_matrix_alloc(nnm, nnm);
-    gsl_vector *eval = gsl_vector_alloc(nnm);
-    int eval_found;
-    FILE *fp;
-
-    fprintf(stderr, "main: constructing covariance matrix...");
-    gsl_blas_dsyrk(CblasLower, CblasNoTrans, 1.0, K, 0.0, covar);
-    fprintf(stderr, "done\n");
-
-    fprintf(stderr, "main: computing eigenvalues of covariance matrix...");
-    lapack_eigen_symm(covar, eval, &eval_found);
-    fprintf(stderr, "done (%d eigenvalues found)\n", eval_found);
-
-    fprintf(stderr, "main: writing eigenvalues format to %s...", eval_file);
-    fp = fopen(eval_file, "w");
-    gsl_vector_fprintf(fp, eval, "%.12e");
-    fclose(fp);
-    fprintf(stderr, "done\n");
-
-    fprintf(stderr, "main: converting to correlation matrix...");
-    correlation_matrix(covar);
-    fprintf(stderr, "done\n");
-
-    /* copy lower triangle to upper */
-    gsl_matrix_transpose_tricpy('L', 0, covar, covar);
-
-    fprintf(stderr, "main: printing correlation matrix to %s...", covar_file);
-    octave_plot(covar, covar_file);
-    fprintf(stderr, "done\n");
-
-    gsl_matrix_free(covar);
-    gsl_vector_free(eval);
-  }
-#endif /* PLOT_COVAR */
 
   {
     const char *sval_txt_file = "sval_time.txt";

@@ -19,7 +19,7 @@ set out "hist.png"
 load 'lines2.cfg'
 
 set ylabel "track scalar rms (nT)"
-set xrange [2013.5:*]
+#set xrange [2013.5:*]
 set yrange [0:14000]
 set ytics nomirror
 

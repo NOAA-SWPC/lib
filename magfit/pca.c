@@ -32,12 +32,17 @@
 #include "magfit.h"
 
 /* relative weightings of different components */
-#define PCA_WEIGHT_X                 (5.0)
+#define PCA_WEIGHT_X                 (1.0)
 #define PCA_WEIGHT_Y                 (1.0)
-#define PCA_WEIGHT_Z                 (5.0)
+#define PCA_WEIGHT_Z                 (1.0)
 
 /* assign higher weight to low-latitude data for better EEJ fit */
 #define PCA_WEIGHT_EEJ               (1.0)
+
+/* scaling factor for PCA mean B signal (this TIEGCM run significantly
+ * overestimates the mean field at Swarm altitude)
+ */
+#define PCA_MEAN_FAC                 (0.0)
 
 typedef struct
 {
@@ -60,6 +65,8 @@ typedef struct
   gsl_vector *tau_Q;
   gsl_vector *tau_Z;
   gsl_vector *residual;
+
+  magfit_parameters params;
 
   gsl_multifit_linear_workspace *multifit_p;
   pca_workspace *pca_workspace_p;
@@ -108,6 +115,7 @@ pcafit_alloc(const void * params)
   state->n = 0;
   state->p = mparams->pca_modes;
   state->UT = -1;
+  state->params = *mparams;
 
   state->X = gsl_matrix_alloc(state->nmax, state->p);
   state->c = gsl_vector_alloc(state->p);
@@ -238,10 +246,10 @@ pcafit_add_datum(const double t, const double r, const double theta, const doubl
   pca_state_t *state = (pca_state_t *) vstate;
   size_t rowidx = state->n;
   double wi = 1.0;
-  gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
-  gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
-  gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
-
+  gsl_vector_view vx, vy, vz;
+  double B_mean[3]; /* average background field */
+  size_t i;
+  
   if (state->UT < 0)
     {
       /* set UT hour for this data point */
@@ -250,23 +258,54 @@ pcafit_add_datum(const double t, const double r, const double theta, const doubl
       fprintf(stderr, "pca_add_datum: set UT to %02d\n", state->UT);
     }
 
+  /* compute average background field */
+  pca_mean_B(r, theta, phi, B_mean, state->pca_workspace_p);
+  for (i = 0; i < 3; ++i)
+    B_mean[i] *= PCA_MEAN_FAC;
+
+#if 0
+  printf("%f %f %f %f %f %f %f\n",
+         qdlat,
+         B[0],
+         B[1],
+         B[2],
+         B_mean[0],
+         B_mean[1],
+         B_mean[2]);
+#endif
+
   /* upweight equatorial data */
   if (fabs(qdlat) <= 10.0)
     wi = PCA_WEIGHT_EEJ;
 
-  /* set rhs vector */
-  gsl_vector_set(state->rhs, rowidx, B[0]);
-  gsl_vector_set(state->rhs, rowidx + 1, B[1]);
-  gsl_vector_set(state->rhs, rowidx + 2, B[2]);
+  /* fill in elements of rhs and weight vectors */
 
-  /* set weight vector */
-  gsl_vector_set(state->wts, rowidx, PCA_WEIGHT_X * wi);
-  gsl_vector_set(state->wts, rowidx + 1, PCA_WEIGHT_Y *  wi);
-  gsl_vector_set(state->wts, rowidx + 2, PCA_WEIGHT_Z *  wi);
+  if (state->params.flags & MAGFIT_FLG_FIT_X)
+    {
+      vx = gsl_matrix_row(state->X, rowidx);
+      gsl_vector_set(state->rhs, rowidx, B[0] - B_mean[0]);
+      gsl_vector_set(state->wts, rowidx, PCA_WEIGHT_X * wi);
+      ++rowidx;
+    }
 
-  /* build 3 rows of the LS matrix */
+  if (state->params.flags & MAGFIT_FLG_FIT_Y)
+    {
+      vy = gsl_matrix_row(state->X, rowidx);
+      gsl_vector_set(state->rhs, rowidx, B[1] - B_mean[1]);
+      gsl_vector_set(state->wts, rowidx, PCA_WEIGHT_Y * wi);
+      ++rowidx;
+    }
+
+  if (state->params.flags & MAGFIT_FLG_FIT_Z)
+    {
+      vz = gsl_matrix_row(state->X, rowidx);
+      gsl_vector_set(state->rhs, rowidx, B[2] - B_mean[2]);
+      gsl_vector_set(state->wts, rowidx, PCA_WEIGHT_Z * wi);
+      ++rowidx;
+    }
+
+  /* build rows of the LS matrix */
   build_matrix_row(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
-  rowidx += 3;
 
   state->n = rowidx;
 
@@ -295,7 +334,7 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
 #if 0
   const double tol = 0.5; /* lower bound on damping parameter */
 #else
-  const double tol = 1.0e-1; /* lower bound on damping parameter */
+  const double tol = 8.0e-2; /* lower bound on damping parameter */
 #endif
   gsl_vector *reg_param = gsl_vector_alloc(npts);
   gsl_vector *rho = gsl_vector_alloc(npts);
@@ -307,7 +346,7 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
   double lambda_gcv, lambda_l, lambda, G_gcv;
   size_t i;
   const char *lambda_file = "lambda.dat";
-  FILE *fp = fopen(lambda_file, "w");
+  FILE *fp = fopen(lambda_file, "a");
   double s0; /* largest singular value */
 
   if (state->n < state->p)
@@ -340,10 +379,11 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
 #if 1
   /* sometimes L-corner method underdamps; for single satellite fit, disable this;
    * for 2-3 satellites, enable this check */
+  /*lambda = GSL_MIN(lambda_l, tol * s0);*/
   lambda = GSL_MAX(lambda_l, tol * s0);
+  lambda = 50.0;
 #else
   /* single satellite fit: GCV seems to work better (less damping) */
-  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
   lambda = lambda_gcv;
 #endif
 
@@ -374,6 +414,8 @@ pcafit_fit(double * rnorm, double * snorm, void * vstate)
               gsl_vector_get(eta, i),
               gsl_vector_get(G, i));
     }
+
+  fprintf(fp, "\n\n");
 
   fprintf(stderr, "done\n");
 
@@ -406,14 +448,31 @@ Notes:
 
 static int
 pcafit_eval_B(const double r, const double theta, const double phi,
-           double B[3], void * vstate)
+              double B[3], void * vstate)
 {
   int status;
   pca_state_t *state = (pca_state_t *) vstate;
+  double B_mean[3];
+  size_t i;
 
+  /* compute field perturbation */
   status = pca_B(state->c, r, theta, phi, B, state->pca_workspace_p);
+  if (status)
+    return status;
 
-  return status;
+  /* compute mean background field */
+  status = pca_mean_B(r, theta, phi, B_mean, state->pca_workspace_p);
+  if (status)
+    return status;
+
+  /* add mean field */
+  for (i = 0; i < 3; ++i)
+    {
+      B_mean[i] *= PCA_MEAN_FAC;
+      B[i] += B_mean[i];
+    }
+
+  return GSL_SUCCESS;
 }
 
 /*
@@ -437,12 +496,26 @@ pcafit_eval_J(const double r, const double theta, const double phi,
 {
   int status;
   pca_state_t *state = (pca_state_t *) vstate;
+  double K_mean[3];
+  size_t i;
 
   (void) r; /* unused parameter */
 
   status = pca_K(state->c, theta, phi, J, state->pca_workspace_p);
+  if (status)
+    return status;
 
-  return status;
+  status = pca_mean_K(theta, phi, K_mean, state->pca_workspace_p);
+  if (status)
+    return status;
+
+  for (i = 0; i < 3; ++i)
+    {
+      K_mean[i] *= PCA_MEAN_FAC;
+      J[i] += K_mean[i];
+    }
+
+  return GSL_SUCCESS;
 }
 
 /*
@@ -464,9 +537,14 @@ static double
 pcafit_eval_chi(const double theta, const double phi, void * vstate)
 {
   pca_state_t *state = (pca_state_t *) vstate;
-  double chi;
+  double chi, chi_mean;
 
   chi = pca_chi(state->c, theta, phi, state->pca_workspace_p);
+
+  chi_mean = pca_mean_chi(theta, phi, state->pca_workspace_p);
+  chi_mean *= PCA_MEAN_FAC;
+
+  chi += chi_mean;
 
   return chi;
 }
@@ -476,7 +554,7 @@ build_matrix_row(const double r, const double theta, const double phi,
                  gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
                  pca_state_t *state)
 {
-  const size_t p = X->size;
+  const size_t p = state->p;
   size_t i;
 
   for (i = 0; i < p; ++i)
@@ -485,9 +563,14 @@ build_matrix_row(const double r, const double theta, const double phi,
 
       pca_pc_B(i, r, theta, phi, B, state->pca_workspace_p);
 
-      gsl_vector_set(X, i, B[0]);
-      gsl_vector_set(Y, i, B[1]);
-      gsl_vector_set(Z, i, B[2]);
+      if (state->params.flags & MAGFIT_FLG_FIT_X)
+        gsl_vector_set(X, i, B[0]);
+
+      if (state->params.flags & MAGFIT_FLG_FIT_Y)
+        gsl_vector_set(Y, i, B[1]);
+
+      if (state->params.flags & MAGFIT_FLG_FIT_Z)
+        gsl_vector_set(Z, i, B[2]);
     }
 
   return 0;

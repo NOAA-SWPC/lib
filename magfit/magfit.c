@@ -37,6 +37,9 @@
 #include "magfit.h"
 #include "track.h"
 
+/* define to subtract a mean value from each component of a track */
+#define MAGFIT_SUBTRACT_MEAN           1
+
 /*
 magfit_alloc()
   Allocate magfit workspace
@@ -96,6 +99,7 @@ magfit_default_parameters(void)
 
   params.pca_modes = 16;
 
+  params.flags = MAGFIT_FLG_FIT_X | MAGFIT_FLG_FIT_Y | MAGFIT_FLG_FIT_Z;
   params.qdmax = 40.0;
 
   return params;
@@ -120,12 +124,57 @@ Return: number of data added
 */
 
 size_t
-magfit_add_track(const track_data *tptr, const satdata_mag *data,
-                 magfit_workspace *w)
+magfit_add_track(track_data *tptr, const satdata_mag *data, magfit_workspace *w)
 {
   int s;
   size_t n = 0;
   size_t i;
+
+#if MAGFIT_SUBTRACT_MEAN
+
+  /* subtract mean value from each track */
+  {
+    double meanX = 0.0;
+    double meanY = 0.0;
+    double meanZ = 0.0;
+    size_t nmean = 0;
+
+    for (i = 0; i < tptr->n; ++i)
+      {
+        size_t didx = i + tptr->start_idx;
+        double qdlat = data->qdlat[didx];
+
+        if (fabs(qdlat) > w->params.qdmax)
+          continue;
+
+        /*meanX += tptr->Bx[i];
+        meanY += tptr->By[i];*/
+        meanZ += tptr->Bz[i];
+        ++nmean;
+      }
+
+    if (nmean > 0)
+      {
+        meanX /= (double) nmean;
+        meanY /= (double) nmean;
+        meanZ /= (double) nmean;
+      }
+
+    /* add mean values as an external field */
+    for (i = 0; i < tptr->n; ++i)
+      {
+        size_t didx = i + tptr->start_idx;
+
+        SATDATA_VEC_X(data->B_ext, didx) += meanX;
+        SATDATA_VEC_Y(data->B_ext, didx) += meanY;
+        SATDATA_VEC_Z(data->B_ext, didx) += meanZ;
+      }
+
+    /* recalculate track residuals */
+    track_calc_residuals(tptr, (const satdata_mag *) data);
+  }
+
+#endif
 
   for (i = 0; i < tptr->n; ++i)
     {
@@ -468,7 +517,9 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
   double rms20[3] = { 0.0, 0.0, 0.0 };
   double rms30[3] = { 0.0, 0.0, 0.0 };
   double rms40[3] = { 0.0, 0.0, 0.0 };
+  double rms_null[3] = { 0.0, 0.0, 0.0 };
   size_t n10 = 0, n20 = 0, n30 = 0, n40 = 0;
+  size_t n_null = 0;
 
   if (header)
     {
@@ -487,6 +538,9 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
       fprintf(fp, "# Field %zu: 40 deg X rms (nT)\n", i++);
       fprintf(fp, "# Field %zu: 40 deg Y rms (nT)\n", i++);
       fprintf(fp, "# Field %zu: 40 deg Z rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: null solution X rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: null solution Y rms (nT)\n", i++);
+      fprintf(fp, "# Field %zu: null solution Z rms (nT)\n", i++);
       return 0;
     }
 
@@ -501,6 +555,15 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
 
       if (!SATDATA_AvailableData(data->flags[didx]))
         continue;
+
+      /* compute null rms result */
+      if (fabs(data->qdlat[didx]) <= 40.0)
+        {
+          rms_null[0] += pow(tptr->Bx[i], 2.0);
+          rms_null[1] += pow(tptr->By[i], 2.0);
+          rms_null[2] += pow(tptr->Bz[i], 2.0);
+          ++n_null;
+        }
 
       /* compute model prediction */
       magfit_eval_B(r, theta, phi, B_model, w);
@@ -593,7 +656,13 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
         rms40[i] = sqrt(rms40[i] / (double)n40);
     }
 
-  fprintf(fp, "%ld %.4f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
+  if (n_null > 0)
+    {
+      for (i = 0; i < 3; ++i)
+        rms_null[i] = sqrt(rms_null[i] / (double)n_null);
+    }
+
+  fprintf(fp, "%ld %.4f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f\n",
           satdata_epoch2timet(tptr->t_eq),
           wrap180(tptr->lon_eq - lon0),
           rms10[0],
@@ -607,7 +676,10 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
           rms30[2],
           rms40[0],
           rms40[1],
-          rms40[2]);
+          rms40[2],
+          rms_null[0],
+          rms_null[1],
+          rms_null[2]);
   fflush(fp);
 
   return 0;

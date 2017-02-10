@@ -1,5 +1,14 @@
 /*
- * main.c
+ * pca_fit.c
+ *
+ * Fit PCA modes to satellite data track by track
+ *
+ * Pre-processing steps are:
+ * 1. Instrument flags
+ * 2. Track rms test
+ * 3. Downsample by factor 15
+ *
+ * Usage: ./pca_fit -s swarmA.idx -r swarmC.idx -x swarmB.idx
  */
 
 #include <stdio.h>
@@ -21,17 +30,27 @@
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_multifit.h>
 
+#include "bin3d.h"
 #include "common.h"
-#include "mageq.h"
 #include "msynth.h"
 #include "oct.h"
+#include "pca.h"
 #include "track.h"
 
-#include "magfit.h"
+/* define this to allow only 1 camera for data selection */
+#define POLTOR_ONE_CAMERA          0
 
-/* define to fit to C/B data */
-#define FIT_SAT_C                  1
-#define FIT_SAT_B                  0
+/* define to fit pca modes to C/B data */
+#define FIT_PCA_C                  1
+#define FIT_PCA_B                  1
+
+/* relative weightings of different components */
+#define PCA_WEIGHT_X               (5.0)
+#define PCA_WEIGHT_Y               (1.0)
+#define PCA_WEIGHT_Z               (5.0)
+
+/* assign higher weight to low-latitude data for better EEJ fit */
+#define PCA_WEIGHT_EEJ             (3.0)
 
 typedef struct
 {
@@ -215,328 +234,360 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
 } /* preprocess_data() */
 
 int
-subtract_RC(const char *filename, satdata_mag *data, track_workspace *w)
+build_matrix_row(const double r, const double theta, const double phi,
+                 gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
+                 pca_workspace *w)
 {
-  int s = 0;
-  const magfit_type *T = magfit_rc;
-  magfit_parameters magfit_params = magfit_default_parameters();
-  magfit_workspace *magfit_p = magfit_alloc(T, &magfit_params);
+  const size_t p = X->size;
   size_t i;
-  FILE *fp;
 
-  fp = fopen(filename, "w");
-  magfit_print_track(1, fp, NULL, data, magfit_p);
-
-  for (i = 0; i < w->n; ++i)
+  for (i = 0; i < p; ++i)
     {
-      track_data *tptr = &(w->tracks[i]);
-      double rnorm, snorm;
+      double B[3];
 
-      if (tptr->flags != 0)
-        continue;
+      pca_pc_B(i, r, theta, phi, B, w);
 
-      magfit_reset(magfit_p);
-
-      magfit_add_track(tptr, data, magfit_p);
-
-      s = magfit_fit(&rnorm, &snorm, magfit_p);
-      if (s)
-        continue;
-
-      magfit_print_track(0, fp, tptr, data, magfit_p);
-
-      /* subtract RC correction model from data */
-      magfit_apply_track(tptr, data, magfit_p);
+      gsl_vector_set(X, i, B[0]);
+      gsl_vector_set(Y, i, B[1]);
+      gsl_vector_set(Z, i, B[2]);
     }
 
-  magfit_free(magfit_p);
-  fclose(fp);
-
-  return s;
+  return 0;
 }
 
 int
-main_proc(satdata_mag *data[3], track_workspace *track[3])
+write_pca_track(const int header, FILE *fp, const satdata_mag *data,
+                const gsl_vector *c, const size_t track_idx,
+                track_workspace *track_p, pca_workspace *pca_p)
+{
+  track_data *tptr;
+  size_t j;
+
+  if (header)
+    {
+      j = 1;
+      fprintf(fp, "# Field %zu: QD latitude (degrees)\n", j++);
+      fprintf(fp, "# Field %zu: B_x observed (nT)\n", j++);
+      fprintf(fp, "# Field %zu: B_y observed (nT)\n", j++);
+      fprintf(fp, "# Field %zu: B_z observed (nT)\n", j++);
+      fprintf(fp, "# Field %zu: B_x modeled (nT)\n", j++);
+      fprintf(fp, "# Field %zu: B_y modeled (nT)\n", j++);
+      fprintf(fp, "# Field %zu: B_z modeled (nT)\n", j++);
+
+      return 0;
+    }
+
+  tptr = &(track_p->tracks[track_idx]);
+
+  for (j = 0; j < tptr->n; ++j)
+    {
+      size_t didx = j + tptr->start_idx;
+      double r = data->altitude[didx] + data->R;
+      double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+      double phi = data->longitude[didx] * M_PI / 180.0;
+      double B_res[3], B_model[3];
+
+      if (SATDATA_BadData(data->flags[didx]))
+        continue;
+
+      /* compute magnetic residual */
+      track_residual(j, didx, B_res, data, track_p);
+
+      /* compute PCA model at this point */
+      pca_B(c, r, theta, phi, B_model, pca_p);
+
+      fprintf(fp, "%f %f %f %f %f %f %f\n",
+              data->qdlat[didx],
+              B_res[0],
+              B_res[1],
+              B_res[2],
+              B_model[0],
+              B_model[1],
+              B_model[2]);
+    }
+
+  fprintf(fp, "\n\n");
+
+  return 0;
+}
+
+/* add a track Bx,By,Bz into LS matrix and rhs vector */
+int
+add_LS(const track_data *tptr, const satdata_mag *data, track_workspace *track_p,
+       gsl_matrix *X, gsl_vector *rhs, gsl_vector *wts, size_t *ridx, pca_workspace *pca_p)
+{
+  size_t rowidx = *ridx;
+  size_t j;
+
+  for (j = 0; j < tptr->n; ++j)
+    {
+      size_t didx = j + tptr->start_idx;
+      double r = data->altitude[didx] + data->R;
+      double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+      double phi = data->longitude[didx] * M_PI / 180.0;
+      double B_res[3];
+      gsl_vector_view vx, vy, vz;
+      double wj = 1.0;
+
+      if (!SATDATA_AvailableData(data->flags[didx]))
+        continue;
+
+      /* fit only low-latitude data */
+      if (fabs(data->qdlat[didx]) > 40.0)
+        continue;
+
+      /* upweight equatorial data to get a better EEJ fit */
+      if (fabs(data->qdlat[didx]) <= 10.0)
+        wj = PCA_WEIGHT_EEJ;
+
+      /* compute magnetic residual */
+      track_residual(j, didx, B_res, data, track_p);
+
+      /* set rhs vector */
+      gsl_vector_set(rhs, rowidx, B_res[0]);
+      gsl_vector_set(rhs, rowidx + 1, B_res[1]);
+      gsl_vector_set(rhs, rowidx + 2, B_res[2]);
+
+      /* set weight vector */
+      gsl_vector_set(wts, rowidx, PCA_WEIGHT_X * wj);
+      gsl_vector_set(wts, rowidx + 1, PCA_WEIGHT_Y * wj);
+      gsl_vector_set(wts, rowidx + 2, PCA_WEIGHT_Z * wj);
+
+      /* build 3 rows of the LS matrix */
+      vx = gsl_matrix_row(X, rowidx);
+      vy = gsl_matrix_row(X, rowidx + 1);
+      vz = gsl_matrix_row(X, rowidx + 2);
+
+      build_matrix_row(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, pca_p);
+
+      rowidx += 3;
+    }
+
+  *ridx = rowidx;
+
+  return 0;
+}
+
+int
+pcafit(const size_t track_idx, const satdata_mag *data, track_workspace *track_p,
+       const size_t track2_idx, const satdata_mag *data2, track_workspace *track2_p,
+       const size_t track3_idx, const satdata_mag *data3, track_workspace *track3_p,
+       gsl_vector *c, pca_workspace *pca_p)
+{
+  track_data *tptr = &(track_p->tracks[track_idx]);
+  track_data *tptr2 = NULL;
+  track_data *tptr3 = NULL;
+  const size_t p = c->size;                  /* number of PCs / model parameters */
+  size_t n = 3 * tptr->n;                    /* number of data */
+  size_t rowidx = 0;
+
+  gsl_multifit_linear_workspace *multifit_p;
+  gsl_matrix *X;
+  gsl_vector *rhs, *wts;
+
+  if (track2_p)
+    {
+      tptr2 = &(track2_p->tracks[track2_idx]);
+      n += 3 * tptr2->n;
+    }
+
+  if (track3_p)
+    {
+      tptr3 = &(track3_p->tracks[track3_idx]);
+      n += 3 * tptr3->n;
+    }
+
+  multifit_p = gsl_multifit_linear_alloc(n, p);
+  X = gsl_matrix_alloc(n, p);
+  rhs = gsl_vector_alloc(n);
+  wts = gsl_vector_alloc(n);
+
+  /* add Swarm A data to LS matrix */
+  add_LS(tptr, data, track_p, X, rhs, wts, &rowidx, pca_p);
+
+  /* add Swarm C data to LS matrix */
+  if (tptr2)
+    add_LS(tptr2, data2, track2_p, X, rhs, wts, &rowidx, pca_p);
+
+  /* add Swarm B data to LS matrix */
+  if (tptr3)
+    add_LS(tptr3, data3, track3_p, X, rhs, wts, &rowidx, pca_p);
+
+  /* solve regularized LS system */
+  {
+    double lambda;
+    gsl_matrix_view A = gsl_matrix_submatrix(X, 0, 0, rowidx, p);
+    gsl_vector_view b = gsl_vector_subvector(rhs, 0, rowidx);
+    gsl_vector_view w = gsl_vector_subvector(wts, 0, rowidx);
+    double rcond, rnorm, snorm;
+
+    const size_t nL = 200;
+    gsl_vector *reg_param = gsl_vector_alloc(nL);
+    gsl_vector *rho = gsl_vector_alloc(nL);
+    gsl_vector *eta = gsl_vector_alloc(nL);
+    size_t reg_idx;
+
+    /* apply weight matrix */
+    gsl_multifit_linear_applyW(&A.matrix, &w.vector, &b.vector,
+                               &A.matrix, &b.vector);
+
+#if 0
+    print_octave(&A.matrix, "A2");
+    printv_octave(&b.vector, "b2");
+    exit(1);
+#endif
+
+    /* compute SVD */
+    gsl_multifit_linear_svd(&A.matrix, multifit_p);
+
+    rcond = gsl_multifit_linear_rcond(multifit_p);
+    fprintf(stderr, "cond(A) = %g...", 1.0 / rcond);
+
+    gsl_multifit_linear_lcurve(&b.vector, reg_param, rho, eta, multifit_p);
+    gsl_multifit_linear_lcorner(rho, eta, &reg_idx);
+    lambda = gsl_vector_get(reg_param, reg_idx);
+#if 0
+    lambda = GSL_MAX(5.0, lambda);
+#endif
+
+    /* solve LS system */
+    gsl_multifit_linear_solve(lambda, &A.matrix, &b.vector, c, &rnorm, &snorm, multifit_p);
+
+    fprintf(stderr, "lambda = %g...", lambda);
+
+    gsl_vector_free(reg_param);
+    gsl_vector_free(rho);
+    gsl_vector_free(eta);
+  }
+
+  gsl_multifit_linear_free(multifit_p);
+  gsl_matrix_free(X);
+  gsl_vector_free(rhs);
+  gsl_vector_free(wts);
+
+  return 0;
+}
+
+int
+main_proc(const satdata_mag *data, const satdata_mag *data2, const satdata_mag *data3,
+          track_workspace *track1, track_workspace *track2, track_workspace *track3)
 {
   int s = 0;
+#if 0 /* XXX */
+  const size_t p = 43;   /* number of PCs / model parameters */
+#else
+  const size_t p = 14;   /* number of PCs / model parameters */
+#endif
   size_t i, j, k;
   size_t nflagged, nunflagged;
-  const magfit_type *T = magfit_pca;
-  magfit_parameters magfit_params = magfit_default_parameters();
-  magfit_workspace *magfit_p;
-  const char *lambda_file = "lambda.dat";
+  pca_workspace *pca_p = pca_alloc();
+  gsl_vector *c = gsl_vector_alloc(p);
   const char *file1 = "data1.txt";
   const char *file2 = "data2.txt";
   const char *file3 = "data3.txt";
   const char *file_chi = "chi.txt";
-  FILE *fp_lambda = fopen(lambda_file, "w");
   FILE *fp1 = fopen(file1, "w");
   FILE *fp2 = fopen(file2, "w");
   FILE *fp3 = fopen(file3, "w");
   FILE *fp_chi = fopen(file_chi, "w");
-  FILE *fp_track = fopen("track.dat", "w");
-  FILE *fp_current = fopen("current.dat", "w");
-  FILE *fp_rms = fopen("rms.dat", "w");
   size_t idx = 0;
-  struct timeval tv0, tv1;
-  mageq_workspace *mageq_p = mageq_alloc();
-  const double dlon = 8.0;
+  char buf[2048];
 
-  if (T == magfit_secs1d)
-    {
-      magfit_params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
-    }
-  else if (T == magfit_secs2d)
-    {
-      magfit_params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
-    }
-  else if (T == magfit_pca)
-    {
-      magfit_params.flags = MAGFIT_FLG_FIT_X | MAGFIT_FLG_FIT_Z;
-      /*magfit_params.flags |= MAGFIT_FLG_FIT_Y;*/
-      magfit_params.pca_modes = 10;
-
-      if (data[1] == NULL)
-        {
-          /* single satellite fit, use less modes */
-          magfit_params.pca_modes = 10;
-        }
-    }
-
-  putenv("TZ=GMT");
-
-  /* the fopen above is just to delete contents of lambda_file - the individual magfit routines will
-   * add L-curve data to the file in the loop below */
-  fclose(fp_lambda);
-
-  nflagged = track_nflagged(track[0]);
-  nunflagged = track[0]->n - nflagged;
-  fprintf(stderr, "Total tracks:    %zu\n", track[0]->n);
+  nflagged = track_nflagged(track1);
+  nunflagged = track1->n - nflagged;
+  fprintf(stderr, "Total tracks:    %zu\n", track1->n);
   fprintf(stderr, "Total flagged:   %zu\n", nflagged);
   fprintf(stderr, "Total unflagged: %zu\n", nunflagged);
 
-  /* remove ring current model from each track */
-  fprintf(stderr, "main_proc: removing ring current model from each track...");
+  /* write headers */
+  write_pca_track(1, fp1, NULL, NULL, 0, NULL, pca_p);
+  write_pca_track(1, fp2, NULL, NULL, 0, NULL, pca_p);
+  write_pca_track(1, fp3, NULL, NULL, 0, NULL, pca_p);
 
-  subtract_RC("rc1.dat", data[0], track[0]);
-
-  if (track[1])
-    subtract_RC("rc2.dat", data[1], track[1]);
-
-  if (track[2])
-    subtract_RC("rc3.dat", data[2], track[2]);
-
-  fprintf(stderr, "done\n");
-
-  /* print header */
-  magfit_print_track(1, fp1, NULL, NULL, NULL);
-  magfit_print_track(1, fp2, NULL, NULL, NULL);
-  magfit_print_track(1, fp3, NULL, NULL, NULL);
-  magfit_print_rms(1, fp_rms, 0.0, NULL, NULL, NULL);
-
-  track_print_track(1, fp_track, NULL, NULL);
-
-  i = 1;
-  fprintf(fp_current, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
-  fprintf(fp_current, "# Field %zu: local time of equator crossing (hours)\n", i++);
-  fprintf(fp_current, "# Field %zu: longitude of equator crossing (degrees)\n", i++);
-  fprintf(fp_current, "# Field %zu: J_y (A/km)\n", i++);
-
-  for (i = 0; i < track[0]->n; ++i)
+  for (i = 0; i < track1->n; ++i)
     {
-      track_data *tptr[3] = { &(track[0]->tracks[i]), NULL, NULL };
-      time_t unix_time = satdata_epoch2timet(tptr[0]->t_eq);
-      char buf[2048];
-      double latc, J[3];
-      size_t ndata;
-      double dphi, rnorm, snorm;
+      track_data *tptr = &(track1->tracks[i]);
+      track_data *tptr2, *tptr3;
+      double dphi;
+      time_t unix_time;
 
-      if (tptr[0]->flags != 0)
+      if (tptr->flags != 0)
         continue;
 
-      if (track[1])
-        {
-          /* find Swarm C crossing within 1 min and 1.7 deg of A */
-          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 1.0, 1.7, &j, track[1]);
-          if (s)
-            continue;
-
-          tptr[1] = &(track[1]->tracks[j]);
-          if (tptr[1]->flags != 0)
-            continue;
-        }
-
-      if (track[2])
-        {
-          /* find Swarm B crossing */
-          s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 50.0, &k, track[2]);
-          /*s = track_find(tptr[0]->t_eq, tptr[0]->lon_eq, 5.0, 20.0, &k, track[2]);*/
-          if (s)
-            continue;
-
-          tptr[2] = &(track[2]->tracks[k]);
-          if (tptr[2]->flags != 0)
-            continue;
-
-#if 0
-          /* force Swarm B to be more than 10 deg away from A */
-          dphi = wrap180(tptr[0]->lon_eq - tptr[2]->lon_eq);
-          if (fabs(dphi) < 10.0)
-            continue;
-#endif
-        }
-
-      sprintf(buf, "%s", ctime(&unix_time));
-      buf[strlen(buf) - 1] = '\0';
-
-      if (tptr[1] && tptr[2])
-        {
-          dphi = wrap180(tptr[2]->lon_eq - tptr[0]->lon_eq);
-          fprintf(stderr, "main_proc: found track triple, %s, dt = %f [min], dphi = %f [deg]\n",
-                  buf,
-                  (tptr[0]->t_eq - tptr[2]->t_eq) / 60000.0,
-                  dphi);
-          fprintf(stderr, "\t LT A = %f\n", tptr[0]->lt_eq);
-          fprintf(stderr, "\t LT C = %f\n", tptr[1]->lt_eq);
-          fprintf(stderr, "\t LT B = %f\n", tptr[2]->lt_eq);
-          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr[0]->lon_eq);
-          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr[1]->lon_eq);
-          fprintf(stderr, "\t longitude B = %f [deg]\n", tptr[2]->lon_eq);
-
-          {
-            time_t t;
-            
-            t = satdata_epoch2timet(tptr[0]->t_eq);
-            fprintf(stderr, "\t UT A = %s", ctime(&t));
-
-            t = satdata_epoch2timet(tptr[1]->t_eq);
-            fprintf(stderr, "\t UT C = %s", ctime(&t));
-
-            t = satdata_epoch2timet(tptr[2]->t_eq);
-            fprintf(stderr, "\t UT B = %s", ctime(&t));
-          }
-
-          magfit_params.lon_max = tptr[2]->lon_eq + dlon;
-        }
-      else if (tptr[1])
-        {
-          dphi = wrap180(tptr[1]->lon_eq - tptr[0]->lon_eq);
-          fprintf(stderr, "main_proc: found track double, %s, dt = %f [min], dphi = %f [deg]\n",
-                  buf,
-                  (tptr[0]->t_eq - tptr[1]->t_eq) / 60000.0,
-                  dphi);
-          fprintf(stderr, "\t LT A = %f\n", tptr[0]->lt_eq);
-          fprintf(stderr, "\t LT C = %f\n", tptr[1]->lt_eq);
-          fprintf(stderr, "\t longitude A = %f [deg]\n", tptr[0]->lon_eq);
-          fprintf(stderr, "\t longitude C = %f [deg]\n", tptr[1]->lon_eq);
-
-          magfit_params.lon_max = tptr[1]->lon_eq + dlon;
-        }
-      else
-        {
-          fprintf(stderr, "main_proc: found track single, %s, LT = %.1f, LON = %.1f [deg]\n",
-                  buf,
-                  tptr[0]->lt_eq,
-                  tptr[0]->lon_eq);
-
-          magfit_params.lon_max = tptr[0]->lon_eq + dlon;
-        }
-
-      magfit_params.lon_min = tptr[0]->lon_eq - dlon;
-      magfit_params.lon_spacing = (magfit_params.lon_max - magfit_params.lon_min) / 6.0;
-
-/*XXX*/
-/*if (idx == 1)*/
-{
-      magfit_p = magfit_alloc(T, &magfit_params);
-      magfit_reset(magfit_p);
-
-      fprintf(stderr, "main_proc: adding data for satellite 1 track %zu/%zu to LS system...", i + 1, track[0]->n);
-      gettimeofday(&tv0, NULL);
-      ndata = magfit_add_track(tptr[0], data[0], magfit_p);
-      gettimeofday(&tv1, NULL);
-      fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
-
-#if FIT_SAT_C
-      if (tptr[1])
-        {
-          fprintf(stderr, "main_proc: adding data for satellite 2 track %zu/%zu to LS system...", j + 1, track[1]->n);
-          gettimeofday(&tv0, NULL);
-          ndata = magfit_add_track(tptr[1], data[1], magfit_p);
-          gettimeofday(&tv1, NULL);
-          fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
-        }
-#endif
-
-#if FIT_SAT_B
-      if (tptr[2])
-        {
-          fprintf(stderr, "main_proc: adding data for satellite 3 track %zu/%zu to LS system...", k + 1, track[2]->n);
-          gettimeofday(&tv0, NULL);
-          ndata = magfit_add_track(tptr[2], data[2], magfit_p);
-          gettimeofday(&tv1, NULL);
-          fprintf(stderr, "done (%zu data added, %g seconds)\n", ndata, time_diff(tv0, tv1));
-        }
-#endif
-
-      fprintf(stderr, "main_proc: fitting magnetic model to track %zu/%zu (index %zu)...", i + 1, track[0]->n, idx);
-      gettimeofday(&tv0, NULL);
-      s = magfit_fit(&rnorm, &snorm, magfit_p);
-      gettimeofday(&tv1, NULL);
-      fprintf(stderr, "done (s = %d, %g seconds)\n", s, time_diff(tv0, tv1));
-
+      /* find Swarm C crossing within 1 min and 1.7 deg of A */
+      s = track_find(tptr->t_eq, tptr->lon_eq, 1.0, 1.7, &j, track2);
       if (s)
         continue;
 
-      magfit_print_track(0, fp1, tptr[0], data[0], magfit_p);
+      tptr2 = &(track2->tracks[j]);
+      if (tptr2->flags != 0)
+        continue;
 
-      if (tptr[1])
-        magfit_print_track(0, fp2, tptr[1], data[1], magfit_p);
+      /* find Swarm B crossing */
+      s = track_find(tptr->t_eq, tptr->lon_eq, 5.0, 20.0, &k, track3);
+      if (s)
+        continue;
 
-      if (tptr[2])
-        {
-          magfit_print_track(0, fp3, tptr[2], data[2], magfit_p);
-          magfit_print_rms(0, fp_rms, tptr[0]->lon_eq, tptr[2], data[2], magfit_p);
-        }
+      tptr3 = &(track3->tracks[k]);
+      if (tptr3->flags != 0)
+        continue;
 
-      track_print_track(0, fp_track, tptr[0], data[0]);
+      dphi = wrap180(tptr->lon_eq - tptr3->lon_eq);
+      if (fabs(dphi) < 10.0)
+        continue;
 
-      /* calculate current density at magnetic equator at this longitude */
-      latc = mageq_calc(tptr[0]->lon_eq * M_PI / 180.0, R_EARTH_KM + 110.0,
-                        satdata_epoch2year(tptr[0]->t_eq), mageq_p);
+      unix_time = satdata_epoch2timet(tptr->t_eq);
+      sprintf(buf, "%s", ctime(&unix_time));
+      buf[strlen(buf) - 1] = '\0';
 
-      magfit_eval_J(magfit_params.R, M_PI / 2.0 - latc, tptr[0]->lon_eq * M_PI / 180.0, J, magfit_p);
+      fprintf(stderr, "main_proc: found track triple, %s, dt = %f [min], dphi = %f [deg]\n",
+              buf,
+              (tptr->t_eq - tptr3->t_eq) / 60000.0,
+              dphi);
+      fprintf(stderr, "\t LT A = %f\n", tptr->lt_eq);
+      fprintf(stderr, "\t LT C = %f\n", tptr2->lt_eq);
+      fprintf(stderr, "\t LT B = %f\n", tptr3->lt_eq);
+      fprintf(stderr, "\t longitude A = %f [deg]\n", tptr->lon_eq);
+      fprintf(stderr, "\t longitude C = %f [deg]\n", tptr2->lon_eq);
+      fprintf(stderr, "\t longitude B = %f [deg]\n", tptr3->lon_eq);
 
-      fprintf(fp_current, "%ld %f %f %f\n",
-              satdata_epoch2timet(tptr[0]->t_eq),
-              tptr[0]->lt_eq,
-              tptr[0]->lon_eq,
-              J[1]);
-      fflush(fp_current);
+      fprintf(stderr, "main_proc: fitting PCs to track %zu/%zu (index %zu)...", i + 1, track1->n, idx);
 
-#if 0
-      /* write current map */
-      fprintf(stderr, "main_proc: writing current map for index %zu to %s...", idx, file_chi);
-      magfit_print_map(fp_chi, R_EARTH_KM + 450.0, magfit_p);
-      fprintf(stderr, "done\n");
+      pcafit(i, data, track1,
+#if FIT_PCA_C
+             j, data2, track2,
+#else
+             0, NULL, NULL,
 #endif
+#if FIT_PCA_B
+             k, data3, track3,
+#else
+             0, NULL, NULL,
+#endif
+             c, pca_p);
 
-      magfit_free(magfit_p);
+      fprintf(stderr, "done\n");
 
-}/*XXX*/
+      /* write PCA along-track prediction for all satellites */
+      write_pca_track(0, fp1, data, c, i, track1, pca_p);
+      write_pca_track(0, fp2, data2, c, j, track2, pca_p);
+      write_pca_track(0, fp3, data3, c, k, track3, pca_p);
+
+      /* write PCA current map */
+      fprintf(stderr, "main_proc: writing current map for index %zu to %s...", idx, file_chi);
+      pca_print_map(fp_chi, R_EARTH_KM + 450.0, c, pca_p);
+      fprintf(stderr, "done\n");
 
       ++idx;
     }
 
-  mageq_free(mageq_p);
+  pca_free(pca_p);
+  gsl_vector_free(c);
 
   fclose(fp1);
   fclose(fp2);
   fclose(fp3);
   fclose(fp_chi);
-  fclose(fp_track);
-  fclose(fp_current);
-  fclose(fp_rms);
 
   return s;
 }
@@ -553,6 +604,7 @@ print_help(char *argv[])
   fprintf(stderr, "\t --champ_plp_file | -b champ_plp_index_file  - CHAMP PLP index file\n");
   fprintf(stderr, "\t --all | -a                                  - print all tracks (no filtering)\n");
   fprintf(stderr, "\t --downsample | -d downsample                - downsampling factor\n");
+  fprintf(stderr, "\t --output_file | -o output_file              - output file\n");
   fprintf(stderr, "\t --lt_min | -j lt_min                        - local time minimum\n");
   fprintf(stderr, "\t --lt_max | -k lt_max                        - local time maximum\n");
   fprintf(stderr, "\t --alt_min | -l alt_min                      - altitude minimum\n");
@@ -567,12 +619,16 @@ print_help(char *argv[])
 int
 main(int argc, char *argv[])
 {
+  char *data_file = "track_data.dat";
+  char *stats_file = "track_stats.dat";
+  char *output_file = NULL;
+  satdata_mag *data = NULL;
+  satdata_mag *data2 = NULL;
+  satdata_mag *data3 = NULL;
   satdata_lp *lp_data = NULL;
   struct timeval tv0, tv1;
-  satdata_mag *data[3] = { NULL, NULL, NULL };
-  track_workspace *track_p[3] = { NULL, NULL, NULL };
+  track_workspace *track_p, *track2_p, *track3_p;
   preprocess_parameters params;
-  size_t i;
 
   /* defaults */
   params.all = 0;
@@ -586,7 +642,7 @@ main(int argc, char *argv[])
   params.lon_max = 200.0;
   params.kp_min = 0.0;
   params.kp_max = 2.0;
-  params.downsample = 2;
+  params.downsample = 1;
   params.alpha = -1.0;
   params.thresh[0] = 210.0;
   params.thresh[1] = 170.0;
@@ -612,11 +668,12 @@ main(int argc, char *argv[])
           { "lon_max", required_argument, NULL, 'u' },
           { "kp_min", required_argument, NULL, 'v' },
           { "kp_max", required_argument, NULL, 'w' },
+          { "output_file", required_argument, NULL, 'o' },
           { "alpha", required_argument, NULL, 'q' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "ab:c:d:j:k:l:m:q:r:s:t:u:v:x:", long_options, &option_index);
+      c = getopt_long(argc, argv, "ab:c:d:j:k:l:m:o:q:r:s:t:u:v:x:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -627,24 +684,24 @@ main(int argc, char *argv[])
             break;
 
           case 's':
-            data[0] = read_swarm(optarg);
+            data = read_swarm(optarg);
             break;
 
           case 'r':
-            data[1] = read_swarm(optarg);
+            data2 = read_swarm(optarg);
             break;
 
           case 'x':
-            data[2] = read_swarm(optarg);
+            data3 = read_swarm(optarg);
             break;
 
           case 'c':
             fprintf(stderr, "main: reading %s...", optarg);
             gettimeofday(&tv0, NULL);
-            data[0] = satdata_champ_read_idx(optarg, 0);
+            data = satdata_champ_read_idx(optarg, 0);
             gettimeofday(&tv1, NULL);
             fprintf(stderr, "done (%zu data read, %g seconds)\n",
-                    data[0]->n, time_diff(tv0, tv1));
+                    data->n, time_diff(tv0, tv1));
 
             /* check for instrument flags since we use Stage1 data */
             {
@@ -657,9 +714,9 @@ main(int argc, char *argv[])
 #endif
 
               fprintf(stderr, "main: filtering for instrument flags...");
-              nflag = satdata_champ_filter_instrument(1, champ_flags, data[0]);
+              nflag = satdata_champ_filter_instrument(1, champ_flags, data);
               fprintf(stderr, "done (%zu/%zu (%.1f%%) data flagged)\n",
-                      nflag, data[0]->n, (double)nflag / (double)data[0]->n * 100.0);
+                      nflag, data->n, (double)nflag / (double)data->n * 100.0);
             }
 
             break;
@@ -672,6 +729,10 @@ main(int argc, char *argv[])
 
           case 'd':
             params.downsample = (size_t) atoi(optarg);
+            break;
+
+          case 'o':
+            output_file = optarg;
             break;
 
           case 'j':
@@ -715,7 +776,7 @@ main(int argc, char *argv[])
         }
     }
 
-  if (!data[0])
+  if (!data)
     {
       print_help(argv);
       exit(1);
@@ -736,27 +797,28 @@ main(int argc, char *argv[])
   if (lp_data)
     {
       fprintf(stderr, "main: adding electron densities to magnetic data...");
-      satdata_mag_fill_ne(data[0], lp_data);
+      satdata_mag_fill_ne(data, lp_data);
       fprintf(stderr, "done\n");
     }
 
-  /* initialize tracks */
-  for (i = 0; i < 3; ++i)
-    {
-      if (data[i] != NULL)
-        track_p[i] = preprocess_data(&params, data[i]);
-    }
+  track_p = preprocess_data(&params, data);
 
-  main_proc(data, track_p);
+  if (data2)
+    track2_p = preprocess_data(&params, data2);
 
-  for (i = 0; i < 3; ++i)
+  if (data3)
+    track3_p = preprocess_data(&params, data3);
+
+  main_proc(data, data2, data3, track_p, track2_p, track3_p);
+
+  satdata_mag_free(data);
+  track_free(track_p);
+
+  if (data2)
     {
-      if (data[i] != NULL)
-        {
-          satdata_mag_free(data[i]);
-          track_free(track_p[i]);
-        }
+      satdata_mag_free(data2);
+      track_free(track2_p);
     }
 
   return 0;
-}
+} /* main() */

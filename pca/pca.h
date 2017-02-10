@@ -24,6 +24,7 @@
 #define PCA_STAGE2B_SVAL       "/data/palken/lib/pca/data/stage2b_sval"
 #define PCA_STAGE2B_U          "/data/palken/lib/pca/data/stage2b_U"
 #define PCA_STAGE2B_V          "/data/palken/lib/pca/data/stage2b_V"
+#define PCA_STAGE2B_MU         "/data/palken/lib/pca/data/stage2b_mu"
 
 /* Stage3b: cumulative variance file prefix */
 #define PCA_STAGE3B_VAR        "/data/palken/lib/pca/data/stage3b_var"
@@ -41,6 +42,8 @@ typedef struct
   gsl_vector *S[24];  /* singular values */
   gsl_matrix *U[24];  /* left singular vectors in terms of knm, nnm-by-nnm */
   gsl_matrix *G[24];  /* left singular vectors in terms of gnm, nnm-by-nnm */
+  gsl_vector *mu[24]; /* mean knm values */
+  gsl_vector *mu_gnm[24]; /* mean gnm values */
 
   size_t ut;          /* current UT hour in [0,23] */
 
@@ -62,12 +65,20 @@ int pca_set_UT(const size_t ut, pca_workspace *w);
 int pca_sval(gsl_vector * T, pca_workspace *w);
 int pca_variance(const char *filename, const double thresh, size_t * nsing,
                  pca_workspace *w);
+int pca_print_pc_map(const char *filename, const double r, const size_t pcidx,
+                     pca_workspace *w);
+int pca_print_mean_map(const char *filename, const double r, pca_workspace *w);
 int pca_print_map(FILE *fp, const double r, const gsl_vector * alpha,
                   pca_workspace *w);
 int pca_pc_B(const size_t pcidx, const double r, const double theta, const double phi,
              double B[3], pca_workspace *w);
+int pca_mean_B(const double r, const double theta, const double phi,
+               double B[3], pca_workspace *w);
 int pca_B(const gsl_vector *alpha, const double r, const double theta, const double phi,
           double B[3], pca_workspace *w);
+int pca_K(const gsl_vector *alpha, const double theta, const double phi, double K[3], pca_workspace *w);
+int pca_mean_K(const double theta, const double phi, double K[3], pca_workspace *w);
 double pca_chi(const gsl_vector *alpha, const double theta, const double phi, pca_workspace *w);
+double pca_mean_chi(const double theta, const double phi, pca_workspace *w);
 
 #endif /* INCLUDED_pca_h */
