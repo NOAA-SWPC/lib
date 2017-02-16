@@ -22,7 +22,7 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      1
+#define MFIELD_SYNTH_DATA      0
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      1
@@ -45,9 +45,11 @@
 
 #define MFIELD_RE_KM          (6371.2)
 
-/* number of observations to accumulate at once in LS system;
- * this includes the (X,Y,Z,F) 4-plet */
-#define MFIELD_BLOCK_SIZE     10000
+/*
+ * approximate matrix size in bytes for precomputing J^T J; each
+ * thread gets its own matrix (1 GB)
+ */
+#define MFIELD_MATRIX_SIZE    (1e9)
 
 /* define if fitting to the EMAG2 grid */
 #define MFIELD_EMAG2          0
@@ -139,9 +141,6 @@ typedef struct
   gsl_vector *wts_final;   /* final weights (robust x spatial), nres-by-1 */
   gsl_multifit_nlinear_workspace *multifit_nlinear_p;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
-  gsl_matrix *block_J;     /* Jacobian matrix block, 4*data_block-by-p */
-  gsl_vector *block_f;     /* residual vector block, 4*data_block-by-1 */
-  gsl_vector *wts;         /* weights vector, 4*data_block-by-1 */
   size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
   size_t nres_vec;         /* number of vector residuals to minimize */
@@ -176,13 +175,6 @@ typedef struct
    * the matrix is symmetric
    */
   gsl_matrix *JTJ_vec;     /* J_mf^T J_mf for vector measurements, p_int-by-p_int */
-
-  gsl_matrix *block_dX;    /* dX/dg data_block-by-nnm_mf */
-  gsl_matrix *block_dY;    /* dY/dg data_block-by-nnm_mf */
-  gsl_matrix *block_dZ;    /* dZ/dg data_block-by-nnm_mf */
-  FILE *fp_dX;             /* file containing dX block matrices */
-  FILE *fp_dY;             /* file containing dX block matrices */
-  FILE *fp_dZ;             /* file containing dX block matrices */
 
   size_t max_threads;      /* maximum number of threads/processors available */
   gsl_matrix *omp_dX;      /* dX/dg max_threads-by-nnm_mf */

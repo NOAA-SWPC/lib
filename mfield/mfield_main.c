@@ -50,7 +50,7 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              15
+#define NMAX_MF              100 
 #define NMAX_SV              15
 #define NMAX_SA              15
 
@@ -765,7 +765,7 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: data tmin  = %.2f\n", satdata_epoch2year(mfield_data_p->t0_data));
   fprintf(stderr, "main: data tmax  = %.2f\n", satdata_epoch2year(mfield_data_p->t1_data));
 
-#if 1
+#if 0
   /* print spatial coverage maps for each satellite */
   mfield_data_map(datamap_file, mfield_data_p);
 #endif

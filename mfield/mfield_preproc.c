@@ -725,9 +725,11 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
+#if 0
   fprintf(stderr, "main: writing data to %s...", data_file);
   magdata_print(data_file, mdata);
   fprintf(stderr, "done\n");
+#endif
 
   fprintf(stderr, "main: writing data map to %s...", datamap_file);
   magdata_map(datamap_file, mdata);

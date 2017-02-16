@@ -54,7 +54,6 @@ int pca_pc_B(const size_t pcidx, const double r, const double theta, const doubl
              double B[3], pca_workspace *w);
 int pca_B(const gsl_vector *alpha, const double r, const double theta, const double phi,
           double B[3], pca_workspace *w);
-int pca_K(const gsl_vector *alpha, const double theta, const double phi, double K[3], pca_workspace *w);
 double pca_chi(const gsl_vector *alpha, const double theta, const double phi, pca_workspace *w);
 
 #endif /* INCLUDED_pca_h */

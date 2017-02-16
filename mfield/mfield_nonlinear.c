@@ -1,4 +1,4 @@
-#define OLD_FDF     1
+#define OLD_FDF     0
 #define DEBUG       0
 
 typedef struct
@@ -359,7 +359,8 @@ mfield_init_nonlinear(mfield_workspace *w)
           if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
             ++nres_dB_ns[2];
 
-          if (MAGDATA_ExistDF_NS(mptr->flags[j]))
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) &&
+              MAGDATA_FitMF(mptr->flags[j]))
             ++nres_dB_ns[3];
 
           ++ndata;

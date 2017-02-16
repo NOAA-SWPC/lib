@@ -310,27 +310,12 @@ mfield_alloc(const mfield_parameters *params)
 
   w->niter = 0;
 
-  /* maximum observations to accumulate at once in LS system */
-  w->data_block = MFIELD_BLOCK_SIZE;
-  
-  /* add factor 4 for (X,Y,Z,F) */
-  w->block_J = gsl_matrix_alloc(4 * w->data_block, w->p);
-  w->block_f = gsl_vector_alloc(4 * w->data_block);
-  w->wts = gsl_vector_alloc(4 * w->data_block);
-
   w->JTJ_vec = gsl_matrix_alloc(w->p_int, w->p_int);
 
   w->eigen_workspace_p = gsl_eigen_symm_alloc(w->p);
 
   w->lambda_diag = gsl_vector_calloc(w->p);
   w->LTL = gsl_vector_calloc(w->p);
-
-  w->block_dX = gsl_matrix_alloc(w->data_block, w->nnm_mf);
-  w->block_dY = gsl_matrix_alloc(w->data_block, w->nnm_mf);
-  w->block_dZ = gsl_matrix_alloc(w->data_block, w->nnm_mf);
-  w->fp_dX = fopen("mat/dX.dat", "w+");
-  w->fp_dY = fopen("mat/dY.dat", "w+");
-  w->fp_dZ = fopen("mat/dZ.dat", "w+");
 
   w->max_threads = (size_t) omp_get_max_threads();
   w->omp_dX = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
@@ -343,6 +328,13 @@ mfield_alloc(const mfield_parameters *params)
   /* initialize green workspaces and omp_J */
   {
     size_t i;
+
+    /*
+     * maximum observations to accumulate at once in LS system, calculated to make
+     * each omp_J matrix approximately of size 'MFIELD_MATRIX_SIZE'
+     */
+    w->data_block = MFIELD_MATRIX_SIZE / (4 * w->p_int * sizeof(double));
+    fprintf(stderr, "mfield_alloc: data_block = %zu\n", w->data_block);
 
     w->green_array_p = malloc(w->max_threads * sizeof(green_workspace *));
     w->omp_J = malloc(w->max_threads * sizeof(gsl_matrix *));
@@ -443,26 +435,8 @@ mfield_free(mfield_workspace *w)
   if (w->weight_workspace_p)
     track_weight_free(w->weight_workspace_p);
 
-  if (w->block_J)
-    gsl_matrix_free(w->block_J);
-
-  if (w->block_f)
-    gsl_vector_free(w->block_f);
-
-  if (w->wts)
-    gsl_vector_free(w->wts);
-
   if (w->JTJ_vec)
     gsl_matrix_free(w->JTJ_vec);
-
-  if (w->block_dX)
-    gsl_matrix_free(w->block_dX);
-
-  if (w->block_dY)
-    gsl_matrix_free(w->block_dY);
-
-  if (w->block_dZ)
-    gsl_matrix_free(w->block_dZ);
 
   if (w->omp_dX)
     gsl_matrix_free(w->omp_dX);
@@ -481,15 +455,6 @@ mfield_free(mfield_workspace *w)
 
   if (w->omp_dZ_grad)
     gsl_matrix_free(w->omp_dZ_grad);
-
-  if (w->fp_dX)
-    fclose(w->fp_dX);
-
-  if (w->fp_dY)
-    fclose(w->fp_dY);
-
-  if (w->fp_dZ)
-    fclose(w->fp_dZ);
 
   if (w->nlinear_workspace_p)
     gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
