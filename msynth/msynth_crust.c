@@ -102,3 +102,65 @@ msynth_crust_read(const char *filename, const size_t nmax, const double epoch)
 
   return w;
 } /* msynth_crust_read() */
+
+int
+msynth_crust_write(const char *filename, const msynth_workspace *w)
+{
+  size_t n;
+  int m;
+  FILE *fp;
+  int iepoch = (int) w->epochs[0];
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "msynth_crust_write: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return 0;
+    }
+
+  /* print header information */
+  fprintf(fp, "%% Crustal magnetic field model coefficients\n");
+  fprintf(fp, "%% nmax:  %zu\n", w->nmax);
+  fprintf(fp, "%% epoch: %.4f\n", w->epochs[0]);
+  fprintf(fp, "%% radius: %.1f\n", w->R);
+  fprintf(fp, "%% %3s %5s %10s %10s\n",
+          "n",
+          "m",
+          "gnm (nT)",
+          "hnm (nT)");
+
+  for (n = 1; n <= w->nmax; ++n)
+    {
+      int ni = (int) n;
+
+      for (m = 0; m <= ni; ++m)
+        {
+          double gnm, hnm;
+          size_t cidx;
+
+          cidx = msynth_nmidx(n, m, w);
+          gnm = w->c[cidx];
+
+          if (m == 0)
+            {
+              hnm = 0.0;
+            }
+          else
+            {
+              cidx = msynth_nmidx(n, -m, w);
+              hnm = w->c[cidx];
+            }
+
+          fprintf(fp, "%5zu %5d %10.4f %10.4f\n",
+                  n,
+                  m,
+                  gnm,
+                  hnm);
+        }
+    }
+
+  fclose(fp);
+
+  return 0;
+}

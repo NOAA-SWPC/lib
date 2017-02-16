@@ -119,6 +119,7 @@ msynth_workspace *msynth_chaos_read(const char *filename);
 msynth_workspace *msynth_mf7_read(const char *filename);
 msynth_workspace *msynth_ngdc720_read(const char *filename);
 msynth_workspace *msynth_emm_read(const char *filename);
+int msynth_crust_write(const char *filename, const msynth_workspace *w);
 
 /* msynth_emm.c */
 int msynth_emm_write(const char *filename, const double year,
