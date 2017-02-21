@@ -202,5 +202,6 @@ int magdata_flag_scalar(magdata *data);
 int magdata_copy_track(const magdata_params *params, const size_t track_idx,
                        const satdata_mag *data, const track_workspace *track_p,
                        magdata *mdata, size_t ntype[4]);
+satdata_mag *magdata_mag2sat(const magdata *mdata);
 
 #endif /* INCLUDED_magdata_h */

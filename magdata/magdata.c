@@ -1324,6 +1324,50 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
 }
 
 /*
+magdata_mag2sat()
+  Convert magdata to satdata struct
+
+Inputs: mdata - magdata
+
+Return: satdata_mag struct
+*/
+
+satdata_mag *
+magdata_mag2sat(const magdata *mdata)
+{
+  satdata_mag *data;
+  size_t i, j;
+
+  data = satdata_mag_alloc(mdata->n);
+
+  for (i = 0; i < mdata->n; ++i)
+    {
+      data->t[i] = mdata->t[i];
+      data->r[i] = mdata->r[i];
+      data->latitude[i] = 90.0 - mdata->theta[i] * 180.0 / M_PI;
+      data->longitude[i] = mdata->phi[i] * 180.0 / M_PI;
+      data->qdlat[i] = mdata->qdlat[i];
+      SATDATA_VEC_X(data->B, i) = mdata->Bx_nec[i];
+      SATDATA_VEC_Y(data->B, i) = mdata->By_nec[i];
+      SATDATA_VEC_Z(data->B, i) = mdata->Bz_nec[i];
+      SATDATA_VEC_X(data->B_VFM, i) = mdata->Bx_vfm[i];
+      SATDATA_VEC_Y(data->B_VFM, i) = mdata->By_vfm[i];
+      SATDATA_VEC_Z(data->B_VFM, i) = mdata->Bz_vfm[i];
+      data->F[i] = mdata->F[i];
+      data->Flags_F[i] = 0;
+      data->Flags_B[i] = 0;
+      data->Flags_q[i] = 0;
+
+      for (j = 0; j < 4; ++j)
+        data->q[4 * i + j] = mdata->q[4 * i + j];
+    }
+
+  data->n = mdata->n;
+
+  return data;
+}
+
+/*
 magdata_luhr()
   Calculate diamagnetic correction from Luhr et al, 2003
 

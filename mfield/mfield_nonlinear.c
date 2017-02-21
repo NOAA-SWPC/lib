@@ -1249,6 +1249,7 @@ mfield_nonlinear_vector_precompute(const gsl_vector *weights, mfield_workspace *
 {
   int s = GSL_SUCCESS;
   size_t i, j;
+  size_t *omp_nrows; /* number of rows processed by each thread */
 
   gsl_matrix_set_zero(w->JTJ_vec);
 
@@ -1256,13 +1257,20 @@ mfield_nonlinear_vector_precompute(const gsl_vector *weights, mfield_workspace *
   if (w->nres_vec == 0)
     return GSL_SUCCESS;
 
+  omp_nrows = malloc(w->max_threads * sizeof(size_t));
+
   /*
    * omp_rowidx[thread_id] contains the number of currently filled rows
    * of omp_J[thread_id]. When omp_J[thread_id] is filled, it is folded
    * into the JTJ_vec matrix and then omp_rowidx[thread_id] is reset to 0
    */
   for (i = 0; i < w->max_threads; ++i)
-    w->omp_rowidx[i] = 0;
+    {
+      omp_nrows[i] = 0;
+      w->omp_rowidx[i] = 0;
+    }
+
+  fprintf(stderr, "\n");
 
   for (i = 0; i < w->nsat; ++i)
     {
@@ -1324,12 +1332,28 @@ mfield_nonlinear_vector_precompute(const gsl_vector *weights, mfield_workspace *
               /* fold current matrix block into JTJ_vec, one thread at a time */
               gsl_matrix_view m = gsl_matrix_submatrix(w->omp_J[thread_id], 0, 0, w->omp_rowidx[thread_id], w->p_int);
 
+              /* keep cumulative total of rows processed by this thread for progress bar */
+              omp_nrows[thread_id] += w->omp_rowidx[thread_id];
+              w->omp_rowidx[thread_id] = 0;
+
 #pragma omp critical
               {
                 gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &m.matrix, 1.0, w->JTJ_vec);
               }
 
-              w->omp_rowidx[thread_id] = 0;
+              if (thread_id == 0)
+                {
+                  double progress = 0.0;
+                  size_t k;
+
+                  for (k = 0; k < w->max_threads; ++k)
+                    progress += (double) omp_nrows[k];
+
+                  progress /= (double) w->nres_vec;
+
+                  fprintf(stderr, "\t");
+                  progress_bar(stderr, progress, 70);
+                }
             }
         } /* for (j = 0; j < mptr->n; ++j) */
     } /* for (i = 0; i < w->nsat; ++i) */
@@ -1344,6 +1368,8 @@ mfield_nonlinear_vector_precompute(const gsl_vector *weights, mfield_workspace *
           gsl_blas_dsyrk(CblasLower, CblasTrans, 1.0, &m.matrix, 1.0, w->JTJ_vec);
         }
     }
+
+  free(omp_nrows);
 
   return s;
 }

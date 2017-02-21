@@ -167,7 +167,7 @@ main(int argc, char *argv[])
 
   fprintf(stderr, "Writing %s...", outfile);
   gettimeofday(&tv0, NULL);
-  satdata_swarm_write(outfile, data_out);
+  satdata_swarm_write(1, outfile, data_out);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%zu records written, %g seconds)\n", data_out->n,
           time_diff(tv0, tv1));

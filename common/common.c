@@ -519,3 +519,36 @@ time_diff(struct timeval a, struct timeval b)
 
   return sec2 - sec1;
 }
+
+/*
+progress_bar()
+  Print a progress bar
+
+Inputs: fp        - where to print progress bar
+        progress  - amount of progress in [0,1]
+        bar_width - how many characters to make progress bar
+*/
+
+int
+progress_bar(FILE *fp, const double progress, const size_t bar_width)
+{
+  const size_t pos = bar_width * progress;
+  size_t k;
+
+  fprintf(fp, "[");
+
+  for (k = 0; k < bar_width; ++k)
+    {
+      if (k < pos)
+        fprintf(fp, "=");
+      else if (k == pos)
+        fprintf(fp, ">");
+      else
+        fprintf(fp, " ");
+    }
+
+  fprintf(fp, "] %.2f%%\r", progress * 100.0);
+  fflush(fp);
+
+  return 0;
+}

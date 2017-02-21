@@ -16,7 +16,7 @@ main()
   fprintf(stderr, "done (%zu points read)\n", data->n);
 
   fprintf(stderr, "writing %s...", outfile);
-  satdata_swarm_write(outfile, data);
+  satdata_swarm_write(1, outfile, data);
   fprintf(stderr, "done\n");
 
   satdata_mag_free(data);
