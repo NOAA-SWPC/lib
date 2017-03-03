@@ -50,7 +50,7 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              100 
+#define NMAX_MF              30
 #define NMAX_SV              15
 #define NMAX_SA              15
 

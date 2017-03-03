@@ -183,7 +183,9 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
+  fprintf(stderr, "main: converting magdata to satdata struct...");
   data = magdata_mag2sat(mdata);
+  fprintf(stderr, "done (%zu/%zu data converted)\n", data->n, mdata->n);
 
   fprintf(stderr, "main: writing Swarm CDF file %s...", swarm_file);
   satdata_swarm_write(0, swarm_file, data);

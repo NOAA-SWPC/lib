@@ -19,10 +19,14 @@
 #define MAGDATA_FLG_DY_NS             (1 << 5)  /* along-track DY measurement available (both VFM and NEC) */
 #define MAGDATA_FLG_DZ_NS             (1 << 6)  /* along-track DZ measurement available (both VFM and NEC) */
 #define MAGDATA_FLG_DF_NS             (1 << 7)  /* along-track DF measurement available */
-#define MAGDATA_FLG_TRACK_START       (1 << 8)  /* start of track in data structure */
-#define MAGDATA_FLG_FIT_MF            (1 << 9)  /* fit main field to this data point */
-#define MAGDATA_FLG_FIT_EULER         (1 << 10) /* fit Euler angles to this data point */
-#define MAGDATA_FLG_DISCARD           (1 << 11) /* discard this data point */
+#define MAGDATA_FLG_DX_EW             (1 << 8)  /* east-west DX measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_DY_EW             (1 << 9)  /* east-west DY measurement available (both VFM and NEC)*/
+#define MAGDATA_FLG_DZ_EW             (1 << 10) /* east-west DZ measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_DF_EW             (1 << 11) /* east-west DF measurement available */
+#define MAGDATA_FLG_TRACK_START       (1 << 12) /* start of track in data structure */
+#define MAGDATA_FLG_FIT_MF            (1 << 13) /* fit main field to this data point */
+#define MAGDATA_FLG_FIT_EULER         (1 << 14) /* fit Euler angles to this data point */
+#define MAGDATA_FLG_DISCARD           (1 << 15) /* discard this data point */
 
 /* global flags */
 #define MAGDATA_GLOBFLG_EULER         (1 << 0)  /* fit Euler angles to this dataset */
@@ -60,6 +64,14 @@
 
 /* scalar north-south gradient measurement available */
 #define MAGDATA_ExistDF_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DF_NS))
+
+/* vector east-west gradient X/Y/Z measurements available */
+#define MAGDATA_ExistDX_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DX_EW))
+#define MAGDATA_ExistDY_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DY_EW))
+#define MAGDATA_ExistDZ_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DZ_EW))
+
+/* scalar east-west gradient measurement available */
+#define MAGDATA_ExistDF_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DF_EW))
 
 /* check if fitting Euler angles to this data point */
 #define MAGDATA_FitEuler(x)           ((MAGDATA_ExistVector(x) || MAGDATA_ExistVectorNS(x)) && \
@@ -168,10 +180,13 @@ typedef struct
 /* parameters for copying tracks into magdata structure */
 typedef struct
 {
-  double grad_dt_ns;   /* time interval for along-track differences */
-  int model_main;      /* include main field in B_model */
-  int model_crust;     /* include crustal field in B_model */
-  int model_ext;       /* include external field in B_model */
+  double grad_dt_ns;    /* time interval for along-track differences (seconds) */
+  double grad_dt_ew;    /* maximum time interval for E/W differences (seconds) */
+  double grad_dphi_max; /* maximum allowed longitudinal separation for E/W gradients (degrees) */
+  double grad_dlat_max; /* maximum allowed latitudinal separation for E/W gradients (degrees) */
+  int model_main;       /* include main field in B_model */
+  int model_crust;      /* include crustal field in B_model */
+  int model_ext;        /* include external field in B_model */
 } magdata_params;
 
 /*
@@ -201,7 +216,11 @@ int magdata_flag_t(const double t0, const double t1, magdata *data);
 int magdata_flag_scalar(magdata *data);
 int magdata_copy_track(const magdata_params *params, const size_t track_idx,
                        const satdata_mag *data, const track_workspace *track_p,
-                       magdata *mdata, size_t ntype[4]);
+                       magdata *mdata, size_t ntype[6]);
+int magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
+                          const satdata_mag *data, const track_workspace *track_p,
+                          const satdata_mag *data2, const track_workspace *track_p2,
+                          magdata *mdata, size_t ntype[6]);
 satdata_mag *magdata_mag2sat(const magdata *mdata);
 
 #endif /* INCLUDED_magdata_h */

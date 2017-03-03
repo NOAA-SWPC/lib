@@ -133,6 +133,11 @@ euler_read(const char *filename)
 
   fclose(fp);
 
+  if (!w)
+    {
+      fprintf(stderr, "euler_read: error: header not found\n");
+    }
+
   return w;
 } /* euler_read() */
 

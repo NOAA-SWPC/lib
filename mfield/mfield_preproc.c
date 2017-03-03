@@ -66,7 +66,16 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 #define MFIELD_EULER_LT_MAX        (6.0)
 
 /* number of seconds for computing along-track differences */
-#define MFIELD_GRAD_DT             (40.0)
+#define MFIELD_GRAD_DT_NS          (40.0)
+
+/* maximum allowed seconds between satellite measurements for computing east-west differences */
+#define MFIELD_GRAD_DT_EW          (10.0)
+
+/* maximum allowed longitudinal separation between satellites for computing east-west differences (degrees) */
+#define MFIELD_GRAD_DPHI_MAX       (2.0)
+
+/* maximum allowed latitudinal separation between satellites for computing east-west differences (degrees) */
+#define MFIELD_GRAD_DLAT_MAX       (0.1)
 
 /* maximum zenith angle in degrees at high latitudes */
 #define MFIELD_MAX_ZENITH          (100.0)
@@ -98,8 +107,12 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 #define MFIELD_IDX_DY_NS          5
 #define MFIELD_IDX_DZ_NS          6
 #define MFIELD_IDX_DF_NS          7
-#define MFIELD_IDX_B_EULER        8
-#define MFIELD_IDX_END            9
+#define MFIELD_IDX_DX_EW          8
+#define MFIELD_IDX_DY_EW          9
+#define MFIELD_IDX_DZ_EW          10
+#define MFIELD_IDX_DF_EW          11
+#define MFIELD_IDX_B_EULER        12
+#define MFIELD_IDX_END            13
 
 /* Global */
 solarpos_workspace *solarpos_workspace_p = NULL;
@@ -111,17 +124,21 @@ typedef struct
 } preprocess_parameters;
 
 magdata *
-copy_data(const size_t magdata_flags, const satdata_mag *data, const track_workspace *track_p)
+copy_data(const size_t magdata_flags, const satdata_mag *data, const track_workspace *track_p,
+          const size_t magdata_flags2, const satdata_mag *data2, const track_workspace *track_p2)
 {
   const size_t nflagged = satdata_nflagged(data);
   size_t ndata = data->n - nflagged;
   magdata *mdata;
   magdata_params params;
   size_t i;
-  size_t npts[4] = { 0, 0, 0, 0 };
+  size_t npts[6] = { 0, 0, 0, 0, 0, 0 };
   size_t nmodel[MFIELD_IDX_END];
 
-  params.grad_dt_ns = MFIELD_GRAD_DT;
+  params.grad_dt_ns = MFIELD_GRAD_DT_NS;
+  params.grad_dt_ew = MFIELD_GRAD_DT_EW;
+  params.grad_dphi_max = MFIELD_GRAD_DPHI_MAX;
+  params.grad_dlat_max = MFIELD_GRAD_DLAT_MAX;
   params.model_main = 0;
 #if MFIELD_INC_CRUSTAL
   /* subtract MF7 crustal field from data prior to modeling */
@@ -156,7 +173,10 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
       if (tptr->flags)
         continue;
 
-      magdata_copy_track(&params, i, data, track_p, mdata, npts);
+      if (data2 == NULL)
+        magdata_copy_track(&params, i, data, track_p, mdata, npts);
+      else
+        magdata_copy_track_EW(&params, i, data, track_p, data2, track_p2, mdata, npts);
     }
 
   /*
@@ -175,7 +195,7 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
             {
               /* don't fit scalar data at low latitudes if vector is available */
               if (MAGDATA_ExistVector(mdata->flags[i]))
-                mdata->flags[i] &= ~(MAGDATA_FLG_F | MAGDATA_FLG_DF_NS);
+                mdata->flags[i] &= ~(MAGDATA_FLG_F | MAGDATA_FLG_DF_NS | MAGDATA_FLG_DF_EW);
             }
           else
             {
@@ -183,17 +203,19 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
               /* only fit Z data at high latitudes */
               mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_F);
               mdata->flags[i] &= ~(MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DF_NS);
+              mdata->flags[i] &= ~(MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DF_EW);
 #else
               /* only fit F data at high latitudes */
               mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z);
               mdata->flags[i] &= ~(MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS);
+              mdata->flags[i] &= ~(MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW);
 #endif
             }
 
 #if MFIELD_FIT_Z_HIGHLAT
           /*XXX: sometimes there is a scalar measurement but no vector -
            * forcably discard all scalar measurements */
-          mdata->flags[i] &= ~(MAGDATA_FLG_F | MAGDATA_FLG_DF_NS);
+          mdata->flags[i] &= ~(MAGDATA_FLG_F | MAGDATA_FLG_DF_NS | MAGDATA_FLG_DF_EW);
 #endif
 
           if (MAGDATA_ExistX(mdata->flags[i]))
@@ -208,6 +230,8 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
           if (MAGDATA_ExistScalar(mdata->flags[i]))
             ++(nmodel[MFIELD_IDX_F]);
 
+          /* count north-south gradient data */
+
           if (MAGDATA_ExistDX_NS(mdata->flags[i]))
             ++(nmodel[MFIELD_IDX_DX_NS]);
 
@@ -219,6 +243,20 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
 
           if (MAGDATA_ExistDF_NS(mdata->flags[i]))
             ++(nmodel[MFIELD_IDX_DF_NS]);
+
+          /* count east-west gradient data */
+
+          if (MAGDATA_ExistDX_EW(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DX_EW]);
+
+          if (MAGDATA_ExistDY_EW(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DY_EW]);
+
+          if (MAGDATA_ExistDZ_EW(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DZ_EW]);
+
+          if (MAGDATA_ExistDF_EW(mdata->flags[i]))
+            ++(nmodel[MFIELD_IDX_DF_EW]);
         }
 
       if ((fitting_flags & MAGDATA_FLG_FIT_EULER) &&
@@ -237,6 +275,10 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
           npts[2], mdata->n, (double) npts[2] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) along-track vector measurements available\n",
           npts[3], mdata->n, (double) npts[3] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) east-west scalar measurements available\n",
+          npts[4], mdata->n, (double) npts[4] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) east-west vector measurements available\n",
+          npts[5], mdata->n, (double) npts[5] / (double) mdata->n * 100.0);
 
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) X vector measurements selected for MF modeling\n",
           nmodel[MFIELD_IDX_X], mdata->n, (double) nmodel[MFIELD_IDX_X] / (double) mdata->n * 100.0);
@@ -248,6 +290,7 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
           nmodel[MFIELD_IDX_F], mdata->n, (double) nmodel[MFIELD_IDX_F] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements selected for Euler angle modeling\n",
           nmodel[MFIELD_IDX_B_EULER], mdata->n, (double) nmodel[MFIELD_IDX_B_EULER] / (double) mdata->n * 100.0);
+
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) North/South dX vector measurements selected for MF modeling\n",
           nmodel[MFIELD_IDX_DX_NS], mdata->n, (double) nmodel[MFIELD_IDX_DX_NS] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) North/South dY vector measurements selected for MF modeling\n",
@@ -256,6 +299,15 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
           nmodel[MFIELD_IDX_DZ_NS], mdata->n, (double) nmodel[MFIELD_IDX_DZ_NS] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) North/South dF scalar measurements selected for MF modeling\n",
           nmodel[MFIELD_IDX_DF_NS], mdata->n, (double) nmodel[MFIELD_IDX_DF_NS] / (double) mdata->n * 100.0);
+
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) East/West dX vector measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DX_EW], mdata->n, (double) nmodel[MFIELD_IDX_DX_EW] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) East/West dY vector measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DY_EW], mdata->n, (double) nmodel[MFIELD_IDX_DY_EW] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) East/West dZ vector measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DZ_EW], mdata->n, (double) nmodel[MFIELD_IDX_DZ_EW] / (double) mdata->n * 100.0);
+  fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) East/West dF scalar measurements selected for MF modeling\n",
+          nmodel[MFIELD_IDX_DF_EW], mdata->n, (double) nmodel[MFIELD_IDX_DF_EW] / (double) mdata->n * 100.0);
 
   return mdata;
 }
@@ -455,7 +507,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   struct timeval tv0, tv1;
   track_workspace *track_p = track_alloc();
 
+#if 0
   print_unflagged_data("data_ts/data_ts.0", data);
+#endif
 
   fprintf(stderr, "preprocess_data: initializing tracks...");
   gettimeofday(&tv0, NULL);
@@ -482,7 +536,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
               nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
     }
 
+#if 0
   print_unflagged_data("data_ts/data_ts.1", data);
+#endif
 
 #if MFIELD_FILTER_SMDL
 
@@ -506,7 +562,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
 
 #endif
 
+#if 0
   print_unflagged_data("data_ts/data_ts.2", data);
+#endif
 
   /* downsample data */
   {
@@ -523,7 +581,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
     fprintf(stderr, "done\n");
   }
 
+#if 0
   print_unflagged_data("data_ts/data_ts.3", data);
+#endif
 
   {
     size_t i;
@@ -549,7 +609,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
             nflag, data->n, (double)nflag / (double)data->n * 100.0);
   }
 
+#if 0
   print_unflagged_data("data_ts/data_ts.4", data);
+#endif
 
   /* print track statistics */
   {
@@ -602,6 +664,7 @@ print_help(char *argv[])
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t --champ_file      | -c champ_index_file       - CHAMP index file\n");
   fprintf(stderr, "\t --swarm_file      | -s swarm_index_file       - Swarm index file\n");
+  fprintf(stderr, "\t --swarm_file2     | -t swarm_index_file2      - Swarm index file 2 (for E/W gradients)\n");
   fprintf(stderr, "\t --swarm_asmv_file | -a swarm_asmv_index_file  - Swarm ASM-V index file\n");
   fprintf(stderr, "\t --downsample      | -d downsample             - downsampling factor\n");
   fprintf(stderr, "\t --euler_file      | -e euler_file             - Euler angles file\n");
@@ -615,12 +678,15 @@ main(int argc, char *argv[])
   char *data_file = "data.dat";
   char *output_file = NULL;
   satdata_mag *data = NULL;
+  satdata_mag *data2 = NULL;
   magdata *mdata;
   euler_workspace *euler_p = NULL;
   struct timeval tv0, tv1;
-  track_workspace *track_p;
+  track_workspace *track_p = NULL;
+  track_workspace *track_p2 = NULL;
   preprocess_parameters params;
   size_t magdata_flags = 0;
+  size_t magdata_flags2 = 0;
 
   /* defaults */
   params.flag_rms = 1;
@@ -633,6 +699,7 @@ main(int argc, char *argv[])
       static struct option long_options[] =
         {
           { "swarm_file", required_argument, NULL, 's' },
+          { "swarm_file2", required_argument, NULL, 't' },
           { "swarm_asmv_file", required_argument, NULL, 'a' },
           { "champ_file", required_argument, NULL, 'c' },
           { "downsample", required_argument, NULL, 'd' },
@@ -641,7 +708,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:c:d:e:o:s:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:c:d:e:o:s:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -658,6 +725,12 @@ main(int argc, char *argv[])
           case 's':
             data = read_swarm(optarg, 0);
             magdata_flags = MAGDATA_GLOBFLG_EULER;
+            break;
+
+          /* For E/W gradients */
+          case 't':
+            data2 = read_swarm(optarg, 0);
+            magdata_flags2 = MAGDATA_GLOBFLG_EULER;
             break;
 
           case 'c':
@@ -705,17 +778,27 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
+  fprintf(stderr, "main: === PREPROCESSING SATELLITE 1 ===\n");
   track_p = preprocess_data(&params, magdata_flags, data);
+
+  if (data2)
+    {
+      fprintf(stderr, "main: === PREPROCESSING SATELLITE 2 ===\n");
+      track_p2 = preprocess_data(&params, magdata_flags2, data2);
+    }
 
   fprintf(stderr, "main: computing vector residuals...");
   gettimeofday(&tv0, NULL);
-  mdata = copy_data(magdata_flags, data, track_p);
+  mdata = copy_data(magdata_flags, data, track_p, magdata_flags2, data2, track_p2);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%zu residuals copied, %g seconds)\n",
           mdata->n, time_diff(tv0, tv1));
 
   /* free data after copying arrays to free up memory */
   satdata_mag_free(data);
+
+  if (data2)
+    satdata_mag_free(data2);
 
   magdata_init(mdata);
 
@@ -729,11 +812,11 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: writing data to %s...", data_file);
   magdata_print(data_file, mdata);
   fprintf(stderr, "done\n");
-#endif
 
   fprintf(stderr, "main: writing data map to %s...", datamap_file);
   magdata_map(datamap_file, mdata);
   fprintf(stderr, "done\n");
+#endif
 
   fprintf(stderr, "main: satellite rmin = %.1f (%.1f) [km]\n",
           mdata->rmin, mdata->rmin - mdata->R);
@@ -750,6 +833,9 @@ main(int argc, char *argv[])
   magdata_free(mdata);
   track_free(track_p);
   solarpos_free(solarpos_workspace_p);
+
+  if (track_p2)
+    track_free(track_p2);
 
   return 0;
 } /* main() */

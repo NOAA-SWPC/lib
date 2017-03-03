@@ -19,6 +19,7 @@
 
 #include <gsl/gsl_math.h>
 
+#include "bsearch.h"
 #include "common.h"
 #include "magdata.h"
 #include "track.h"
@@ -1148,10 +1149,11 @@ Inputs: params    - parameters
         track_p   - track workspace
         mdata     - (output) where to store data
         ntype     - (output) counts of different data stored in mdata
-                    ntype[0] - number of scalar measurements
-                    ntype[1] - number of vector measurements (both VFM and NEC)
-                    ntype[2] - number of along-track scalar measurements
-                    ntype[3] - number of along-track vector measurements (both VFM and NEC)
+                    ntype[0]   - number of scalar measurements
+                    ntype[1]   - number of vector measurements (both VFM and NEC)
+                    ntype[2]   - number of along-track scalar measurements
+                    ntype[3]   - number of along-track vector measurements (both VFM and NEC)
+                    ntype[4-5] - unused
 
 Return: success/error
 
@@ -1162,7 +1164,7 @@ Notes:
 int
 magdata_copy_track(const magdata_params *params, const size_t track_idx,
                    const satdata_mag *data, const track_workspace *track_p,
-                   magdata *mdata, size_t ntype[4])
+                   magdata *mdata, size_t ntype[6])
 {
   int s = 0;
   size_t i, k;
@@ -1324,6 +1326,221 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
 }
 
 /*
+magdata_copy_track_EW()
+  Copy a single satellite track into magdata structure, discarding
+bad data, and flagging when scalar/vector measurements are
+available. For vector measurements, both VFM and NEC vectors
+must be available or point is discarded.
+
+  The start of the track is flagged with MAGDATA_FLG_TRACK_START
+for later printing purposes.
+
+Inputs: params    - parameters
+        track_idx - track index
+        data      - satellite data
+        track_p   - track workspace
+        data2     - satellite data for second satellite
+        track_p2  - track workspace for second satellite
+        mdata     - (output) where to store data
+        ntype     - (output) counts of different data stored in mdata
+                    ntype[0-3] - unused
+                    ntype[4]   - number of E/W scalar measurements
+                    ntype[5]   - number of E/W vector measurements (both VFM and NEC)
+
+Return: success/error
+
+Notes:
+1) ntype should be initialized by the calling function
+*/
+
+int
+magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
+                      const satdata_mag *data, const track_workspace *track_p,
+                      const satdata_mag *data2, const track_workspace *track_p2,
+                      magdata *mdata, size_t ntype[6])
+{
+  int s = 0;
+  size_t i, k;
+  track_data *tptr = &(track_p->tracks[track_idx]);
+  track_data *tptr2;
+  const size_t start_idx = tptr->start_idx;
+  const size_t end_idx = tptr->end_idx;
+  size_t track_idx2;
+  magdata_datum datum;
+  int flagged_start = 0;
+
+  /* first locate the track of the second satellite close in time to the first */
+  s = track_find(tptr->t_eq, tptr->lon_eq, params->grad_dt_ew / 60.0, params->grad_dphi_max, &track_idx2, track_p2);
+
+  if (s != GSL_SUCCESS)
+    {
+      /* track for second satellite not found, nothing to do */
+      return 0;
+    }
+
+  tptr2 = &(track_p2->tracks[track_idx2]);
+
+  for (i = start_idx; i <= end_idx; ++i)
+    {
+      size_t flags = 0;
+      size_t j;
+
+      /* ignore bad data */
+      if (!SATDATA_AvailableData(data->flags[i]))
+        continue;
+
+      /* attempt to find a measurement for satellite 2 with approximately the
+       * same latitude as satellite 1 */
+      if (tptr->satdir == 1)
+        {
+          j = bsearch_double(data2->latitude, data->latitude[i],
+                             tptr2->start_idx, tptr2->end_idx);
+        }
+      else
+        {
+          j = bsearch_desc_double(data2->latitude, data->latitude[i],
+                                  tptr2->start_idx, tptr2->end_idx);
+        }
+
+      /* now check that the latitude separation and time separation are within
+       * allowed tolerances */
+      if (fabs(data->latitude[i] - data2->latitude[j]) > params->grad_dlat_max)
+        continue;
+      if (fabs(data->t[i] - data2->t[j]) > params->grad_dt_ew * 1000.0)
+        continue;
+
+      /*
+       * check if satellite 2 measurement should be rejected - don't use
+       * SATDATA_AvailableData() here because this point could have a downsample
+       * flag applied which doesn't affect us using it as a gradient
+       */
+      if (SATDATA_BadData(data2->flags[j]) || (data2->flags[j] & SATDATA_FLG_FILTER))
+        continue;
+
+      /* initialize to 0 */
+      magdata_datum_init(&datum);
+
+      if (!flagged_start)
+        {
+          flags |= MAGDATA_FLG_TRACK_START;
+          flagged_start = 1;
+        }
+
+      /*
+       * here there is at minimum a scalar measurement available; check
+       * for vector measurement (both VFM and NEC)
+       */
+      if (SATDATA_ExistVector(data->flags[i]))
+        {
+          datum.B_nec[0] = SATDATA_VEC_X(data->B, i);
+          datum.B_nec[1] = SATDATA_VEC_Y(data->B, i);
+          datum.B_nec[2] = SATDATA_VEC_Z(data->B, i);
+          datum.B_vfm[0] = SATDATA_VEC_X(data->B_VFM, i);
+          datum.B_vfm[1] = SATDATA_VEC_Y(data->B_VFM, i);
+          datum.B_vfm[2] = SATDATA_VEC_Z(data->B_VFM, i);
+        }
+
+      datum.F = data->F[i];
+
+      for (k = 0; k < 4; ++k)
+        datum.q[k] = data->q[4 * i + k];
+
+      if (params->model_main)
+        {
+          datum.B_model[0] += SATDATA_VEC_X(data->B_main, i);
+          datum.B_model[1] += SATDATA_VEC_Y(data->B_main, i);
+          datum.B_model[2] += SATDATA_VEC_Z(data->B_main, i);
+        }
+
+      if (params->model_crust)
+        {
+          datum.B_model[0] += SATDATA_VEC_X(data->B_crust, i);
+          datum.B_model[1] += SATDATA_VEC_Y(data->B_crust, i);
+          datum.B_model[2] += SATDATA_VEC_Z(data->B_crust, i);
+        }
+
+      if (params->model_ext)
+        {
+          datum.B_model[0] += SATDATA_VEC_X(data->B_ext, i);
+          datum.B_model[1] += SATDATA_VEC_Y(data->B_ext, i);
+          datum.B_model[2] += SATDATA_VEC_Z(data->B_ext, i);
+        }
+
+      /* set flag to indicate scalar gradient information available */
+      flags |= MAGDATA_FLG_DF_EW;
+
+      for (k = 0; k < 4; ++k)
+        datum.q_ns[k] = data2->q[4 * j + k];
+
+      /* store east-west scalar measurement */
+      datum.F_ns = data2->F[j];
+
+      /* if satellite 1 has vector measurement, check for satellite 2 vector measurement */
+      if (SATDATA_ExistVector(data->flags[i]) && SATDATA_ExistVector(data2->flags[j]))
+        {
+          assert(data2->flags[j] == 0 || data2->flags[j] == SATDATA_FLG_DOWNSAMPLE);
+
+          flags |= MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW;
+
+          datum.B_nec_ns[0] = SATDATA_VEC_X(data2->B, j);
+          datum.B_nec_ns[1] = SATDATA_VEC_Y(data2->B, j);
+          datum.B_nec_ns[2] = SATDATA_VEC_Z(data2->B, j);
+          datum.B_vfm_ns[0] = SATDATA_VEC_X(data2->B_VFM, j);
+          datum.B_vfm_ns[1] = SATDATA_VEC_Y(data2->B_VFM, j);
+          datum.B_vfm_ns[2] = SATDATA_VEC_Z(data2->B_VFM, j);
+        }
+
+      if (params->model_main)
+        {
+          datum.B_model_ns[0] += SATDATA_VEC_X(data2->B_main, j);
+          datum.B_model_ns[1] += SATDATA_VEC_Y(data2->B_main, j);
+          datum.B_model_ns[2] += SATDATA_VEC_Z(data2->B_main, j);
+        }
+
+      if (params->model_crust)
+        {
+          datum.B_model_ns[0] += SATDATA_VEC_X(data2->B_crust, j);
+          datum.B_model_ns[1] += SATDATA_VEC_Y(data2->B_crust, j);
+          datum.B_model_ns[2] += SATDATA_VEC_Z(data2->B_crust, j);
+        }
+
+      if (params->model_ext)
+        {
+          datum.B_model_ns[0] += SATDATA_VEC_X(data2->B_ext, j);
+          datum.B_model_ns[1] += SATDATA_VEC_Y(data2->B_ext, j);
+          datum.B_model_ns[2] += SATDATA_VEC_Z(data2->B_ext, j);
+        }
+
+      datum.t_ns = data2->t[j];
+      datum.r_ns = data2->r[j];
+      datum.theta_ns = M_PI / 2.0 - data2->latitude[j] * M_PI / 180.0;
+      datum.phi_ns = data2->longitude[j] * M_PI / 180.0;
+      datum.qdlat_ns = data2->qdlat[j];
+
+      datum.t = data->t[i];
+      datum.r = data->r[i];
+      datum.theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
+      datum.phi = data->longitude[i] * M_PI / 180.0;
+      datum.qdlat = data->qdlat[i];
+      datum.ne = 0.0; /* filled in later */
+      datum.satdir = satdata_mag_satdir(i, data);
+      datum.flags = flags;
+
+      s = magdata_add(&datum, mdata);
+      if (s)
+        return s;
+
+      /* update counts */
+      if (flags & MAGDATA_FLG_DF_EW)
+        ++(ntype[4]);
+      if (flags & MAGDATA_FLG_DZ_EW)
+        ++(ntype[5]);
+    }
+
+  return 0;
+}
+
+/*
 magdata_mag2sat()
   Convert magdata to satdata struct
 
@@ -1337,32 +1554,41 @@ magdata_mag2sat(const magdata *mdata)
 {
   satdata_mag *data;
   size_t i, j;
+  size_t idx = 0;
 
   data = satdata_mag_alloc(mdata->n);
 
   for (i = 0; i < mdata->n; ++i)
     {
-      data->t[i] = mdata->t[i];
-      data->r[i] = mdata->r[i];
-      data->latitude[i] = 90.0 - mdata->theta[i] * 180.0 / M_PI;
-      data->longitude[i] = mdata->phi[i] * 180.0 / M_PI;
-      data->qdlat[i] = mdata->qdlat[i];
-      SATDATA_VEC_X(data->B, i) = mdata->Bx_nec[i];
-      SATDATA_VEC_Y(data->B, i) = mdata->By_nec[i];
-      SATDATA_VEC_Z(data->B, i) = mdata->Bz_nec[i];
-      SATDATA_VEC_X(data->B_VFM, i) = mdata->Bx_vfm[i];
-      SATDATA_VEC_Y(data->B_VFM, i) = mdata->By_vfm[i];
-      SATDATA_VEC_Z(data->B_VFM, i) = mdata->Bz_vfm[i];
-      data->F[i] = mdata->F[i];
-      data->Flags_F[i] = 0;
-      data->Flags_B[i] = 0;
-      data->Flags_q[i] = 0;
+      if (!MAGDATA_FitMF(mdata->flags[i]))
+        continue;
+
+      if (!MAGDATA_ExistZ(mdata->flags[i]))
+        continue;
+
+      data->t[idx] = mdata->t[i];
+      data->r[idx] = mdata->r[i];
+      data->latitude[idx] = 90.0 - mdata->theta[i] * 180.0 / M_PI;
+      data->longitude[idx] = mdata->phi[i] * 180.0 / M_PI;
+      data->qdlat[idx] = mdata->qdlat[i];
+      SATDATA_VEC_X(data->B, idx) = mdata->Bx_nec[i];
+      SATDATA_VEC_Y(data->B, idx) = mdata->By_nec[i];
+      SATDATA_VEC_Z(data->B, idx) = mdata->Bz_nec[i];
+      SATDATA_VEC_X(data->B_VFM, idx) = mdata->Bx_vfm[i];
+      SATDATA_VEC_Y(data->B_VFM, idx) = mdata->By_vfm[i];
+      SATDATA_VEC_Z(data->B_VFM, idx) = mdata->Bz_vfm[i];
+      data->F[idx] = mdata->F[i];
+      data->Flags_F[idx] = 0;
+      data->Flags_B[idx] = 0;
+      data->Flags_q[idx] = 0;
 
       for (j = 0; j < 4; ++j)
-        data->q[4 * i + j] = mdata->q[4 * i + j];
+        data->q[4 * idx + j] = mdata->q[4 * i + j];
+
+      ++idx;
     }
 
-  data->n = mdata->n;
+  data->n = idx;
 
   return data;
 }
