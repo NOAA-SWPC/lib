@@ -1,7 +1,7 @@
 #bin_PROGRAMS = calc_crf2s calc_euler crust dynamo plot_tracks print print_all print_crust print_alt residuals stage1 swarmcdf2fday testcal
 bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust print_alt print_tracks residuals plotsep stage1 swarmcdf2fday
 
-check_PROGRAMS = crustal1 print_eph
+check_PROGRAMS = print_eph
 
 commonlibs = -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas
 
@@ -25,9 +25,6 @@ plotsep_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos
 
 #crust_SOURCES = crust.c
 #crust_LDADD = $(top_builddir)/euler/libeuler.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
-
-crustal1_SOURCES = crustal1.c
-crustal1_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
 
 compare_SOURCES = compare.c
 compare_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm ${commonlibs}

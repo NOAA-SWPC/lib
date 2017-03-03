@@ -19,7 +19,6 @@ SUBDIRS =         \
   msynth          \
   mageq           \
   magfit          \
-	mserv           \
   peak            \
   superlu         \
   hwm             \
