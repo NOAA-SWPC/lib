@@ -559,6 +559,38 @@ print_unflagged_data(const char *filename, const satdata_mag *data)
   fclose(fp);
 }
 
+int
+calc_main(satdata_mag *data)
+{
+  /*msynth_workspace *msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);*/
+  msynth_workspace *msynth_p = msynth_read(MSYNTH_BOUMME_FILE);
+  size_t i;
+
+  msynth_set(1, 15, msynth_p);
+
+  for (i = 0; i < data->n; ++i)
+    {
+      double tyr = satdata_epoch2year(data->t[i]);
+      double r = data->r[i];
+      double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
+      double phi = data->longitude[i] * M_PI / 180.0;
+      double B_core[4];
+
+      if (!SATDATA_AvailableData(data->flags[i]))
+        continue;
+
+      msynth_eval(tyr, r, theta, phi, B_core, msynth_p);
+
+      SATDATA_VEC_X(data->B_main, i) = B_core[0];
+      SATDATA_VEC_Y(data->B_main, i) = B_core[1];
+      SATDATA_VEC_Z(data->B_main, i) = B_core[2];
+    }
+
+  msynth_free(msynth_p);
+
+  return 0;
+}
+
 void
 print_help(char *argv[])
 {
@@ -668,6 +700,13 @@ main(int argc, char *argv[])
       euler_apply(data, euler_p);
       fprintf(stderr, "done\n");
     }
+
+  {
+    /* XXX recompute main field with recent model */
+    fprintf(stderr, "main: recomputing main field for satellite 1...");
+    calc_main(data);
+    fprintf(stderr, "done\n");
+  }
 
   track_p = preprocess_data(&params, magdata_flags, data);
 
