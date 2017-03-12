@@ -15,9 +15,12 @@
 #define MFIELD_FIT_Y          1
 #define MFIELD_FIT_Z          1
 #define MFIELD_FIT_F          0
-#define MFIELD_FIT_DX_NS      0
-#define MFIELD_FIT_DY_NS      0
-#define MFIELD_FIT_DZ_NS      0
+#define MFIELD_FIT_DX_NS      1
+#define MFIELD_FIT_DY_NS      1
+#define MFIELD_FIT_DZ_NS      1
+#define MFIELD_FIT_DX_EW      1
+#define MFIELD_FIT_DY_EW      1
+#define MFIELD_FIT_DZ_EW      1
 
 typedef struct
 {
@@ -51,7 +54,8 @@ size_t mfield_data_filter_euler(mfield_data_workspace *w);
 size_t mfield_data_filter_comp(mfield_data_workspace *w);
 int mfield_data_init(mfield_data_workspace *w);
 double mfield_data_epoch(mfield_data_workspace *w);
-int mfield_data_map(const char *filename, const mfield_data_workspace *w);
+int mfield_data_map(const char *dir_prefix, const mfield_data_workspace *w);
+int mfield_data_print(const char *dir_prefix, const mfield_data_workspace *w);
 magdata *mfield_data_ptr(const size_t idx, const mfield_data_workspace *w);
 int mfield_data_t(double *t0, double *t1, const magdata *data);
 

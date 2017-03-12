@@ -15,7 +15,7 @@ print_SOURCES = print.c
 print_LDADD = libpca.la $(top_builddir)/common/libcommon.la -lm -lgsl -lgslcblas -lnetcdf
 
 stage1_SOURCES = stage1.c
-stage1_LDADD = libpca.la $(top_builddir)/apex/libapex.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/green/libgreen.la  $(top_builddir)/common/libcommon.la $(top_builddir)/track/libtrack.la $(top_builddir)/lapack_wrapper/liblapack_wrapper.la -lm -lsatdata -lindices -lcdf -lgsl -lnetcdf ${common_libs}
+stage1_LDADD = libpca.la $(top_builddir)/apex/libapex.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/green/libgreen.la  $(top_builddir)/track/libtrack.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/common/libcommon.la $(top_builddir)/lapack_wrapper/liblapack_wrapper.la -lm -lsatdata -lindices -lcdf -lgsl -lnetcdf ${common_libs}
 
 stage2_SOURCES = stage2.c
 stage2_LDADD = libpca.la $(top_builddir)/green/libgreen.la $(top_builddir)/common/libcommon.la $(top_builddir)/lapack_wrapper/liblapack_wrapper.la -lm -lgsl ${common_libs}

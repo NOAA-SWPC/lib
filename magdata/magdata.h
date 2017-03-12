@@ -202,7 +202,7 @@ int magdata_init(magdata *data);
 int magdata_unit_weights(magdata *data);
 int magdata_calc(magdata *data);
 int magdata_print(const char *filename, const magdata *data);
-int magdata_map(const char *filename, const magdata *data);
+int magdata_map(const char *prefix, const magdata *data);
 int magdata_residual(const size_t idx, double B[4], const magdata *data);
 int magdata_residual_ns(const size_t idx, double B[4], const magdata *data);
 int magdata_residual_dB_ns(const size_t idx, double dB[4], const magdata *data);

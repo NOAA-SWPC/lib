@@ -70,6 +70,11 @@
 #define MFIELD_WEIGHT_Y              (1.0)
 #define MFIELD_WEIGHT_Z              (1.0)
 
+/* weighting factors for gradient data (N/S or E/W) */
+#define MFIELD_WEIGHT_DX             (1.0)
+#define MFIELD_WEIGHT_DY             (1.0)
+#define MFIELD_WEIGHT_DZ             (1.0)
+
 static int mfield_green(const double r, const double theta, const double phi,
                         mfield_workspace *w);
 static int mfield_eval_g(const double t, const double r, const double theta, const double phi,
@@ -327,13 +332,18 @@ mfield_alloc(const mfield_parameters *params)
 
   /* initialize green workspaces and omp_J */
   {
+    /*
+     * Number of components added to omp_J matrix:
+     * X, Y, Z, F, DX_NS, DY_NS, DZ_NS, DX_EW, DY_EW, DZ_EW
+     */
+    const size_t ncomp = 10;
     size_t i;
 
     /*
      * maximum observations to accumulate at once in LS system, calculated to make
      * each omp_J matrix approximately of size 'MFIELD_MATRIX_SIZE'
      */
-    w->data_block = MFIELD_MATRIX_SIZE / (4 * w->p_int * sizeof(double));
+    w->data_block = MFIELD_MATRIX_SIZE / (ncomp * w->p_int * sizeof(double));
     fprintf(stderr, "mfield_alloc: data_block = %zu\n", w->data_block);
 
     w->green_array_p = malloc(w->max_threads * sizeof(green_workspace *));
@@ -345,7 +355,7 @@ mfield_alloc(const mfield_parameters *params)
     for (i = 0; i < w->max_threads; ++i)
       {
         w->green_array_p[i] = green_alloc(w->nmax_mf, w->nmax_mf, w->R);
-        w->omp_J[i] = gsl_matrix_alloc(4 * w->data_block, w->p_int);
+        w->omp_J[i] = gsl_matrix_alloc(ncomp * w->data_block, w->p_int);
         w->omp_GTG[i] = gsl_matrix_alloc(w->nnm_mf, w->nnm_mf);
         w->omp_JTJ[i] = gsl_matrix_alloc(w->p_int, w->p_int);
       }

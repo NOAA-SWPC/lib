@@ -41,7 +41,7 @@ mfield_synth_g(gsl_vector * g, mfield_workspace * w)
 
   gsl_vector_set_zero(g);
 
-  /* initialize coefficients g from test_gnm[] */
+  /* initialize MF/SV/SA coefficients g from test_gnm[] */
   for (gptr = &test_gnm[0]; gptr->n != 0; ++gptr)
     {
       size_t n = gptr->n;
@@ -51,6 +51,28 @@ mfield_synth_g(gsl_vector * g, mfield_workspace * w)
       mfield_set_mf(g, cidx, gptr->gnm, w);
       mfield_set_sv(g, cidx, gptr->dgnm, w);
       mfield_set_sa(g, cidx, gptr->ddgnm, w);
+    }
+
+  /* fill in crustal field part of g with MF7 values */
+  if (w->nmax_mf >= 16)
+    {
+      msynth_workspace *crust_p = msynth_mf7_read(MSYNTH_MF7_FILE);
+      size_t n;
+
+      for (n = 16; n <= w->nmax_mf; ++n)
+        {
+          int M = (int) n;
+          int m;
+
+          for (m = -M; m <= M; ++m)
+            {
+              size_t cidx = mfield_coeff_nmidx(n, m);
+              size_t didx = msynth_nmidx(n, m, crust_p);
+              mfield_set_mf(g, cidx, crust_p->c[didx], w);
+            }
+        }
+
+      msynth_free(crust_p);
     }
 
   return 0;
@@ -115,7 +137,8 @@ mfield_synth_replace(mfield_workspace *w)
           }
 #endif
 
-          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS))
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS |
+                                MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
             {
               t = satdata_epoch2year(mptr->t_ns[j]);
               mfield_synth_calc(t, mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], g, B, w);
@@ -165,6 +188,7 @@ mfield_synth_calc(const double t, const double r, const double theta, const doub
   const double ratio = w->R / r;
   const double sint = sin(theta);
   const double cost = cos(theta);
+  double rterm = ratio * ratio;
   double *Plm = w->Plm;
   double *dPlm = w->dPlm;
   size_t n;
@@ -175,16 +199,24 @@ mfield_synth_calc(const double t, const double r, const double theta, const doub
 
   gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, nmax, cost, Plm, dPlm);
 
+  for (n = 0; n <= nmax; ++n)
+    {
+      w->cosmphi[n] = cos(n * phi);
+      w->sinmphi[n] = sin(n * phi);
+    }
+
   for (n = 1; n <= nmax; ++n)
     {
       int ni = (int) n;
       int m;
-      double rterm = pow(ratio, n + 2.0);
+
+      /* (R/r)^{n+2} */
+      rterm *= ratio;
 
       for (m = 0; m <= ni; ++m)
         {
-          double c = cos(m * phi);
-          double s = sin(m * phi);
+          double c = w->cosmphi[m];
+          double s = w->sinmphi[m];
           size_t pidx = gsl_sf_legendre_array_index(n, m);
           size_t cidx = mfield_coeff_nmidx(n, m);
           double gnm, hnm = 0.0;

@@ -50,9 +50,9 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              30
-#define NMAX_SV              15
-#define NMAX_SA              15
+#define NMAX_MF              65
+#define NMAX_SV              1
+#define NMAX_SA              1
 
 #define MAX_BUFFER           2048
 
@@ -333,6 +333,7 @@ print_residuals(const char *filename, mfield_workspace *w)
       fprintf(fp_res, "# Field %zu: Z data used in MF fitting (1 or 0)\n", k++);
       fprintf(fp_res, "# Field %zu: vector data used in Euler angle fitting (1 or 0)\n", k++);
       fprintf(fp_res, "# Field %zu: along-track gradient available (1 or 0)\n", k++);
+      fprintf(fp_res, "# Field %zu: east-west gradient available (1 or 0)\n", k++);
 
       fprintf(stderr, "Writing residuals to %s...", fileres);
 
@@ -435,7 +436,7 @@ print_residuals(const char *filename, mfield_workspace *w)
                 gsl_rstat_add(res[3], rstat_highf);
             }
 
-          fprintf(fp_res, "%12.6f %6.3f %6.2f %7.3f %8.4f %8.4f %9.4f %8.2f %8.2f %8.2f %8.2f %9.2f %9.2f %9.2f %d %d %d %d %d %d %d\n",
+          fprintf(fp_res, "%12.6f %6.3f %6.2f %7.3f %8.4f %8.4f %9.4f %8.2f %8.2f %8.2f %8.2f %9.2f %9.2f %9.2f %d %d %d %d %d %d %d %d\n",
                   t,
                   lt,
                   get_season(unix_time),
@@ -456,7 +457,8 @@ print_residuals(const char *filename, mfield_workspace *w)
                   fit_Y,
                   fit_Z,
                   mptr->flags[j] & MAGDATA_FLG_FIT_EULER ? 1 : 0,
-                  mptr->flags[j] & MAGDATA_FLG_DZ_NS ? 1 : 0);
+                  mptr->flags[j] & MAGDATA_FLG_DZ_NS ? 1 : 0,
+                  mptr->flags[j] & MAGDATA_FLG_DZ_EW ? 1 : 0);
         }
 
       fprintf(stderr, "done\n");
@@ -569,6 +571,8 @@ print_help(char *argv[])
   fprintf(stderr, "\t --lcurve_file | -l file         - L-curve data file\n");
   fprintf(stderr, "\t --tmin | -b min_time            - minimum data period time in decimal years\n");
   fprintf(stderr, "\t --tmax | -c max_time            - maximum data period time in decimal years\n");
+  fprintf(stderr, "\t --print_data | -d               - print data used for MF modeling to output directory\n");
+  fprintf(stderr, "\t --print_map | -m                - print spatial data map files to output directory\n");
 } /* print_help() */
 
 int
@@ -579,7 +583,8 @@ main(int argc, char *argv[])
   char *outfile = NULL;
   char *resfile = NULL;
   char *Lfile = NULL;
-  char *datamap_file = "datamap.dat";
+  char *datamap_prefix = "output";
+  char *data_prefix = "output";
   mfield_workspace *mfield_workspace_p;
   mfield_parameters mfield_params;
   mfield_data_workspace *mfield_data_p;
@@ -592,6 +597,8 @@ main(int argc, char *argv[])
   double tmin = -1.0;         /* minimum time for data in years */
   double tmax = -1.0;         /* maximum time for data in years */
   int nsat = 0;               /* number of satellites */
+  int print_data = 0;         /* print data for MF modeling */
+  int print_map = 0;          /* print data maps */
   struct timeval tv0, tv1;
   char buf[MAX_BUFFER];
 
@@ -611,10 +618,12 @@ main(int argc, char *argv[])
           { "tmin", required_argument, NULL, 'b' },
           { "tmax", required_argument, NULL, 'c' },
           { "euler", required_argument, NULL, 'p' },
+          { "print_data", required_argument, NULL, 'd' },
+          { "print_map", required_argument, NULL, 'm' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:e:l:n:o:p:r:v:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:de:l:mn:o:p:r:v:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -626,6 +635,14 @@ main(int argc, char *argv[])
 
           case 'c':
             tmax = atof(optarg);
+            break;
+
+          case 'd':
+            print_data = 1;
+            break;
+
+          case 'm':
+            print_map = 1;
             break;
 
           case 'o':
@@ -765,10 +782,19 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: data tmin  = %.2f\n", satdata_epoch2year(mfield_data_p->t0_data));
   fprintf(stderr, "main: data tmax  = %.2f\n", satdata_epoch2year(mfield_data_p->t1_data));
 
-#if 0
-  /* print spatial coverage maps for each satellite */
-  mfield_data_map(datamap_file, mfield_data_p);
-#endif
+  if (print_map)
+    {
+      /* print spatial coverage maps for each satellite */
+      mfield_data_map(datamap_prefix, mfield_data_p);
+    }
+
+  if (print_data)
+    {
+      /* print data used for MF modeling for each satellite */
+      fprintf(stderr, "main: printing data for MF modeling to %s...", data_prefix);
+      mfield_data_print(data_prefix, mfield_data_p);
+      fprintf(stderr, "done\n");
+    }
 
   mfield_params.epoch = epoch;
   mfield_params.R = R;

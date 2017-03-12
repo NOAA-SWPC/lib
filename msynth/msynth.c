@@ -713,6 +713,7 @@ msynth_eval_g(const double t, const double r, const double theta,
             }
           else
             {
+              fprintf(stderr, "ACK\n");
               /* set gnm to the tangent line to the parabola at tend */
               gnm = g[cidx] + dg[cidx] * t3 + ddg[cidx] * t4 +
                     (dg[cidx] + ddg[cidx] * t3) * (t - tend);

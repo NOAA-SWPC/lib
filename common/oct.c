@@ -104,7 +104,7 @@ printc_octave(const gsl_matrix_complex *m, const char *str)
   fclose(fp);
 }
 
-/* print symmetric matrix, using upper triangle */
+/* print symmetric matrix, using lower triangle */
 void
 printsym_octave(const gsl_matrix *m, const char *str)
 {
@@ -130,7 +130,7 @@ printsym_octave(const gsl_matrix *m, const char *str)
         {
           double z;
 
-          if (j >= i)
+          if (j <= i)
             z = gsl_matrix_get(m, i, j);
           else
             z = gsl_matrix_get(m, j, i);

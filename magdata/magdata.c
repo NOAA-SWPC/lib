@@ -663,60 +663,161 @@ magdata_print(const char *filename, const magdata *data)
 magdata_map()
   Output lat/lon map of data coverage
 
-Inputs: filename - where to store data map
-        data     - lat/lon data
+Inputs: prefix - file prefix for where to store data map
+        data   - lat/lon data
 
 Return: success/error
 */
 
 int
-magdata_map(const char *filename, const magdata *data)
+magdata_map(const char *prefix, const magdata *data)
 {
   int s = 0;
   size_t i;
-  FILE *fp;
+  FILE *fp[10];
+  size_t n = 10; /* number of files to write */
+  char buf[2048];
 
-  fp = fopen(filename, "w");
-  if (!fp)
+  sprintf(buf, "%s_X.dat", prefix);
+  fp[0] = fopen(buf, "w");
+
+  sprintf(buf, "%s_Y.dat", prefix);
+  fp[1] = fopen(buf, "w");
+
+  sprintf(buf, "%s_Z.dat", prefix);
+  fp[2] = fopen(buf, "w");
+
+  sprintf(buf, "%s_F.dat", prefix);
+  fp[3] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DX_NS.dat", prefix);
+  fp[4] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DY_NS.dat", prefix);
+  fp[5] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DZ_NS.dat", prefix);
+  fp[6] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DX_EW.dat", prefix);
+  fp[7] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DY_EW.dat", prefix);
+  fp[8] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DZ_EW.dat", prefix);
+  fp[9] = fopen(buf, "w");
+
+  for (i = 0; i < n; ++i)
     {
-      fprintf(stderr, "magdata_map: unable to open %s: %s\n",
-              filename, strerror(errno));
-      return -1;
+      if (!fp[i])
+        {
+          fprintf(stderr, "magdata_map: unable to open file %zu: %s\n",
+                  i, strerror(errno));
+          return -1;
+        }
     }
 
-  i = 1;
-  fprintf(fp, "# Field %zu: time (decimal year)\n", i++);
-  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: geocentric latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: altitude (km)\n", i++);
-  fprintf(fp, "# Field %zu: scalar data used in MF fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: X vector data used in MF fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: Y vector data used in MF fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: Z vector data used in MF fitting (1 or 0)\n", i++);
+  fprintf(fp[0], "# Spatial distribution of X vector data\n");
+  fprintf(fp[1], "# Spatial distribution of Y vector data\n");
+  fprintf(fp[2], "# Spatial distribution of Z vector data\n");
+  fprintf(fp[3], "# Spatial distribution of F scalar data\n");
+  fprintf(fp[4], "# Spatial distribution of N/S gradient DX vector data\n");
+  fprintf(fp[5], "# Spatial distribution of N/S gradient DY vector data\n");
+  fprintf(fp[6], "# Spatial distribution of N/S gradient DZ vector data\n");
+  fprintf(fp[7], "# Spatial distribution of E/W gradient DX vector data\n");
+  fprintf(fp[8], "# Spatial distribution of E/W gradient DY vector data\n");
+  fprintf(fp[9], "# Spatial distribution of E/W gradient DZ vector data\n");
+
+  for (i = 0; i < n; ++i)
+    {
+      size_t j = 1;
+      fprintf(fp[i], "# Field %zu: time (decimal year)\n", j++);
+      fprintf(fp[i], "# Field %zu: longitude (degrees)\n", j++);
+      fprintf(fp[i], "# Field %zu: geocentric latitude (degrees)\n", j++);
+      fprintf(fp[i], "# Field %zu: QD latitude (degrees)\n", j++);
+      fprintf(fp[i], "# Field %zu: geocentric radius (km)\n", j++);
+    }
+
+#if 0
   fprintf(fp, "# Field %zu: vector data used in Euler angle fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: vector along-track gradient available (1 or 0)\n", i++);
+#endif
 
   for (i = 0; i < data->n; ++i)
     {
-      if (data->flags[i] & MAGDATA_FLG_DISCARD)
+      double t = satdata_epoch2year(data->t[i]);
+      double phi = wrap180(data->phi[i] * 180.0 / M_PI);
+      double lat = 90.0 - data->theta[i] * 180.0 / M_PI;
+
+      if (MAGDATA_Discarded(data->flags[i]))
         continue;
 
-      fprintf(fp, "%f %f %f %f %.2f %d %d %d %d %d %d\n",
-              satdata_epoch2year(data->t[i]),
-              wrap180(data->phi[i] * 180.0 / M_PI),
-              90.0 - data->theta[i] * 180.0 / M_PI,
-              data->qdlat[i],
-              data->r[i] - data->R,
-              (MAGDATA_ExistScalar(data->flags[i]) && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
-              (data->flags[i] & MAGDATA_FLG_X && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
-              (data->flags[i] & MAGDATA_FLG_Y && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
-              (data->flags[i] & MAGDATA_FLG_Z && MAGDATA_FitMF(data->flags[i])) ? 1 : 0,
+      if (MAGDATA_ExistX(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[0], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistY(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[1], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistZ(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[2], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistScalar(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[3], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistDX_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[4], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistDY_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[5], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistDZ_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[6], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistDX_EW(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[7], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistDY_EW(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[8], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+
+      if (MAGDATA_ExistDZ_EW(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[9], "%f %.4f %.4f %.4f %.4f\n",
+                  t, phi, lat, data->qdlat[i], data->r[i]);
+        }
+#if 0
               MAGDATA_FitEuler(data->flags[i]) ? 1 : 0,
-              data->flags[i] & MAGDATA_FLG_DZ_NS ? 1 : 0);
+#endif
     }
 
-  fclose(fp);
+  for (i = 0; i < n; ++i)
+    fclose(fp[i]);
 
   return s;
 } /* magdata_map() */
@@ -1525,6 +1626,28 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       datum.ne = 0.0; /* filled in later */
       datum.satdir = satdata_mag_satdir(i, data);
       datum.flags = flags;
+
+#if 1
+      if (MAGDATA_ExistDZ_EW(flags))
+        {
+          printf("%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n",
+                 datum.t,
+                 datum.qdlat,
+                 datum.qdlat_ns,
+                 datum.B_nec[0],
+                 datum.B_nec[1],
+                 datum.B_nec[2],
+                 datum.B_model[0],
+                 datum.B_model[1],
+                 datum.B_model[2],
+                 datum.B_nec_ns[0],
+                 datum.B_nec_ns[1],
+                 datum.B_nec_ns[2],
+                 datum.B_model_ns[0],
+                 datum.B_model_ns[1],
+                 datum.B_model_ns[2]);
+        }
+#endif
 
       s = magdata_add(&datum, mdata);
       if (s)

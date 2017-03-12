@@ -35,7 +35,7 @@
 #endif
 
 /* fit Euler angles to data */
-#define MFIELD_FIT_EULER       1
+#define MFIELD_FIT_EULER       0
 
 /* fit external field model to data */
 #define MFIELD_FIT_EXTFIELD    0
@@ -144,6 +144,7 @@ typedef struct
   size_t ndata;            /* number of unique data points in LS system */
   size_t nres;             /* number of residuals to minimize */
   size_t nres_vec;         /* number of vector residuals to minimize */
+  size_t nres_vec_grad;    /* number of vector gradient residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   gsl_vector *LTL;         /* L^T L regularization matrix */

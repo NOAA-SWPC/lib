@@ -13,7 +13,7 @@ invert_SOURCES = invert_main.c
 invert_LDADD = libpoltor.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
 
 plot_SOURCES = plot.c
-plot_LDADD = libpoltor.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la -lm -lgfortran ${commonlibs}
+plot_LDADD = libpoltor.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la  $(top_builddir)/common/libcommon.la -lm -lgfortran ${commonlibs}
 
 preproc_SOURCES = preproc.c
 preproc_LDADD = libpoltor.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm ${commonlibs}

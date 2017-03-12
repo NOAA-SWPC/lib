@@ -40,6 +40,7 @@
 #include "common.h"
 #include "euler.h"
 #include "magdata.h"
+#include "msynth.h"
 #include "track.h"
 #include "solarpos.h"
 
@@ -81,11 +82,20 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 #define MFIELD_MAX_ZENITH          (100.0)
 
 /*
+ * subtract a priori main field from data - suitable for modeling high
+ * degree crustal field
+ */
+#define MFIELD_INC_MAIN            1
+
+/*
  * include apriori crustal field in modeling - set this if fitting only
  * a main field model, so that an apriori crustal field (MF7) is subtracted
  * from the satellite observations
  */
 #define MFIELD_INC_CRUSTAL         0
+
+/* subtract a priori external field from data */
+#define MFIELD_INC_EXTERNAL        1
 
 /* QD latitude above which we do not fit X/Y data for MF modeling */
 #define MFIELD_QDLAT_HIGH          (55.0)
@@ -139,15 +149,27 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
   params.grad_dt_ew = MFIELD_GRAD_DT_EW;
   params.grad_dphi_max = MFIELD_GRAD_DPHI_MAX;
   params.grad_dlat_max = MFIELD_GRAD_DLAT_MAX;
+
+#if MFIELD_INC_MAIN
+  /* subtract main field from data prior to modeling */
+  params.model_main = 1;
+#else
   params.model_main = 0;
+#endif
+
 #if MFIELD_INC_CRUSTAL
   /* subtract MF7 crustal field from data prior to modeling */
   params.model_crust = 1;
 #else
   params.model_crust = 0;
 #endif
+
+#if MFIELD_INC_EXTERNAL
   /* subtract external field from data prior to modeling */
   params.model_ext = 1;
+#else
+  params.model_ext = 0;
+#endif
 
   /* initialize arrays */
   for (i = 0; i < MFIELD_IDX_END; ++i)
@@ -657,6 +679,38 @@ print_unflagged_data(const char *filename, const satdata_mag *data)
   fclose(fp);
 }
 
+int
+calc_main(satdata_mag *data)
+{
+  /*msynth_workspace *msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);*/
+  msynth_workspace *msynth_p = msynth_read(MSYNTH_BOUMME_FILE);
+  size_t i;
+
+  msynth_set(1, 15, msynth_p);
+
+  for (i = 0; i < data->n; ++i)
+    {
+      double tyr = satdata_epoch2year(data->t[i]);
+      double r = data->r[i];
+      double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
+      double phi = data->longitude[i] * M_PI / 180.0;
+      double B_core[4];
+
+      if (!SATDATA_AvailableData(data->flags[i]))
+        continue;
+
+      msynth_eval(tyr, r, theta, phi, B_core, msynth_p);
+
+      SATDATA_VEC_X(data->B_main, i) = B_core[0];
+      SATDATA_VEC_Y(data->B_main, i) = B_core[1];
+      SATDATA_VEC_Z(data->B_main, i) = B_core[2];
+    }
+
+  msynth_free(msynth_p);
+
+  return 0;
+}
+
 void
 print_help(char *argv[])
 {
@@ -668,6 +722,7 @@ print_help(char *argv[])
   fprintf(stderr, "\t --swarm_asmv_file | -a swarm_asmv_index_file  - Swarm ASM-V index file\n");
   fprintf(stderr, "\t --downsample      | -d downsample             - downsampling factor\n");
   fprintf(stderr, "\t --euler_file      | -e euler_file             - Euler angles file\n");
+  fprintf(stderr, "\t --euler_file2     | -f euler_file2            - Euler angles file 2 (for E/W gradients)\n");
   fprintf(stderr, "\t --output_file     | -o output_file            - binary output data file (magdata format)\n");
 }
 
@@ -681,6 +736,7 @@ main(int argc, char *argv[])
   satdata_mag *data2 = NULL;
   magdata *mdata;
   euler_workspace *euler_p = NULL;
+  euler_workspace *euler_p2 = NULL;
   struct timeval tv0, tv1;
   track_workspace *track_p = NULL;
   track_workspace *track_p2 = NULL;
@@ -705,10 +761,11 @@ main(int argc, char *argv[])
           { "downsample", required_argument, NULL, 'd' },
           { "output_file", required_argument, NULL, 'o' },
           { "euler_file", required_argument, NULL, 'e' },
+          { "euler_file2", required_argument, NULL, 'f' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:c:d:e:o:s:t:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:c:d:e:f:o:s:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -749,6 +806,14 @@ main(int argc, char *argv[])
               fprintf(stderr, "done (%zu sets of angles read)\n", euler_p->n);
               break;
 
+          case 'f':
+              fprintf(stderr, "main: reading Euler angles from %s...", optarg);
+              euler_p2 = euler_read(optarg);
+              if (!euler_p2)
+                exit(1);
+              fprintf(stderr, "done (%zu sets of angles read)\n", euler_p2->n);
+              break;
+
           case 'o':
             output_file = optarg;
             break;
@@ -778,6 +843,13 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
+  if (euler_p2 && data2)
+    {
+      fprintf(stderr, "main: rotating VFM measurements with new Euler angles for satellite 2...");
+      euler_apply(data2, euler_p2);
+      fprintf(stderr, "done\n");
+    }
+
   fprintf(stderr, "main: === PREPROCESSING SATELLITE 1 ===\n");
   track_p = preprocess_data(&params, magdata_flags, data);
 
@@ -786,6 +858,20 @@ main(int argc, char *argv[])
       fprintf(stderr, "main: === PREPROCESSING SATELLITE 2 ===\n");
       track_p2 = preprocess_data(&params, magdata_flags2, data2);
     }
+
+#if MFIELD_INC_MAIN
+  /* XXX recompute B_main with CHAOS model */
+  fprintf(stderr, "main: recomputing main field for satellite 1...");
+  calc_main(data);
+  fprintf(stderr, "done\n");
+
+  if (data2)
+    {
+      fprintf(stderr, "main: recomputing main field for satellite 2...");
+      calc_main(data2);
+      fprintf(stderr, "done\n");
+    }
+#endif
 
   fprintf(stderr, "main: computing vector residuals...");
   gettimeofday(&tv0, NULL);
