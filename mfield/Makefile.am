@@ -11,7 +11,7 @@ mfield_emag_SOURCES = mfield_emag.c
 mfield_emag_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -llapack -lcdf -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib -lgsl -lptcblas -lptf77blas -latlas -lz
 
 mfield_preproc_SOURCES = mfield_preproc.c
-mfield_preproc_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -llapack -lcdf -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib -lgsl -lptcblas -lptf77blas -latlas
+mfield_preproc_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/magfit/libmagfit.la $(top_builddir)/pca/libpca.la $(top_builddir)/green/libgreen.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -llapack -lcdf -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib -lgsl -lptcblas -lptf77blas -latlas
 
 mfield_ascii_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_ascii.c
 mfield_ascii_CFLAGS = -fopenmp
@@ -41,4 +41,4 @@ mfield_residuals_LDADD = $(top_builddir)/msynth/libmsynth.la $(top_builddir)/eul
 #mfield_dBdt_SOURCES = mfield_dBdt.c mfield.c mfield_data.c mfield_green.c
 #mfield_dBdt_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lpthread -lgfortran -L/home/palken/usr/lib
 
-AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/apex -I$(top_builddir)/mageq -I$(top_builddir)/msynth -I$(top_builddir)/lls -I$(top_builddir)/track -I$(top_builddir)/magdata -I$(top_builddir)/euler -I$(top_builddir)/estist -I$(top_builddir)/green
+AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/apex -I$(top_builddir)/mageq -I$(top_builddir)/msynth -I$(top_builddir)/lls -I$(top_builddir)/track -I$(top_builddir)/magdata -I$(top_builddir)/euler -I$(top_builddir)/estist -I$(top_builddir)/green -I$(top_builddir)/magfit

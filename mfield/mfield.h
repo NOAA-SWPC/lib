@@ -25,10 +25,10 @@
 #define MFIELD_SYNTH_DATA      0
 
 /* define to fit secular variation coefficients */
-#define MFIELD_FIT_SECVAR      1
+#define MFIELD_FIT_SECVAR      0
 
 /* define to fit secular acceleration coefficients */
-#define MFIELD_FIT_SECACC      1
+#define MFIELD_FIT_SECACC      0
 
 #if !MFIELD_FIT_SECVAR
 #define MFIELD_FIT_SECACC      0

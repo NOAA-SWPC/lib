@@ -68,10 +68,10 @@ static void *secs2d_alloc(const void * params);
 static void secs2d_free(void * vstate);
 static int secs2d_reset(void * vstate);
 static size_t secs2d_ncoeff(void * vstate);
-static int secs2d_add_datum(const double r, const double theta, const double phi,
+static int secs2d_add_datum(const double t, const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
 static int secs2d_fit(double * rnorm, double * snorm, void * vstate);
-static int secs2d_eval_B(const double r, const double theta, const double phi,
+static int secs2d_eval_B(const double t, const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs2d_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
@@ -255,7 +255,8 @@ secs2d_ncoeff(void * vstate)
 secs2d_add_datum()
   Add single vector measurement to LS system
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         qdlat  - QD latitude (degrees)
@@ -269,7 +270,7 @@ Notes:
 */
 
 static int
-secs2d_add_datum(const double r, const double theta, const double phi,
+secs2d_add_datum(const double t, const double r, const double theta, const double phi,
                  const double qdlat, const double B[3], void * vstate)
 {
   secs2d_state_t *state = (secs2d_state_t *) vstate;
@@ -278,6 +279,8 @@ secs2d_add_datum(const double r, const double theta, const double phi,
   gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
   gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
+
+  (void) t;
 
   if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
     {
@@ -440,7 +443,8 @@ secs2d_eval_B()
   Evaluate magnetic field at a given (r,theta) using
 previously computed 1D SECS coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -451,7 +455,7 @@ Notes:
 */
 
 static int
-secs2d_eval_B(const double r, const double theta, const double phi,
+secs2d_eval_B(const double t, const double r, const double theta, const double phi,
               double B[3], void * vstate)
 {
   secs2d_state_t *state = (secs2d_state_t *) vstate;
@@ -459,7 +463,7 @@ secs2d_eval_B(const double r, const double theta, const double phi,
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
 
-  (void) phi; /* unused parameter */
+  (void) t;   /* unused parameter */
 
   B[0] = 0.0;
   B[1] = 0.0;

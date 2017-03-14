@@ -40,6 +40,7 @@
 #include "common.h"
 #include "euler.h"
 #include "magdata.h"
+#include "magfit.h"
 #include "msynth.h"
 #include "track.h"
 #include "solarpos.h"
@@ -67,7 +68,7 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 #define MFIELD_EULER_LT_MAX        (6.0)
 
 /* number of seconds for computing along-track differences */
-#define MFIELD_GRAD_DT_NS          (40.0)
+#define MFIELD_GRAD_DT_NS          (20.0)
 
 /* maximum allowed seconds between satellite measurements for computing east-west differences */
 #define MFIELD_GRAD_DT_EW          (10.0)
@@ -108,6 +109,9 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 
 /* define to fit Z component at high latitudes instead of F */
 #define MFIELD_FIT_Z_HIGHLAT      1
+
+/* define to subtract ring current model from each track */
+#define MFIELD_SUBTRACT_RC        1
 
 #define MFIELD_IDX_X              0
 #define MFIELD_IDX_Y              1
@@ -221,16 +225,21 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
             }
           else
             {
+              /* don't fit X/Y data, including gradients, at high latitudes */
+              mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y);
+              mdata->flags[i] &= ~(MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS);
+              mdata->flags[i] &= ~(MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW);
+
+              /* at high latitudes, even N/S Z gradients are quite large so don't fit them;
+               * E/W Z gradients are better */
+              mdata->flags[i] &= ~MAGDATA_FLG_DZ_NS;
+
 #if MFIELD_FIT_Z_HIGHLAT
               /* only fit Z data at high latitudes */
-              mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_F);
-              mdata->flags[i] &= ~(MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DF_NS);
-              mdata->flags[i] &= ~(MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DF_EW);
+              mdata->flags[i] &= ~(MAGDATA_FLG_F | MAGDATA_FLG_DF_NS | MAGDATA_FLG_DF_EW);
 #else
               /* only fit F data at high latitudes */
-              mdata->flags[i] &= ~(MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z);
-              mdata->flags[i] &= ~(MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS);
-              mdata->flags[i] &= ~(MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW);
+              mdata->flags[i] &= ~(MAGDATA_FLG_Z | MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DZ_EW);
 #endif
             }
 
@@ -529,10 +538,6 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   struct timeval tv0, tv1;
   track_workspace *track_p = track_alloc();
 
-#if 0
-  print_unflagged_data("data_ts/data_ts.0", data);
-#endif
-
   fprintf(stderr, "preprocess_data: initializing tracks...");
   gettimeofday(&tv0, NULL);
   track_init(data, NULL, track_p);
@@ -558,10 +563,6 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
               nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
     }
 
-#if 0
-  print_unflagged_data("data_ts/data_ts.1", data);
-#endif
-
 #if MFIELD_FILTER_SMDL
 
   /* flag according to SMDL index */
@@ -585,7 +586,7 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
 #endif
 
 #if 0
-  print_unflagged_data("data_ts/data_ts.2", data);
+  print_unflagged_data("data.dat.1", data);
 #endif
 
   /* downsample data */
@@ -604,7 +605,7 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   }
 
 #if 0
-  print_unflagged_data("data_ts/data_ts.3", data);
+  print_unflagged_data("data.dat.2", data);
 #endif
 
   {
@@ -632,7 +633,7 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   }
 
 #if 0
-  print_unflagged_data("data_ts/data_ts.4", data);
+  print_unflagged_data("data.dat.3", data);
 #endif
 
   /* print track statistics */
@@ -655,26 +656,42 @@ print_unflagged_data(const char *filename, const satdata_mag *data)
 {
   size_t i;
   FILE *fp;
-  const double tmin = satdata_epoch2year(data->t[0]);
-  const double tmax = satdata_epoch2year(data->t[data->n - 1]);
-  const double dt = 10.0;            /* bin size in days */
-  const double dt_yrs = dt / 365.25; /* convert to years */
-  const size_t n = (size_t) ((tmax - tmin) / dt_yrs);
-  gsl_histogram *h = gsl_histogram_alloc(n);
-
-  gsl_histogram_set_ranges_uniform(h, tmin, tmax);
 
   fp = fopen(filename, "w");
 
   for (i = 0; i < data->n; ++i)
     {
-      if (data->flags[i])
+      double B[3], B_main[3], B_ext[3];
+
+#if 0
+      if (!SATDATA_AvailableData(data->flags[i]))
         continue;
+#else
+      if (SATDATA_BadData(data->flags[i]) || (data->flags[i] & SATDATA_FLG_FILTER))
+        continue;
+#endif
 
-      gsl_histogram_increment(h, satdata_epoch2year(data->t[i]));
+      B[0] = SATDATA_VEC_X(data->B, i);
+      B[1] = SATDATA_VEC_Y(data->B, i);
+      B[2] = SATDATA_VEC_Z(data->B, i);
+
+      B_main[0] = SATDATA_VEC_X(data->B_main, i);
+      B_main[1] = SATDATA_VEC_Y(data->B_main, i);
+      B_main[2] = SATDATA_VEC_Z(data->B_main, i);
+
+      B_ext[0] = SATDATA_VEC_X(data->B_ext, i);
+      B_ext[1] = SATDATA_VEC_Y(data->B_ext, i);
+      B_ext[2] = SATDATA_VEC_Z(data->B_ext, i);
+
+      fprintf(fp, "%f %f %f %f %f %f %f\n",
+              data->qdlat[i],
+              B[0],
+              B[1],
+              B[2],
+              B_main[0] + B_ext[0],
+              B_main[1] + B_ext[1],
+              B_main[2] + B_ext[2]);
     }
-
-  gsl_histogram_fprintf(fp, h, "%g", "%g");
 
   fclose(fp);
 }
@@ -682,8 +699,11 @@ print_unflagged_data(const char *filename, const satdata_mag *data)
 int
 calc_main(satdata_mag *data)
 {
-  /*msynth_workspace *msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);*/
+#if 0
+  msynth_workspace *msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+#else
   msynth_workspace *msynth_p = msynth_read(MSYNTH_BOUMME_FILE);
+#endif
   size_t i;
 
   msynth_set(1, 15, msynth_p);
@@ -696,8 +716,17 @@ calc_main(satdata_mag *data)
       double phi = data->longitude[i] * M_PI / 180.0;
       double B_core[4];
 
+      /* IMPORTANT: this needs the second check below, since AvailableData() will
+       * reject downsampled points, but they could be used for N/S or E/W gradients
+       * so the field value must be computed for thos too
+       */
+#if 0
       if (!SATDATA_AvailableData(data->flags[i]))
         continue;
+#else
+      if (SATDATA_BadData(data->flags[i]) || (data->flags[i] & SATDATA_FLG_FILTER))
+        continue;
+#endif
 
       msynth_eval(tyr, r, theta, phi, B_core, msynth_p);
 
@@ -709,6 +738,104 @@ calc_main(satdata_mag *data)
   msynth_free(msynth_p);
 
   return 0;
+}
+
+static int
+subtract_RC(const char *filename, satdata_mag *data, track_workspace *w)
+{
+  int s = 0;
+  const magfit_type *T = magfit_rc;
+  magfit_parameters magfit_params = magfit_default_parameters();
+  magfit_workspace *magfit_p = magfit_alloc(T, &magfit_params);
+  size_t i, j;
+  FILE *fp;
+
+  fp = fopen(filename, "w");
+  magfit_print_track(1, fp, NULL, data, magfit_p);
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      double rnorm, snorm;
+
+      if (tptr->flags != 0)
+        continue;
+
+      magfit_reset(magfit_p);
+
+      for (j = 0; j < tptr->n; ++j)
+        {
+          size_t didx = j + tptr->start_idx;
+          double t = data->t[didx];
+          double r = data->r[didx];
+          double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+          double phi = data->longitude[didx] * M_PI / 180.0;
+          double qdlat = data->qdlat[didx];
+          double B[3];
+
+          if (SATDATA_BadData(data->flags[didx]) || (data->flags[didx] & SATDATA_FLG_FILTER))
+            continue;
+
+          /* only fit RC model to low-latitude data */
+          if (fabs(qdlat) > 55.0)
+            continue;
+
+          /* start with total measurement */
+          B[0] = SATDATA_VEC_X(data->B, didx);
+          B[1] = SATDATA_VEC_Y(data->B, didx);
+          B[2] = SATDATA_VEC_Z(data->B, didx);
+
+          /* subtract main field */
+          B[0] -= SATDATA_VEC_X(data->B_main, didx);
+          B[1] -= SATDATA_VEC_Y(data->B_main, didx);
+          B[2] -= SATDATA_VEC_Z(data->B_main, didx);
+
+          /* subtract crustal field */
+          B[0] -= SATDATA_VEC_X(data->B_crust, didx);
+          B[1] -= SATDATA_VEC_Y(data->B_crust, didx);
+          B[2] -= SATDATA_VEC_Z(data->B_crust, didx);
+
+          /* subtract external field */
+          B[0] -= SATDATA_VEC_X(data->B_ext, didx);
+          B[1] -= SATDATA_VEC_Y(data->B_ext, didx);
+          B[2] -= SATDATA_VEC_Z(data->B_ext, didx);
+
+          /* add residual to magfit workspace */
+          magfit_add_datum(t, r, theta, phi, qdlat, B, magfit_p);
+        }
+
+      /* fit RC model */
+      s = magfit_fit(&rnorm, &snorm, magfit_p);
+      if (s)
+        continue;
+
+      magfit_print_track(0, fp, tptr, data, magfit_p);
+
+      /* now add the RC model to the external field model vector */
+      for (j = 0; j < tptr->n; ++j)
+        {
+          size_t didx = j + tptr->start_idx;
+          double t = data->t[didx];
+          double r = data->r[didx];
+          double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
+          double phi = data->longitude[didx] * M_PI / 180.0;
+          double B[3];
+
+          if (SATDATA_BadData(data->flags[didx]) || (data->flags[didx] & SATDATA_FLG_FILTER))
+            continue;
+
+          magfit_eval_B(t, r, theta, phi, B, magfit_p);
+
+          SATDATA_VEC_X(data->B_ext, didx) += B[0];
+          SATDATA_VEC_Y(data->B_ext, didx) += B[1];
+          SATDATA_VEC_Z(data->B_ext, didx) += B[2];
+        }
+    }
+
+  magfit_free(magfit_p);
+  fclose(fp);
+
+  return s;
 }
 
 void
@@ -860,7 +987,7 @@ main(int argc, char *argv[])
     }
 
 #if MFIELD_INC_MAIN
-  /* XXX recompute B_main with CHAOS model */
+  /* XXX recompute B_main with recent main field model */
   fprintf(stderr, "main: recomputing main field for satellite 1...");
   calc_main(data);
   fprintf(stderr, "done\n");
@@ -871,6 +998,27 @@ main(int argc, char *argv[])
       calc_main(data2);
       fprintf(stderr, "done\n");
     }
+#endif
+
+#if MFIELD_SUBTRACT_RC
+
+  fprintf(stderr, "main: subtracting RC model from satellite 1...");
+  subtract_RC("rc1.dat", data, track_p);
+  fprintf(stderr, "done\n");
+
+  if (data2)
+    {
+      fprintf(stderr, "main: subtracting RC model from satellite 2...");
+      subtract_RC("rc2.dat", data2, track_p2);
+      fprintf(stderr, "done\n");
+    }
+
+#endif
+
+#if 0 /* XXX */
+  print_unflagged_data("data1.dat", data);
+  /*print_unflagged_data("data2.dat", data2);*/
+  exit(1);
 #endif
 
   fprintf(stderr, "main: computing vector residuals...");
@@ -919,6 +1067,12 @@ main(int argc, char *argv[])
   magdata_free(mdata);
   track_free(track_p);
   solarpos_free(solarpos_workspace_p);
+
+  if (euler_p)
+    euler_free(euler_p);
+
+  if (euler_p2)
+    euler_free(euler_p2);
 
   if (track_p2)
     track_free(track_p2);

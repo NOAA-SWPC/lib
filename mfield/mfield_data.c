@@ -409,6 +409,7 @@ mfield_data_print(const char *dir_prefix, const mfield_data_workspace *w)
       for (j = 0; j < n; ++j)
         {
           k = 1;
+          fprintf(fp[j], "# Field %zu: timestamp (UT seconds since 1970-01-01)\n", k++);
           fprintf(fp[j], "# Field %zu: time (decimal year)\n", k++);
           fprintf(fp[j], "# Field %zu: longitude (degrees)\n", k++);
           fprintf(fp[j], "# Field %zu: geocentric latitude (degrees)\n", k++);
@@ -443,6 +444,7 @@ mfield_data_print(const char *dir_prefix, const mfield_data_workspace *w)
       for (j = 0; j < mptr->n; ++j)
         {
           double t = satdata_epoch2year(mptr->t[j]);
+          time_t unix_time = satdata_epoch2timet(mptr->t[j]);
           double phi = wrap180(mptr->phi[j] * 180.0 / M_PI);
           double lat = 90.0 - mptr->theta[j] * 180.0 / M_PI;
           double qdlat = mptr->qdlat[j];
@@ -475,63 +477,73 @@ mfield_data_print(const char *dir_prefix, const mfield_data_workspace *w)
 
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
-              fprintf(fp[0], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[0], B_model[0]);
+              fprintf(fp[0], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[0], B_model[0]);
             }
 
           if (MAGDATA_ExistY(mptr->flags[j]))
             {
-              fprintf(fp[1], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[1], B_model[1]);
+              fprintf(fp[1], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[1], B_model[1]);
             }
 
           if (MAGDATA_ExistZ(mptr->flags[j]))
             {
-              fprintf(fp[2], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[2], B_model[2]);
+              fprintf(fp[2], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[2], B_model[2]);
             }
 
           if (MAGDATA_ExistScalar(mptr->flags[j]))
             {
-              fprintf(fp[3], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[3], B_model[3]);
+              fprintf(fp[3], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[3], B_model[3]);
             }
 
           if (MAGDATA_ExistDX_NS(mptr->flags[j]))
             {
-              fprintf(fp[4], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[0] - B_grad[0], B_model[0] - B_grad_model[0]);
+              fprintf(fp[4], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[0] - B_grad[0], B_model[0] - B_grad_model[0]);
             }
 
           if (MAGDATA_ExistDY_NS(mptr->flags[j]))
             {
-              fprintf(fp[5], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[1] - B_grad[1], B_model[1] - B_grad_model[1]);
+              fprintf(fp[5], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[1] - B_grad[1], B_model[1] - B_grad_model[1]);
             }
 
           if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
             {
-              fprintf(fp[6], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[2] - B_grad[2], B_model[2] - B_grad_model[2]);
+              fprintf(fp[6], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[2] - B_grad[2], B_model[2] - B_grad_model[2]);
             }
 
           if (MAGDATA_ExistDX_EW(mptr->flags[j]))
             {
-              fprintf(fp[7], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[0] - B_grad[0], B_model[0] - B_grad_model[0]);
+              fprintf(fp[7], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[0] - B_grad[0], B_model[0] - B_grad_model[0]);
             }
 
           if (MAGDATA_ExistDY_EW(mptr->flags[j]))
             {
-              fprintf(fp[8], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[1] - B_grad[1], B_model[1] - B_grad_model[1]);
+              fprintf(fp[8], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[1] - B_grad[1], B_model[1] - B_grad_model[1]);
             }
 
           if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
             {
-              fprintf(fp[9], "%f %.4f %.4f %.4f %.4f %.2f %.2f\n",
-                      t, phi, lat, qdlat, r, B[2] - B_grad[2], B_model[2] - B_grad_model[2]);
+              fprintf(fp[9], "%ld %f %.4f %.4f %.4f %.4f %.4f %.4f\n",
+                      unix_time, t, phi, lat, qdlat, r, B[2] - B_grad[2], B_model[2] - B_grad_model[2]);
             }
+
+#if 0
+          if (mptr->flags[j] & MAGDATA_FLG_TRACK_START)
+            {
+              size_t k;
+
+              for (k = 0; k < n; ++k)
+                fprintf(fp[k], "\n\n");
+            }
+#endif
         }
 
       for (j = 0; j < n; ++j)

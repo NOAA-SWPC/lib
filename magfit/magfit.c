@@ -109,6 +109,35 @@ magfit_reset(magfit_workspace *w)
 }
 
 /*
+magfit_add_datum()
+  Add single datum to magfit workspace
+
+Inputs: t     - timestamp (CDF_EPOCH)
+        r     - radius (km)
+        theta - colatitude (radians)
+        phi   - colatitude (radians)
+        qdlat - QD latitude (degrees)
+        B     - magnetic field NEC vector (nT)
+        w     - workspace
+*/
+
+int
+magfit_add_datum(const double t, const double r, const double theta, const double phi,
+                 const double qdlat, double B[3], magfit_workspace *w)
+{
+  int s;
+
+  s = (w->type->add_datum)(t, r, theta, phi, qdlat, B, w->state);
+  if (s)
+    {
+      fprintf(stderr, "magfit_add_datum: error adding data: %d\n", s);
+      return GSL_FAILURE;
+    }
+
+  return GSL_SUCCESS;
+}
+
+/*
 magfit_add_track()
   Add satellite data from a single track to LS system
 
@@ -130,6 +159,7 @@ magfit_add_track(const track_data *tptr, const satdata_mag *data,
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
+      double t = data->t[didx];
       double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
@@ -147,7 +177,7 @@ magfit_add_track(const track_data *tptr, const satdata_mag *data,
       B[1] = tptr->By[i];
       B[2] = tptr->Bz[i];
 
-      s = (w->type->add_datum)(r, theta, phi, qdlat, B, w->state);
+      s = (w->type->add_datum)(t, r, theta, phi, qdlat, B, w->state);
       if (s)
         {
           fprintf(stderr, "magfit_add_track: error adding data\n");
@@ -201,6 +231,7 @@ magfit_apply_track(track_data *tptr, satdata_mag *data, magfit_workspace *w)
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
+      double t = data->t[didx];
       double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
@@ -209,7 +240,7 @@ magfit_apply_track(track_data *tptr, satdata_mag *data, magfit_workspace *w)
       if (!SATDATA_AvailableData(data->flags[didx]))
         continue;
 
-      magfit_eval_B(r, theta, phi, B, w);
+      magfit_eval_B(t, r, theta, phi, B, w);
 
       /* add RC correction model to data->B_ext */
       SATDATA_VEC_X(data->B_ext, didx) += B[0];
@@ -225,10 +256,11 @@ magfit_apply_track(track_data *tptr, satdata_mag *data, magfit_workspace *w)
 
 /*
 magfit_eval_B()
-  Evaluate magnetic field at a given (r,theta) using
+  Evaluate magnetic field at a given (t,r,theta,phi) using
 previously computed coefficients
 
-Inputs: r     - radius (km)
+Inputs: t     - timestamp (CDF_EPOCH)
+        r     - radius (km)
         theta - colatitude (radians)
         phi   - longitude (radians)
         B     - (output) magnetic field vector (nT)
@@ -236,10 +268,10 @@ Inputs: r     - radius (km)
 */
 
 int
-magfit_eval_B(const double r, const double theta, const double phi,
+magfit_eval_B(const double t, const double r, const double theta, const double phi,
               double B[3], magfit_workspace *w)
 {
-  int status = (w->type->eval_B)(r, theta, phi, B, w->state);
+  int status = (w->type->eval_B)(t, r, theta, phi, B, w->state);
   return status;
 }
 
@@ -307,10 +339,10 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
               double B[3];
 
               /* compute magnetic field vector */
-              s += (w->type->eval_B)(r, theta, phi, B, w->state);
+              s += (w->type->eval_B)(0.0, r, theta, phi, B, w->state);
 
               /* add B to gaussint workspace */
-              (gaussint_p->type->add_datum)(r, theta, phi, 0.0, B, gaussint_p->state);
+              (gaussint_p->type->add_datum)(0.0, r, theta, phi, 0.0, B, gaussint_p->state);
             }
         }
 
@@ -350,7 +382,7 @@ magfit_print_map(FILE *fp, const double r, magfit_workspace *w)
           chi = (eval_chi)(theta, phi, chi_state);
 
           /* compute magnetic field vector */
-          s += (w->type->eval_B)(r, theta, phi, B, w->state);
+          s += (w->type->eval_B)(0.0, r, theta, phi, B, w->state);
 
           fprintf(fp, "%f %f %f %f %f %f\n",
                   lon,
@@ -408,6 +440,7 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
+      double t = data->t[didx];
       double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
@@ -421,7 +454,7 @@ magfit_print_track(const int header, FILE *fp, const track_data *tptr,
         continue;
 
       /* compute model prediction */
-      magfit_eval_B(r, theta, phi, B_model, w);
+      magfit_eval_B(t, r, theta, phi, B_model, w);
       magfit_eval_J(r, theta, phi, J_model, w);
 
       fprintf(fp, "%ld %f %f %f %f %f %f %f %f %f %f %f %f %f\n",
@@ -480,6 +513,7 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
   for (i = 0; i < tptr->n; ++i)
     {
       size_t didx = i + tptr->start_idx;
+      double t = data->t[didx];
       double r = data->r[didx];
       double theta = M_PI / 2.0 - data->latitude[didx] * M_PI / 180.0;
       double phi = data->longitude[didx] * M_PI / 180.0;
@@ -493,7 +527,7 @@ magfit_print_rms(const int header, FILE *fp, const double lon0, const track_data
         continue;
 
       /* compute model prediction */
-      magfit_eval_B(r, theta, phi, B_model, w);
+      magfit_eval_B(t, r, theta, phi, B_model, w);
 
       rms[0] += pow(tptr->Bx[i] - B_model[0], 2.0);
       rms[1] += pow(tptr->By[i] - B_model[1], 2.0);

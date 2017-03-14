@@ -1,7 +1,7 @@
 /*
- * msynth_chaos.c
+ * msynth_swarm.c
  * 
- * Routines to read a CHAOS coefficient file
+ * Routines to read a SWARM SHC formatted coefficient file
  */
 
 #include <stdio.h>
@@ -14,12 +14,12 @@
 #include "msynth.h"
 
 /*
-msynth_chaos_read()
-  Read CHAOS coefficient file
+msynth_swarm_read()
+  Read SWARM coefficient file
 */
 
 msynth_workspace *
-msynth_chaos_read(const char *filename)
+msynth_swarm_read(const char *filename)
 {
   FILE *fp;
   size_t nmin = 0;
@@ -35,7 +35,7 @@ msynth_chaos_read(const char *filename)
   fp = fopen(filename, "r");
   if (!fp)
     {
-      fprintf(stderr, "msynth_chaos_read: unable to open %s: %s\n",
+      fprintf(stderr, "msynth_swarm_read: unable to open %s: %s\n",
               filename, strerror(errno));
       return 0;
     }
@@ -83,14 +83,14 @@ msynth_chaos_read(const char *filename)
 
               if (i >= MSYNTH_MAX_SNAPSHOT)
                 {
-                  fprintf(stderr, "msynth_chaos_read: MSYNTH_MAX_SNAPSHOT not large enough\n");
+                  fprintf(stderr, "msynth_swarm_read: MSYNTH_MAX_SNAPSHOT not large enough\n");
                   return 0;
                 }
             }
 
           if (i != num_epochs)
             {
-              fprintf(stderr, "msynth_chaos_read: error reading epochs\n");
+              fprintf(stderr, "msynth_swarm_read: error reading epochs\n");
               return 0;
             }
 
@@ -133,7 +133,7 @@ msynth_chaos_read(const char *filename)
 
           if (i != num_epochs)
             {
-              fprintf(stderr, "msynth_chaos_read: error in file format\n");
+              fprintf(stderr, "msynth_swarm_read: error in file format\n");
               break;
             }
         }
@@ -143,7 +143,7 @@ msynth_chaos_read(const char *filename)
 
   if (num_epochs == 0)
     {
-      fprintf(stderr, "msynth_chaos_read: error parsing file %s\n", filename);
+      fprintf(stderr, "msynth_swarm_read: error parsing file %s\n", filename);
       return w;
     }
 
@@ -160,4 +160,4 @@ msynth_chaos_read(const char *filename)
     }
 
   return w;
-} /* msynth_chaos_read() */
+}

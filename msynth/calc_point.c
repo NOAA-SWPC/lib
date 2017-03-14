@@ -41,7 +41,7 @@ main(int argc, char *argv[])
 
           case 'h':
             fprintf(stderr, "main: reading CHAOS coefficient file %s...", optarg);
-            w = msynth_chaos_read(optarg);
+            w = msynth_swarm_read(optarg);
             fprintf(stderr, "done\n");
             break;
 
@@ -61,7 +61,7 @@ main(int argc, char *argv[])
 
   if (!w)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-w wmm_file] [-a arnaud_file] [-h chaos_file] [-i igrf_file]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-i igrf_file]\n", argv[0]);
       exit(1);
     }
 

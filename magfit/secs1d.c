@@ -73,10 +73,10 @@ static void *secs1d_alloc(const void * params);
 static void secs1d_free(void * vstate);
 static int secs1d_reset(void * vstate);
 static size_t secs1d_ncoeff(void * vstate);
-static int secs1d_add_datum(const double r, const double theta, const double phi,
+static int secs1d_add_datum(const double t, const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
 static int secs1d_fit(double * rnorm, double * snorm, void * vstate);
-static int secs1d_eval_B(const double r, const double theta, const double phi,
+static int secs1d_eval_B(const double t, const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs1d_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
@@ -280,7 +280,8 @@ secs1d_ncoeff(void * vstate)
 secs1d_add_datum()
   Add single vector measurement to LS system
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         qdlat  - QD latitude (degrees)
@@ -294,13 +295,14 @@ Notes:
 */
 
 static int
-secs1d_add_datum(const double r, const double theta, const double phi,
+secs1d_add_datum(const double t, const double r, const double theta, const double phi,
                  const double qdlat, const double B[3], void * vstate)
 {
   secs1d_state_t *state = (secs1d_state_t *) vstate;
   size_t rowidx = state->n;
   double wi = 1.0;
 
+  (void) t;   /* unused parameter */
   (void) phi; /* unused parameter */
 
   if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
@@ -477,7 +479,8 @@ secs1d_eval_B()
   Evaluate magnetic field at a given (r,theta) using
 previously computed 1D SECS coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -488,7 +491,7 @@ Notes:
 */
 
 static int
-secs1d_eval_B(const double r, const double theta, const double phi,
+secs1d_eval_B(const double t, const double r, const double theta, const double phi,
               double B[3], void * vstate)
 {
   secs1d_state_t *state = (secs1d_state_t *) vstate;
@@ -496,6 +499,7 @@ secs1d_eval_B(const double r, const double theta, const double phi,
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
 
+  (void) t;   /* unused parameter */
   (void) phi; /* unused parameter */
 
   B[0] = 0.0;

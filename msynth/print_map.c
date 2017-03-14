@@ -8,7 +8,7 @@
  * [-m mf7_file]
  * [-w wmm_file]
  * [-a arnaud_file]
- * [-h chaos_file]
+ * [-h swarm_shc_file]
  * [-p pomme_file]
  * [-i igrf12_mf_candidate]
  * [-z]
@@ -125,9 +125,9 @@ main(int argc, char *argv[])
 
           case 'h':
             if (!msynth1)
-              msynth1 = msynth_chaos_read(optarg);
+              msynth1 = msynth_swarm_read(optarg);
             else
-              msynth2 = msynth_chaos_read(optarg);
+              msynth2 = msynth_swarm_read(optarg);
             break;
 
           case 'p':
@@ -164,14 +164,14 @@ main(int argc, char *argv[])
 
           case 'd':
             diff = 1;
-            msynth2 = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+            msynth2 = msynth_swarm_read(MSYNTH_CHAOS_FILE);
             break;
         }
     }
 
   if (!msynth1)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h chaos_file] [-p pomme_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-t epoch] [-o output_file] [-d]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-p pomme_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-t epoch] [-o output_file] [-d]\n", argv[0]);
       exit(1);
     }
 

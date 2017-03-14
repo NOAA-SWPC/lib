@@ -10,7 +10,7 @@
  * [-a arnaud_file]
  * [-b NGDC720_file]
  * [-f EMM_crust_file]
- * [-h chaos_file]
+ * [-h swarm_file]
  * [-p pomme_file]
  * [-i igrf12_mf_candidate]
  * [-z]
@@ -95,9 +95,9 @@ main(int argc, char *argv[])
 
           case 'h':
             if (!msynth1)
-              msynth1 = msynth_chaos_read(optarg);
+              msynth1 = msynth_swarm_read(optarg);
             else
-              msynth2 = msynth_chaos_read(optarg);
+              msynth2 = msynth_swarm_read(optarg);
             break;
 
           case 'p':
@@ -144,14 +144,14 @@ main(int argc, char *argv[])
             break;
 
           case 'd':
-            msynth2 = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+            msynth2 = msynth_swarm_read(MSYNTH_CHAOS_FILE);
             break;
         }
     }
 
   if (!msynth1)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h chaos_file] [-p pomme_file] [-t tgcm_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-e epoch] [-o output_file] [-d]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h swarm_shc_file] [-p pomme_file] [-t tgcm_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-e epoch] [-o output_file] [-d]\n", argv[0]);
       exit(1);
     }
 

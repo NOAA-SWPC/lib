@@ -50,7 +50,7 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              65
+#define NMAX_MF              85
 #define NMAX_SV              1
 #define NMAX_SA              1
 
@@ -562,7 +562,7 @@ print_help(char *argv[])
   fprintf(stderr, "Usage: %s [options] sat1.dat sat2.dat ...\n", argv[0]);
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t --maxit | -n num_iterations     - number of robust iterations\n");
-  fprintf(stderr, "\t --output_file | -o file         - coefficient output file\n");
+  fprintf(stderr, "\t --output_file | -o file         - coefficient output file (ASCII)\n");
   fprintf(stderr, "\t --epoch | -e epoch              - model epoch in decimal years\n");
   fprintf(stderr, "\t --lambda_sv | -v lambda_sv      - SV damping parameter\n");
   fprintf(stderr, "\t --lambda_sa | -a lambda_sa      - SA damping parameter\n");
@@ -838,6 +838,12 @@ main(int argc, char *argv[])
 
       mfield_calc_nonlinear(coeffs, mfield_workspace_p);
 
+      /* output coefficients for this iteration */
+      sprintf(buf, "coef.txt.iter%zu", iter);
+      fprintf(stderr, "main: writing coefficient file %s...", buf);
+      mfield_write_ascii(buf, mfield_workspace_p->epoch, 0, mfield_workspace_p);
+      fprintf(stderr, "done\n");
+
       /* output spectrum for this iteration */
       sprintf(buf, "mfield.s.iter%zu", iter);
       print_spectrum(buf, mfield_workspace_p);
@@ -909,8 +915,9 @@ main(int argc, char *argv[])
 
   if (outfile)
     {
-      fprintf(stderr, "main: writing coefficients to %s...", outfile);
-      mfield_write(outfile, mfield_workspace_p);
+      fprintf(stderr, "main: writing ASCII coefficients to %s...", outfile);
+      /*mfield_write(outfile, mfield_workspace_p);*/
+      mfield_write_ascii(outfile, mfield_workspace_p->epoch, 0, mfield_workspace_p);
       fprintf(stderr, "done\n");
     }
 

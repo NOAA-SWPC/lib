@@ -66,14 +66,14 @@
 
 /* weighting factors for data (multiplies spatial weights) */
 #define MFIELD_WEIGHT_F              (1.0)
-#define MFIELD_WEIGHT_X              (1.0)
+#define MFIELD_WEIGHT_X              (2.0)
 #define MFIELD_WEIGHT_Y              (1.0)
-#define MFIELD_WEIGHT_Z              (1.0)
+#define MFIELD_WEIGHT_Z              (2.0)
 
 /* weighting factors for gradient data (N/S or E/W) */
-#define MFIELD_WEIGHT_DX             (1.0)
-#define MFIELD_WEIGHT_DY             (1.0)
-#define MFIELD_WEIGHT_DZ             (1.0)
+#define MFIELD_WEIGHT_DX             (5.0)
+#define MFIELD_WEIGHT_DY             (5.0)
+#define MFIELD_WEIGHT_DZ             (5.0)
 
 static int mfield_green(const double r, const double theta, const double phi,
                         mfield_workspace *w);

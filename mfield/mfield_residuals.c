@@ -76,9 +76,13 @@ print_residual_stats(const magdata *data, msynth_workspace *core_p)
       B_nec[1] = data->By_nec[i];
       B_nec[2] = data->Bz_nec[i];
 
+#if 0
       B_ext[0] = data->Bx_model[i];
       B_ext[1] = data->By_model[i];
       B_ext[2] = data->Bz_model[i];
+#else
+      B_ext[0] = B_ext[1] = B_ext[2] = 0.0;
+#endif
 
       msynth_eval(t, r, theta, phi, B_core, core_p);
 #if 0
@@ -287,7 +291,7 @@ main(int argc, char *argv[])
 
           case 'h':
             fprintf(stderr, "main: reading coefficients from %s...", MSYNTH_CHAOS_FILE);
-            msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+            msynth_p = msynth_swarm_read(MSYNTH_CHAOS_FILE);
             fprintf(stderr, "done\n");
             break;
 

@@ -40,6 +40,7 @@ typedef struct
   double kp_max;
   double alt_min;
   double alt_max;
+  msynth_workspace *core_p;
 } print_parameters;
 
 /*
@@ -94,10 +95,11 @@ print_data(const int down_sample, const print_parameters *params,
   for (i = 0; i < data->n; i += down_sample)
     {
       time_t unix_time;
+      double tyr = satdata_epoch2year(data->t[i]);
       double phi = data->longitude[i] * M_PI / 180.0;
       double lt, ut, euvac;
       double qdlat = data->qdlat[i];
-      double B_obs[3], B_main[3], B_crust[3], B_ext[3], B_res[4], B_model[4];
+      double B_obs[3], B_main[4], B_crust[3], B_ext[3], B_res[4], B_model[4];
 
       if (data->flags[i])
         continue; /* nan vector components */
@@ -124,9 +126,17 @@ print_data(const int down_sample, const print_parameters *params,
       B_obs[1] = SATDATA_VEC_Y(data->B, i);
       B_obs[2] = SATDATA_VEC_Z(data->B, i);
 
-      B_main[0] = SATDATA_VEC_X(data->B_main, i);
-      B_main[1] = SATDATA_VEC_Y(data->B_main, i);
-      B_main[2] = SATDATA_VEC_Z(data->B_main, i);
+      if (params->core_p != NULL)
+        {
+          double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
+          msynth_eval(tyr, data->r[i], theta, phi, B_main, params->core_p);
+        }
+      else
+        {
+          B_main[0] = SATDATA_VEC_X(data->B_main, i);
+          B_main[1] = SATDATA_VEC_Y(data->B_main, i);
+          B_main[2] = SATDATA_VEC_Z(data->B_main, i);
+        }
 
       B_crust[0] = SATDATA_VEC_X(data->B_crust, i);
       B_crust[1] = SATDATA_VEC_Y(data->B_crust, i);
@@ -148,7 +158,7 @@ print_data(const int down_sample, const print_parameters *params,
 
       printf("%ld %.8f %.2f %.2f %6.2f %5.1f %10.4f %8.4f %10.4f %10.4f %d %10.4e %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
              unix_time,
-             satdata_epoch2year(data->t[i]),
+             tyr,
              get_ut(unix_time),
              lt,
              get_season(unix_time),
@@ -202,6 +212,7 @@ main(int argc, char *argv[])
   params.kp_max = 20.0;
   params.alt_min = 0.0;
   params.alt_max = 1000.0;
+  params.core_p = NULL;
 
   while (1)
     {
@@ -219,10 +230,11 @@ main(int argc, char *argv[])
           { "ut_max", required_argument, NULL, 'j' },
           { "alt_min", required_argument, NULL, 'k' },
           { "alt_max", required_argument, NULL, 'l' },
+          { "core_file", required_argument, NULL, 'm' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:d:", long_options, &option_index);
+      c = getopt_long(argc, argv, "i:d:m:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -276,6 +288,13 @@ main(int argc, char *argv[])
             params.alt_max = atof(optarg);
             break;
 
+          case 'm':
+            fprintf(stderr, "main: reading core field coefficients from %s...", optarg);
+            params.core_p = msynth_read(optarg);
+            msynth_set(1, 15, params.core_p);
+            fprintf(stderr, "done\n");
+            break;
+
           default:
             break;
         }
@@ -283,7 +302,7 @@ main(int argc, char *argv[])
 
   if (!infile)
     {
-      fprintf(stderr, "Usage: %s <-i swarm_index_file> [-d down_sample] [--lt_min lt_min] [--lt_max lt_max] [--alt_min alt_min] [--alt_max alt_max] [--qd_min qd_min] [--qd_max qd_max] [--kp_min kp_min] [--kp_max kp_max] [--ut_min ut_min] [--ut_max ut_max]\n",
+      fprintf(stderr, "Usage: %s <-i swarm_index_file> [-d down_sample] [--lt_min lt_min] [--lt_max lt_max] [--alt_min alt_min] [--alt_max alt_max] [--qd_min qd_min] [--qd_max qd_max] [--kp_min kp_min] [--kp_max kp_max] [--ut_min ut_min] [--ut_max ut_max] [-m core_model_file]\n",
               argv[0]);
       exit(1);
     }

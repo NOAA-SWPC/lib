@@ -53,7 +53,7 @@ main(int argc, char *argv[])
             break;
 
           case 'h':
-            w = msynth_chaos_read(optarg);
+            w = msynth_swarm_read(optarg);
             break;
 
           case 'p':
@@ -85,7 +85,7 @@ main(int argc, char *argv[])
 
   if (!w)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h chaos_file] [-p pomme_file] [-i igrf12_mf_candidate] [-n nmax] [-e epoch] [-y data_start] [-z data_end] [-o output_file]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-p pomme_file] [-i igrf12_mf_candidate] [-n nmax] [-e epoch] [-y data_start] [-z data_end] [-o output_file]\n", argv[0]);
       exit(1);
     }
 

@@ -529,6 +529,54 @@ msynth_print_spectrum_m(const char *filename, const msynth_workspace *w)
   return 0;
 } /* msynth_print_spectrum_m() */
 
+/* print sensitivity matrix between two sets of coefficients */
+int
+msynth_print_smatrix(const char *filename, const msynth_workspace *w1,
+                     const msynth_workspace *w2)
+{
+  FILE *fp;
+  const size_t nmin = GSL_MAX(w1->eval_nmin, w2->eval_nmin);
+  const size_t nmax = GSL_MIN(w1->eval_nmax, w2->eval_nmax);
+  size_t n;
+  
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "msynth_print_smatrix: cannot open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  n = 1;
+  fprintf(fp, "# Field %zu: spherical harmonic degree n\n", n++);
+  fprintf(fp, "# Field %zu: spherical harmonic order m\n", n++);
+  fprintf(fp, "# Field %zu: model difference for coefficient (n,m)\n", n++);
+
+  for (n = nmin; n <= nmax; ++n)
+    {
+      int ni = (int) n;
+      int m;
+
+      for (m = -ni; m <= ni; ++m)
+        {
+          size_t cidx1 = msynth_nmidx(n, m, w1);
+          size_t cidx2 = msynth_nmidx(n, m, w2);
+          double gnm = w1->c[cidx1] - w2->c[cidx2];
+
+          fprintf(fp, "%4d %4zu %10.4f\n",
+                  m,
+                  n,
+                  gnm);
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  fclose(fp);
+
+  return 0;
+}
+
 /* print degree correlation between two sets of coefficients */
 int
 msynth_print_correlation(const char *filename, const msynth_workspace *w1,
@@ -536,7 +584,8 @@ msynth_print_correlation(const char *filename, const msynth_workspace *w1,
 {
   size_t n;
   FILE *fp;
-  size_t nmax = GSL_MIN(w1->eval_nmax, w2->eval_nmax);
+  const size_t nmin = GSL_MAX(w1->eval_nmin, w2->eval_nmin);
+  const size_t nmax = GSL_MIN(w1->eval_nmax, w2->eval_nmax);
   gsl_vector *c1 = gsl_vector_alloc(w1->p);
   gsl_vector *c2 = gsl_vector_alloc(w2->p);
   gsl_vector_view v;
@@ -562,7 +611,7 @@ msynth_print_correlation(const char *filename, const msynth_workspace *w1,
   fprintf(fp, "# Field %zu: SV R_n\n", n++);
   fprintf(fp, "# Field %zu: SA R_n\n", n++);
 
-  for (n = 1; n <= nmax; ++n)
+  for (n = nmin; n <= nmax; ++n)
     {
       size_t base = n * n - 1;
       size_t len = 2 * n + 1;
@@ -1291,6 +1340,14 @@ msynth_get_ddgnm(const double t, const size_t n, int m,
 
   return ddg[cidx];
 } /* msynth_get_ddgnm() */
+
+/*
+msynth_epoch_idx()
+  Return index in [0,n_snapshot-1] for epoch corresponding to t
+
+Inputs: t - time (decimal years)
+        w - workspace
+*/
 
 size_t
 msynth_epoch_idx(const double t, const msynth_workspace *w)

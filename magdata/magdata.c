@@ -1340,10 +1340,14 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
       {
         size_t j = GSL_MIN(i + grad_idx, data->n - 1);
         double dt = (data->t[j] - data->t[i]) / 1000.0; /* in s */
+        int status = 0;
 
         /* check if along-track point should be rejected */
-        if (!SATDATA_BadData(data->flags[j]) &&
-            (dt >= grad_dt_min && dt <= grad_dt_max))
+        if (SATDATA_BadData(data->flags[j]) || (data->flags[j] & SATDATA_FLG_FILTER) ||
+            (dt < grad_dt_min || dt > grad_dt_max))
+          status = -1;
+
+        if (status == 0)
           {
             /* set flag to indicate scalar gradient information available */
             flags |= MAGDATA_FLG_DF_NS;
@@ -1627,7 +1631,7 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       datum.satdir = satdata_mag_satdir(i, data);
       datum.flags = flags;
 
-#if 1
+#if 0
       if (MAGDATA_ExistDZ_EW(flags))
         {
           printf("%f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n",

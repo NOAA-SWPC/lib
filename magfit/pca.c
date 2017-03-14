@@ -68,10 +68,10 @@ static void *pcafit_alloc(const void * params);
 static void pcafit_free(void * vstate);
 static int pcafit_reset(void * vstate);
 static size_t pcafit_ncoeff(void * vstate);
-static int pcafit_add_datum(const double r, const double theta, const double phi,
+static int pcafit_add_datum(const double t, const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
 static int pcafit_fit(double * rnorm, double * snorm, void * vstate);
-static int pcafit_eval_B(const double r, const double theta, const double phi,
+static int pcafit_eval_B(const double t, const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int pcafit_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
@@ -233,7 +233,8 @@ pcafit_ncoeff(void * vstate)
 pcafit_add_datum()
   Add single vector measurement to LS system
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         qdlat  - QD latitude (degrees)
@@ -247,7 +248,7 @@ Notes:
 */
 
 static int
-pcafit_add_datum(const double r, const double theta, const double phi,
+pcafit_add_datum(const double t, const double r, const double theta, const double phi,
                  const double qdlat, const double B[3], void * vstate)
 {
   pca_state_t *state = (pca_state_t *) vstate;
@@ -256,6 +257,8 @@ pcafit_add_datum(const double r, const double theta, const double phi,
   gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
   gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
+
+  (void) t;
 
   /* upweight equatorial data */
   if (fabs(qdlat) <= 10.0)
@@ -443,7 +446,8 @@ pcafit_eval_B()
   Evaluate magnetic field at a given (r,theta) using
 previously computed coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -454,11 +458,13 @@ Notes:
 */
 
 static int
-pcafit_eval_B(const double r, const double theta, const double phi,
-           double B[3], void * vstate)
+pcafit_eval_B(const double t, const double r, const double theta, const double phi,
+              double B[3], void * vstate)
 {
   int status;
   pca_state_t *state = (pca_state_t *) vstate;
+
+  (void) t;
 
   status = pca_B(state->c, r, theta, phi, B, state->pca_workspace_p);
 

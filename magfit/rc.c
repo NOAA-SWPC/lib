@@ -32,6 +32,7 @@
 #include "common.h"
 #include "interp.h"
 #include "green.h"
+#include "msynth.h"
 #include "track.h"
 
 #include "magfit.h"
@@ -42,12 +43,15 @@ typedef struct
   size_t p;         /* number of coefficients */
   size_t nmax;      /* maximum number of measurements in LS system */
 
+  int subtract_crust; /* subtract crustal field prior to fitting RC model */
+
   gsl_matrix *X;    /* LS matrix */
   gsl_vector *rhs;  /* rhs vector */
   gsl_vector *wts;  /* weight vector */
   gsl_matrix *cov;  /* covariance matrix */
   gsl_vector *c;    /* solution vector */
 
+  msynth_workspace *msynth_core_p;
   gsl_multifit_linear_workspace *multifit_p;
   green_workspace *green_workspace_p;
 } rc_state_t;
@@ -56,16 +60,16 @@ static void *rc_alloc(const void * params);
 static void rc_free(void * vstate);
 static int rc_reset(void * vstate);
 static size_t rc_ncoeff(void * vstate);
-static int rc_add_datum(const double r, const double theta, const double phi,
-                            const double qdlat, const double B[3], void * vstate);
+static int rc_add_datum(const double t, const double r, const double theta, const double phi,
+                        const double qdlat, const double B[3], void * vstate);
 static int rc_fit(double * rnorm, double * snorm, void * vstate);
-static int rc_eval_B(const double r, const double theta, const double phi,
-                         double B[3], void * vstate);
+static int rc_eval_B(const double t, const double r, const double theta, const double phi,
+                     double B[3], void * vstate);
 static int rc_eval_J(const double r, const double theta, const double phi,
-                         double J[3], void * vstate);
+                     double J[3], void * vstate);
 static double rc_eval_chi(const double theta, const double phi, void * vstate);
 
-static int build_matrix_row(const double r, const double theta, const double phi,
+static int build_matrix_row(const double t, const double r, const double theta, const double phi,
                             gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
                             rc_state_t *state);
 
@@ -81,9 +85,8 @@ Return: pointer to workspace
 static void *
 rc_alloc(const void * params)
 {
+  const magfit_parameters *mparams = (const magfit_parameters *) params;
   rc_state_t *state;
-
-  (void) params;
 
   state = calloc(1, sizeof(rc_state_t));
   if (!state)
@@ -92,6 +95,10 @@ rc_alloc(const void * params)
   state->nmax = 20000;
   state->n = 0;
   state->p = 1;
+  state->subtract_crust = mparams->subtract_crust;
+
+  state->msynth_core_p = msynth_read(MSYNTH_BOUMME_FILE);
+  msynth_set(1, 15, state->msynth_core_p);
 
   state->green_workspace_p = green_alloc(1, 1, R_EARTH_KM);
 
@@ -125,6 +132,9 @@ rc_free(void * vstate)
   if (state->cov)
     gsl_matrix_free(state->cov);
 
+  if (state->msynth_core_p)
+    msynth_free(state->msynth_core_p);
+
   if (state->multifit_p)
     gsl_multifit_linear_free(state->multifit_p);
 
@@ -154,7 +164,8 @@ rc_ncoeff(void * vstate)
 rc_add_datum()
   Add single vector measurement to LS system
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         qdlat  - QD latitude (degrees)
@@ -168,8 +179,8 @@ Notes:
 */
 
 static int
-rc_add_datum(const double r, const double theta, const double phi,
-                   const double qdlat, const double B[3], void * vstate)
+rc_add_datum(const double t, const double r, const double theta, const double phi,
+             const double qdlat, const double B[3], void * vstate)
 {
   rc_state_t *state = (rc_state_t *) vstate;
   size_t rowidx = state->n;
@@ -191,7 +202,7 @@ rc_add_datum(const double r, const double theta, const double phi,
   gsl_vector_set(state->wts, rowidx + 2, wi);
 
   /* build 3 rows of the LS matrix */
-  build_matrix_row(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
+  build_matrix_row(t, r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
   rowidx += 3;
 
   state->n = rowidx;
@@ -217,13 +228,17 @@ static int
 rc_fit(double * rnorm, double * snorm, void * vstate)
 {
   rc_state_t *state = (rc_state_t *) vstate;
-  gsl_matrix_view A = gsl_matrix_submatrix(state->X, 0, 0, state->n, state->p);
-  gsl_vector_view b = gsl_vector_subvector(state->rhs, 0, state->n);
-  gsl_vector_view wts = gsl_vector_subvector(state->wts, 0, state->n);
+  gsl_matrix_view A;
+  gsl_vector_view b;
+  gsl_vector_view wts;
   double chisq;
 
   if (state->n < state->p)
     return -1;
+
+  A = gsl_matrix_submatrix(state->X, 0, 0, state->n, state->p);
+  b = gsl_vector_subvector(state->rhs, 0, state->n);
+  wts = gsl_vector_subvector(state->wts, 0, state->n);
 
   /* solve system */
   gsl_multifit_wlinear(&A.matrix, &wts.vector, &b.vector, state->c, state->cov, &chisq, state->multifit_p);
@@ -236,10 +251,11 @@ rc_fit(double * rnorm, double * snorm, void * vstate)
 
 /*
 rc_eval_B()
-  Evaluate magnetic field at a given (r,theta,phi) using
+  Evaluate magnetic field at a given (t,r,theta,phi) using
 previously computed coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -250,8 +266,8 @@ Notes:
 */
 
 static int
-rc_eval_B(const double r, const double theta, const double phi,
-                double B[3], void * vstate)
+rc_eval_B(const double t, const double r, const double theta, const double phi,
+          double B[3], void * vstate)
 {
   int status = GSL_SUCCESS;
   rc_state_t *state = (rc_state_t *) vstate;
@@ -259,7 +275,7 @@ rc_eval_B(const double r, const double theta, const double phi,
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
 
-  build_matrix_row(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
+  build_matrix_row(t, r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
 
   gsl_blas_ddot(&vx.vector, state->c, &B[0]);
   gsl_blas_ddot(&vy.vector, state->c, &B[1]);
@@ -327,28 +343,30 @@ rc_eval_chi(const double theta, const double phi, void * vstate)
 }
 
 static int
-build_matrix_row(const double r, const double theta, const double phi,
+build_matrix_row(const double t, const double r, const double theta, const double phi,
                  gsl_vector *X, gsl_vector *Y, gsl_vector *Z,
                  rc_state_t *state)
 {
   int s = 0;
-  green_workspace *w = state->green_workspace_p;
-  const double g10 = -29439.0536; /* XXX */
-  const double g11 = -1492.8298;
-  const double h11 = 4783.2326;
+  green_workspace *green_p = state->green_workspace_p;
+  msynth_workspace *msynth_p = state->msynth_core_p;
+  double tyr = satdata_epoch2year(t);
+  const double g10 = msynth_get_gnm(tyr, 1, 0, msynth_p);
+  const double g11 = msynth_get_gnm(tyr, 1, 1, msynth_p);
+  const double h11 = msynth_get_gnm(tyr, 1, -1, msynth_p);
   const double g1 = gsl_hypot3(g10, g11, h11);
   double q[3];
   double dX[3], dY[3], dZ[3];
   double dX_ext[3], dY_ext[3], dZ_ext[3];
 
   /* unit vector along internal dipole direction */
-  q[green_nmidx(1, 0, w)] = g10 / g1;
-  q[green_nmidx(1, 1, w)] = g11 / g1;
-  q[green_nmidx(1, -1, w)] = h11 / g1;
+  q[green_nmidx(1, 0, green_p)] = g10 / g1;
+  q[green_nmidx(1, 1, green_p)] = g11 / g1;
+  q[green_nmidx(1, -1, green_p)] = h11 / g1;
 
   /* compute internal/external green's functions */
-  green_calc_int(r, theta, phi, dX, dY, dZ, w);
-  green_calc_ext(r, theta, phi, dX_ext, dY_ext, dZ_ext, w);
+  green_calc_int(r, theta, phi, dX, dY, dZ, green_p);
+  green_calc_ext(r, theta, phi, dX_ext, dY_ext, dZ_ext, green_p);
 
   gsl_vector_set(X, 0, 0.7 * vec_dot(q, dX_ext) + 0.3 * vec_dot(q, dX));
   gsl_vector_set(Y, 0, 0.7 * vec_dot(q, dY_ext) + 0.3 * vec_dot(q, dY));
