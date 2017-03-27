@@ -12,8 +12,8 @@ prog="./main"
 prefix="log"
 
 # set for profiles only
-#flags="-p"
-flags=""
+flags="-p"
+#flags=""
 
 for sat in ${sats}; do
   log_dir="${prefix}_${sat}"

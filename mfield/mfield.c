@@ -52,6 +52,7 @@
 #include "common.h"
 #include "euler.h"
 #include "lls.h"
+#include "lapack_wrapper.h"
 #include "mfield.h"
 #include "oct.h"
 #include "track_weight.h"
@@ -60,15 +61,15 @@
  * scale time to dimensionless units for SV/SA terms - this
  * helps improve the condition of the least squares A^T A matrix
  */
-#define MFIELD_SCALE_TIME            1
+#define MFIELD_SCALE_TIME            0
 
 #define MFIELD_REGULARIZE            1
 
 /* weighting factors for data (multiplies spatial weights) */
 #define MFIELD_WEIGHT_F              (1.0)
-#define MFIELD_WEIGHT_X              (2.0)
+#define MFIELD_WEIGHT_X              (1.0)
 #define MFIELD_WEIGHT_Y              (1.0)
-#define MFIELD_WEIGHT_Z              (2.0)
+#define MFIELD_WEIGHT_Z              (1.0)
 
 /* weighting factors for gradient data (N/S or E/W) */
 #define MFIELD_WEIGHT_DX             (5.0)
@@ -344,7 +345,6 @@ mfield_alloc(const mfield_parameters *params)
      * each omp_J matrix approximately of size 'MFIELD_MATRIX_SIZE'
      */
     w->data_block = MFIELD_MATRIX_SIZE / (ncomp * w->p_int * sizeof(double));
-    fprintf(stderr, "mfield_alloc: data_block = %zu\n", w->data_block);
 
     w->green_array_p = malloc(w->max_threads * sizeof(green_workspace *));
     w->omp_J = malloc(w->max_threads * sizeof(gsl_matrix *));
@@ -596,17 +596,29 @@ mfield_init(mfield_workspace *w)
           mptr->ts[j] = (u - w->t_mu) / w->t_sigma;
           mptr->ts_ns[j] = (v - w->t_mu) / w->t_sigma;
 
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
-#if 0
+#if 1
           if (mptr->flags[j] & MAGDATA_FLG_X)
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
           if (mptr->flags[j] & MAGDATA_FLG_Y)
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
           if (mptr->flags[j] & MAGDATA_FLG_Z)
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
-          if (mptr->flags[j] & MAGDATA_FLG_F)
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DX_EW))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DY_NS | MAGDATA_FLG_DY_EW))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DZ_EW))
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
 #else
           track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);

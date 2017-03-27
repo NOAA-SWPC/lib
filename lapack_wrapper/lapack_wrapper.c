@@ -435,3 +435,52 @@ lapack_complex_svd(const gsl_matrix_complex * A, gsl_vector * S,
       return s;
     }
 }
+
+/* solve A x = b using Cholesky factorization of A */
+int
+lapack_cholesky_solve(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x,
+                      double * rcond)
+{
+  int s;
+  lapack_int N = A->size1;
+  lapack_int nrhs = 1;
+  lapack_int lda = A->size1;
+  lapack_int ldb = b->size;
+  lapack_int ldx = x->size;
+  gsl_vector *S = gsl_vector_alloc(N);
+  gsl_vector *work_b = gsl_vector_alloc(N);
+  gsl_matrix *work_A = gsl_matrix_alloc(N, N);
+  gsl_matrix *AF = gsl_matrix_alloc(N, N);
+  lapack_int ldaf = AF->size1;
+  char equed;
+  double ferr, berr;
+
+  gsl_vector_memcpy(work_b, b);
+  gsl_matrix_transpose_memcpy(work_A, A);
+
+  s = LAPACKE_dposvx(LAPACK_COL_MAJOR,
+                     'E',
+                     'L',
+                     N,
+                     nrhs,
+                     work_A->data,
+                     lda,
+                     AF->data,
+                     ldaf,
+                     &equed,
+                     S->data,
+                     work_b->data,
+                     ldb,
+                     x->data,
+                     ldx,
+                     rcond,
+                     &ferr,
+                     &berr);
+
+  gsl_vector_free(S);
+  gsl_vector_free(work_b);
+  gsl_matrix_free(AF);
+  gsl_matrix_free(work_A);
+
+  return s;
+}

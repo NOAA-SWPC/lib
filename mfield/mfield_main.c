@@ -50,7 +50,7 @@
 #include "track.h"
 
 /* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              85
+#define NMAX_MF              100
 #define NMAX_SV              1
 #define NMAX_SA              1
 
@@ -163,6 +163,7 @@ int
 initial_guess(gsl_vector *c, mfield_workspace *w)
 {
   gsl_vector_set_zero(c);
+  return 0; /*XXX*/
 
 #if !MFIELD_EMAG2
 
@@ -193,6 +194,33 @@ initial_guess(gsl_vector *c, mfield_workspace *w)
             mfield_set_mf(c, cidx, gnm + dt * dgnm, w);
             mfield_set_sv(c, cidx, dgnm, w);
             mfield_set_sa(c, cidx, 0.0, w);
+          }
+      }
+
+    msynth_free(msynth_p);
+  }
+
+#endif
+
+#if 1 /*XXX*/
+
+  {
+    msynth_workspace *msynth_p = msynth_mf7_read(MSYNTH_MF7_FILE);
+    const size_t nmax = GSL_MIN(w->nmax_mf, msynth_p->nmax);
+    size_t n;
+    int m;
+
+    for (n = 16; n <= nmax; ++n)
+      {
+        int ni = (int) n;
+
+        for (m = -ni; m <= ni; ++m)
+          {
+            size_t midx = msynth_nmidx(n, m, msynth_p);
+            size_t cidx = mfield_coeff_nmidx(n, m);
+            double gnm = msynth_get_mf(2008.0, midx, msynth_p);
+
+            mfield_set_mf(c, cidx, gnm, w);
           }
       }
 
@@ -244,6 +272,182 @@ print_spectrum(const char *filename, mfield_workspace *w)
 
   return 0;
 } /* print_spectrum() */
+
+int
+mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c, mfield_workspace *w)
+{
+  int s = 0;
+  char buf[2048];
+  FILE *fp[10];
+  const size_t n = 10; /* number of components to write to disk */
+  const char *fmtstr = "%ld %f %.4f %.4f %.4f %.4f %.3f %.4f\n";
+  size_t i;
+  mfield_data_workspace *data_p = w->data_workspace_p;
+  size_t idx = 0;
+  gsl_vector *f = mfield_residual(c, w);
+  gsl_vector *wts_spatial = w->wts_spatial;
+
+  for (i = 0; i < data_p->nsources; ++i)
+    {
+      magdata *mptr = mfield_data_ptr(i, data_p);
+      size_t j, k;
+
+      sprintf(buf, "%s/res%zu_X_iter%zu.dat", prefix, i, iter);
+      fp[0] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_Y_iter%zu.dat", prefix, i, iter);
+      fp[1] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_Z_iter%zu.dat", prefix, i, iter);
+      fp[2] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_F_iter%zu.dat", prefix, i, iter);
+      fp[3] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DX_NS_iter%zu.dat", prefix, i, iter);
+      fp[4] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DY_NS_iter%zu.dat", prefix, i, iter);
+      fp[5] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DZ_NS_iter%zu.dat", prefix, i, iter);
+      fp[6] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DX_EW_iter%zu.dat", prefix, i, iter);
+      fp[7] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DY_EW_iter%zu.dat", prefix, i, iter);
+      fp[8] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DZ_EW_iter%zu.dat", prefix, i, iter);
+      fp[9] = fopen(buf, "w");
+
+      fprintf(fp[0], "# X vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[1], "# Y vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[2], "# Z vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[3], "# F scalar residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[4], "# DX gradient (N/S) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[5], "# DY gradient (N/S) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[6], "# DZ gradient (N/S) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[7], "# DX gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[8], "# DY gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[9], "# DZ gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+
+      for (j = 0; j < n; ++j)
+        {
+          k = 1;
+          fprintf(fp[j], "# Field %zu: timestamp (UT seconds since 1970-01-01)\n", k++);
+          fprintf(fp[j], "# Field %zu: time (decimal year)\n", k++);
+          fprintf(fp[j], "# Field %zu: longitude (degrees)\n", k++);
+          fprintf(fp[j], "# Field %zu: geocentric latitude (degrees)\n", k++);
+          fprintf(fp[j], "# Field %zu: QD latitude (degrees)\n", k++);
+          fprintf(fp[j], "# Field %zu: geocentric radius (km)\n", k++);
+          fprintf(fp[j], "# Field %zu: total weight factor\n", k++);
+        }
+
+      fprintf(fp[0], "# Field %zu: X vector residual (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y vector residual (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z vector residual (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: F vector residual (nT)\n", k);
+      fprintf(fp[4], "# Field %zu: DX gradient (N/S) vector residual (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: DY gradient (N/S) vector residual (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: DZ gradient (N/S) vector residual (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: DX gradient (E/W) vector residual (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: DY gradient (E/W) vector residual (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: DZ gradient (E/W) vector residual (nT)\n", k);
+      ++k;
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          double t = satdata_epoch2year(mptr->t[j]);
+          time_t unix_time = satdata_epoch2timet(mptr->t[j]);
+          double phi = wrap180(mptr->phi[j] * 180.0 / M_PI);
+          double lat = 90.0 - mptr->theta[j] * 180.0 / M_PI;
+          double qdlat = mptr->qdlat[j];
+          double r = mptr->r[j];
+
+          if (MAGDATA_Discarded(mptr->flags[j]) || !MAGDATA_FitMF(mptr->flags[j]))
+            continue;
+
+          if (MAGDATA_ExistX(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistY(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistZ(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[3], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDX_NS(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[4], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDY_NS(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[5], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[6], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDX_EW(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[7], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDY_EW(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[8], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[9], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+        }
+    }
+
+  assert(idx == w->nres);
+
+  for (i = 0; i < n; ++i)
+    fclose(fp[i]);
+
+  return s;
+}
 
 /*
 print_residuals()
@@ -567,7 +771,7 @@ print_help(char *argv[])
   fprintf(stderr, "\t --lambda_sv | -v lambda_sv      - SV damping parameter\n");
   fprintf(stderr, "\t --lambda_sa | -a lambda_sa      - SA damping parameter\n");
   fprintf(stderr, "\t --euler | -p period             - Euler bin size in days\n");
-  fprintf(stderr, "\t --residual_file | -r file       - residual output file\n");
+  fprintf(stderr, "\t --print_residuals | -r          - write residuals at each iteration\n");
   fprintf(stderr, "\t --lcurve_file | -l file         - L-curve data file\n");
   fprintf(stderr, "\t --tmin | -b min_time            - minimum data period time in decimal years\n");
   fprintf(stderr, "\t --tmax | -c max_time            - maximum data period time in decimal years\n");
@@ -581,10 +785,10 @@ main(int argc, char *argv[])
   double epoch = MFIELD_EPOCH;
   double R = MFIELD_RE_KM;
   char *outfile = NULL;
-  char *resfile = NULL;
   char *Lfile = NULL;
   char *datamap_prefix = "output";
   char *data_prefix = "output";
+  char *residual_prefix = "output";
   mfield_workspace *mfield_workspace_p;
   mfield_parameters mfield_params;
   mfield_data_workspace *mfield_data_p;
@@ -599,6 +803,7 @@ main(int argc, char *argv[])
   int nsat = 0;               /* number of satellites */
   int print_data = 0;         /* print data for MF modeling */
   int print_map = 0;          /* print data maps */
+  int print_residuals = 0;    /* print residuals at each iteration */
   struct timeval tv0, tv1;
   char buf[MAX_BUFFER];
 
@@ -608,7 +813,7 @@ main(int argc, char *argv[])
       int option_index = 0;
       static struct option long_options[] =
         {
-          { "residual_file", required_argument, NULL, 'r' },
+          { "print_residuals", no_argument, NULL, 'r' },
           { "output_file", required_argument, NULL, 'o' },
           { "epoch", required_argument, NULL, 'e' },
           { "lambda_sv", required_argument, NULL, 'v' },
@@ -623,7 +828,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:de:l:mn:o:p:r:v:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:de:l:mn:o:p:rv:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -670,7 +875,7 @@ main(int argc, char *argv[])
             break;
 
           case 'r':
-            resfile = optarg;
+            print_residuals = 1;
             break;
 
           case 'l':
@@ -708,10 +913,9 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: number of robust iterations = %zu\n", maxit);
   fprintf(stderr, "main: number of satellites = %d\n", nsat);
   fprintf(stderr, "main: number of threads = %d\n", omp_get_max_threads());
+  fprintf(stderr, "main: print_residuals = %d\n", print_residuals);
   if (outfile)
     fprintf(stderr, "main: output coefficient file = %s\n", outfile);
-  if (resfile)
-    fprintf(stderr, "main: residual output file = %s\n", resfile);
   if (Lfile)
     fprintf(stderr, "main: L-curve output file = %s\n", Lfile);
 
@@ -788,14 +992,6 @@ main(int argc, char *argv[])
       mfield_data_map(datamap_prefix, mfield_data_p);
     }
 
-  if (print_data)
-    {
-      /* print data used for MF modeling for each satellite */
-      fprintf(stderr, "main: printing data for MF modeling to %s...", data_prefix);
-      mfield_data_print(data_prefix, mfield_data_p);
-      fprintf(stderr, "done\n");
-    }
-
   mfield_params.epoch = epoch;
   mfield_params.R = R;
   mfield_params.nmax_mf = NMAX_MF;
@@ -824,6 +1020,16 @@ main(int argc, char *argv[])
   /* coefficient damping parameters */
   mfield_set_damping(lambda_sv, lambda_sa, mfield_workspace_p);
 
+  /* print out dataset if requested - do this after mfield_init() so
+   * spatial weights are computed */
+  if (print_data)
+    {
+      /* print data used for MF modeling for each satellite */
+      fprintf(stderr, "main: printing data for MF modeling to %s...", data_prefix);
+      mfield_data_print(data_prefix, mfield_workspace_p->wts_spatial, mfield_data_p);
+      fprintf(stderr, "done\n");
+    }
+
   /* construct initial guess vector from IGRF */
   coeffs = gsl_vector_alloc(mfield_workspace_p->p);
   fprintf(stderr, "main: constructing initial coefficient vector...");
@@ -847,6 +1053,13 @@ main(int argc, char *argv[])
       /* output spectrum for this iteration */
       sprintf(buf, "mfield.s.iter%zu", iter);
       print_spectrum(buf, mfield_workspace_p);
+
+      if (print_residuals)
+        {
+          fprintf(stderr, "main: printing residuals to %s...", residual_prefix);
+          mfield_print_residual(residual_prefix, iter, coeffs, mfield_workspace_p);
+          fprintf(stderr, "done\n");
+        }
 
       /* reset workspace for a new iteration */
       mfield_reset(mfield_workspace_p);
@@ -920,9 +1133,6 @@ main(int argc, char *argv[])
       mfield_write_ascii(outfile, mfield_workspace_p->epoch, 0, mfield_workspace_p);
       fprintf(stderr, "done\n");
     }
-
-  if (resfile)
-    print_residuals(resfile, mfield_workspace_p);
 
   print_spectrum("mfield.s", mfield_workspace_p);
 

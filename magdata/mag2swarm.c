@@ -81,9 +81,7 @@ replace_ephemeris(magdata *mdata)
         B_ext[j] *= 1.0e9;
 
       for (j = 0; j < 3; ++j)
-        {
-          B_tot[j] = B_core[j] + B_crust[j] + B_ext[j];
-        }
+        B_tot[j] = B_core[j] + B_crust[j] + B_ext[j];
 
       /* subtract field models from current location */
       mdata->Bx_nec[i] -= B_tot[0];
@@ -112,6 +110,64 @@ replace_ephemeris(magdata *mdata)
       mdata->Bx_nec[i] += B_tot[0];
       mdata->By_nec[i] += B_tot[1];
       mdata->Bz_nec[i] += B_tot[2];
+
+      mdata->Bx_model[i] = B_core[0] + B_ext[0];
+      mdata->By_model[i] = B_core[1] + B_ext[1];
+      mdata->Bz_model[i] = B_core[2] + B_ext[2];
+
+      if (mdata->flags[i] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS |
+                             MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
+        {
+          tyr = satdata_epoch2year(mdata->t_ns[i]);
+          unix_time = satdata_epoch2timet(mdata->t_ns[i]);
+          r = mdata->r_ns[i];
+          theta = mdata->theta_ns[i];
+          phi = mdata->phi_ns[i];
+          alt = r - mdata->R;
+
+          /* evaluate field models at current location */
+          msynth_eval(tyr, r, theta, phi, B_core, core_p);
+          msynth_eval(tyr, r, theta, phi, B_crust, mf7_p);
+
+          pomme_calc_ext(theta, phi, unix_time, alt, B_ext, pomme_p);
+          for (j = 0; j < 3; ++j)
+            B_ext[j] *= 1.0e9;
+
+          for (j = 0; j < 3; ++j)
+            B_tot[j] = B_core[j] + B_crust[j] + B_ext[j];
+
+          /* subtract field models from current location */
+          mdata->Bx_nec_ns[i] -= B_tot[0];
+          mdata->By_nec_ns[i] -= B_tot[1];
+          mdata->Bz_nec_ns[i] -= B_tot[2];
+
+          /* reduce radius by 100 km */
+          r -= 100.0;
+          alt -= 100.0;
+          mdata->r_ns[i] = r;
+
+          /* evaluate field models at new location (with new crustal field) */
+          msynth_eval(tyr, r, theta, phi, B_core, core_p);
+          msynth_eval(tyr, r, theta, phi, B_crust, newcrust_p);
+
+          pomme_calc_ext(theta, phi, unix_time, alt, B_ext, pomme_p);
+          for (j = 0; j < 3; ++j)
+            B_ext[j] *= 1.0e9;
+
+          for (j = 0; j < 3; ++j)
+            {
+              B_tot[j] = B_core[j] + B_crust[j] + B_ext[j];
+            }
+
+          /* add back field models at new location */
+          mdata->Bx_nec_ns[i] += B_tot[0];
+          mdata->By_nec_ns[i] += B_tot[1];
+          mdata->Bz_nec_ns[i] += B_tot[2];
+
+          mdata->Bx_model_ns[i] = B_core[0] + B_ext[0];
+          mdata->By_model_ns[i] = B_core[1] + B_ext[1];
+          mdata->Bz_model_ns[i] = B_core[2] + B_ext[2];
+        }
 
       if (thread_id == 0 && omp_n[0] % 100 == 0)
         {
@@ -142,12 +198,13 @@ int
 main(int argc, char *argv[])
 {
   char *swarm_file = NULL;
+  char *magdata_file = NULL;
   magdata *mdata = NULL;
-  satdata_mag *data;
+  satdata_mag *data = NULL;
   int new_ephemeris = 0;
   int c;
 
-  while ((c = getopt(argc, argv, "i:o:n")) != (-1))
+  while ((c = getopt(argc, argv, "i:o:x:n")) != (-1))
     {
       switch (c)
         {
@@ -161,6 +218,10 @@ main(int argc, char *argv[])
             swarm_file = optarg;
             break;
 
+          case 'x':
+            magdata_file = optarg;
+            break;
+
           case 'n':
             new_ephemeris = 1;
             break;
@@ -170,9 +231,9 @@ main(int argc, char *argv[])
         }
     }
 
-  if (mdata == NULL || swarm_file == NULL)
+  if (mdata == NULL)
     {
-      fprintf(stderr, "Usage: %s <-i magdata_file> <-o swarm_file> [-n]\n", argv[0]);
+      fprintf(stderr, "Usage: %s <-i magdata_file> [-o swarm_file] [-x magdata_file] [-n]\n", argv[0]);
       exit(1);
     }
 
@@ -183,16 +244,28 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
-  fprintf(stderr, "main: converting magdata to satdata struct...");
-  data = magdata_mag2sat(mdata);
-  fprintf(stderr, "done (%zu/%zu data converted)\n", data->n, mdata->n);
+  if (swarm_file)
+    {
+      fprintf(stderr, "main: converting magdata to satdata struct...");
+      data = magdata_mag2sat(mdata);
+      fprintf(stderr, "done (%zu/%zu data converted)\n", data->n, mdata->n);
 
-  fprintf(stderr, "main: writing Swarm CDF file %s...", swarm_file);
-  satdata_swarm_write(0, swarm_file, data);
-  fprintf(stderr, "done (%zu data written)\n", data->n);
+      fprintf(stderr, "main: writing Swarm CDF file %s...", swarm_file);
+      satdata_swarm_write(0, swarm_file, data);
+      fprintf(stderr, "done (%zu data written)\n", data->n);
+    }
+
+  if (magdata_file)
+    {
+      fprintf(stderr, "main: writing magdata file %s...", magdata_file);
+      magdata_write(magdata_file, mdata);
+      fprintf(stderr, "done (%zu data written)\n", mdata->n);
+    }
 
   magdata_free(mdata);
-  satdata_mag_free(data);
+
+  if (data)
+    satdata_mag_free(data);
 
   return 0;
 }

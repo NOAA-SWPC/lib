@@ -25,6 +25,7 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
+#include <omp.h>
 
 #include <satdata/satdata.h>
 #include <flow/flow.h>
@@ -699,17 +700,22 @@ print_unflagged_data(const char *filename, const satdata_mag *data)
 int
 calc_main(satdata_mag *data)
 {
-#if 0
-  msynth_workspace *msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);
-#else
-  msynth_workspace *msynth_p = msynth_read(MSYNTH_BOUMME_FILE);
-#endif
+  const int max_threads = omp_get_max_threads();
+  msynth_workspace **msynth_p;
   size_t i;
 
-  msynth_set(1, 15, msynth_p);
+  msynth_p = malloc(max_threads * sizeof(msynth_workspace *));
 
+  for (i = 0; i < max_threads; ++i)
+    {
+      msynth_p[i] = msynth_read(MSYNTH_BOUMME_FILE);
+      msynth_set(1, 15, msynth_p[i]);
+    }
+
+#pragma omp parallel for private(i)
   for (i = 0; i < data->n; ++i)
     {
+      int thread_id = omp_get_thread_num();
       double tyr = satdata_epoch2year(data->t[i]);
       double r = data->r[i];
       double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
@@ -728,14 +734,17 @@ calc_main(satdata_mag *data)
         continue;
 #endif
 
-      msynth_eval(tyr, r, theta, phi, B_core, msynth_p);
+      msynth_eval(tyr, r, theta, phi, B_core, msynth_p[thread_id]);
 
       SATDATA_VEC_X(data->B_main, i) = B_core[0];
       SATDATA_VEC_Y(data->B_main, i) = B_core[1];
       SATDATA_VEC_Z(data->B_main, i) = B_core[2];
     }
 
-  msynth_free(msynth_p);
+  for (i = 0; i < max_threads; ++i)
+    msynth_free(msynth_p[i]);
+
+  free(msynth_p);
 
   return 0;
 }

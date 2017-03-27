@@ -22,7 +22,10 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      0
+#define MFIELD_SYNTH_DATA          0
+#define MFIELD_SYNTH_DATA_NOISE    0
+#define MFIELD_SYNTH_HIGH_LAT_ONLY 1
+#define MFIELD_SYNTH_NMIN          16
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      0
@@ -56,6 +59,22 @@
 
 /* define for no weighting in fit */
 #define MFIELD_NOWEIGHTS      0
+
+/* indices for each residual type */
+#define MFIELD_IDX_X              0
+#define MFIELD_IDX_Y              1
+#define MFIELD_IDX_Z              2
+#define MFIELD_IDX_F              3
+#define MFIELD_IDX_DX_NS          4
+#define MFIELD_IDX_DY_NS          5
+#define MFIELD_IDX_DZ_NS          6
+#define MFIELD_IDX_DF_NS          7
+#define MFIELD_IDX_DX_EW          8
+#define MFIELD_IDX_DY_EW          9
+#define MFIELD_IDX_DZ_EW          10
+#define MFIELD_IDX_DF_EW          11
+#define MFIELD_IDX_B_EULER        12
+#define MFIELD_IDX_END            13
 
 typedef struct
 {
@@ -217,6 +236,7 @@ mfield_workspace *mfield_copy(const mfield_workspace *w);
 int mfield_init(mfield_workspace *w);
 int mfield_calc_linear(gsl_vector *c, mfield_workspace *w);
 int mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w);
+gsl_vector *mfield_residual(const gsl_vector *c, mfield_workspace *w);
 int mfield_reset(mfield_workspace *w);
 int mfield_coeffs(const int dir, const gsl_vector *gin, gsl_vector *gout,
                   const mfield_workspace *w);

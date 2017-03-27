@@ -3,10 +3,10 @@
  *
  * Fit simple ring current model to magnetic vector data. Model is
  *
- * B_model = k * (0.7 * B_ext + 0.3 * B_int)
+ * B_model = c1 * B_ext + c2 B_int
  *
  * where B_int and B_ext are internal/external dipole fields aligned with
- * main field dipole axis, and k is a parameter to be determined from
+ * main field dipole axis, and c1,c2 are parameters to be determined from
  * each track
  */
 
@@ -94,7 +94,7 @@ rc_alloc(const void * params)
 
   state->nmax = 20000;
   state->n = 0;
-  state->p = 1;
+  state->p = 2;
   state->subtract_crust = mparams->subtract_crust;
 
   state->msynth_core_p = msynth_read(MSYNTH_BOUMME_FILE);
@@ -246,6 +246,12 @@ rc_fit(double * rnorm, double * snorm, void * vstate)
   *rnorm = sqrt(chisq);
   *snorm = gsl_blas_dnrm2(state->c);
 
+#if 0
+  printf("c_ext = %f, c_int = %f, ratio = %f\n",
+         gsl_vector_get(state->c,0), gsl_vector_get(state->c,1),
+         gsl_vector_get(state->c,1) / gsl_vector_get(state->c,0));
+#endif
+
   return 0;
 }
 
@@ -368,9 +374,13 @@ build_matrix_row(const double t, const double r, const double theta, const doubl
   green_calc_int(r, theta, phi, dX, dY, dZ, green_p);
   green_calc_ext(r, theta, phi, dX_ext, dY_ext, dZ_ext, green_p);
 
-  gsl_vector_set(X, 0, 0.7 * vec_dot(q, dX_ext) + 0.3 * vec_dot(q, dX));
-  gsl_vector_set(Y, 0, 0.7 * vec_dot(q, dY_ext) + 0.3 * vec_dot(q, dY));
-  gsl_vector_set(Z, 0, 0.7 * vec_dot(q, dZ_ext) + 0.3 * vec_dot(q, dZ));
+  gsl_vector_set(X, 0, vec_dot(q, dX_ext));
+  gsl_vector_set(Y, 0, vec_dot(q, dY_ext));
+  gsl_vector_set(Z, 0, vec_dot(q, dZ_ext));
+
+  gsl_vector_set(X, 1, vec_dot(q, dX));
+  gsl_vector_set(Y, 1, vec_dot(q, dY));
+  gsl_vector_set(Z, 1, vec_dot(q, dZ));
 
   return s;
 }

@@ -10,25 +10,15 @@
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_sf_legendre.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
 
 #include "euler.h"
+#include "msynth.h"
+#include "oct.h"
 
 #include "mfield.h"
 #include "mfield_synth.h"
-
-/* n m gnm dgnm ddgnm */
-static mfield_synth_coeff test_gnm[] = {
-  /*
-   * need to start somewhat close to IGRF for main field, otherwise
-   * Euler angles won't converge
-   */
-  { 1, 0, -30000.0, -25.0, 1.2 },
-  { 1, -1, 5000.0, 30.0, -3.2 },
-  { 2, 1, 3000.0, -4.0, 4.2 },
-  { 3, -2, 250.0, -3.0, -6.2 },
-
-  { 0, 0, 0.0, 0.0, 0.0 }
-};
 
 static int mfield_synth_calc(const double t, const double r, const double theta, const double phi,
                              const gsl_vector * g, double B[3], mfield_workspace *w);
@@ -37,29 +27,46 @@ static int mfield_synth_calc(const double t, const double r, const double theta,
 int
 mfield_synth_g(gsl_vector * g, mfield_workspace * w)
 {
-  mfield_synth_coeff *gptr;
-
   gsl_vector_set_zero(g);
 
-  /* initialize MF/SV/SA coefficients g from test_gnm[] */
-  for (gptr = &test_gnm[0]; gptr->n != 0; ++gptr)
-    {
-      size_t n = gptr->n;
-      int m = gptr->m;
-      size_t cidx = mfield_coeff_nmidx(n, m);
+  /* initialize MF/SV coefficients g from CHAOS */
+  {
+    msynth_workspace *msynth_p = msynth_swarm_read(MSYNTH_CHAOS_FILE);
+    const double epoch = 2010.0;
+    size_t nmin = MFIELD_SYNTH_NMIN;
+    size_t nmax = GSL_MIN(GSL_MIN(msynth_p->nmax, w->nmax_mf), 15);
+    size_t n;
 
-      mfield_set_mf(g, cidx, gptr->gnm, w);
-      mfield_set_sv(g, cidx, gptr->dgnm, w);
-      mfield_set_sa(g, cidx, gptr->ddgnm, w);
-    }
+    for (n = nmin; n <= nmax; ++n)
+      {
+        int M = (int) n;
+        int m;
+
+        for (m = -M; m <= M; ++m)
+          {
+            size_t cidx = mfield_coeff_nmidx(n, m);
+            double gnm = msynth_get_gnm(epoch, n, m, msynth_p);
+            double dgnm = msynth_get_dgnm(epoch, n, m, msynth_p);
+            double ddgnm = (double)n + (double)m / (double)n; /* choose some SA value */
+
+            mfield_set_mf(g, cidx, gnm, w);
+            mfield_set_sv(g, cidx, dgnm, w);
+            mfield_set_sa(g, cidx, ddgnm, w);
+          }
+      }
+
+    msynth_free(msynth_p);
+  }
 
   /* fill in crustal field part of g with MF7 values */
   if (w->nmax_mf >= 16)
     {
       msynth_workspace *crust_p = msynth_mf7_read(MSYNTH_MF7_FILE);
+      size_t nmin = GSL_MAX(MFIELD_SYNTH_NMIN, crust_p->eval_nmin);
+      size_t nmax = GSL_MIN(w->nmax_mf, crust_p->eval_nmax);
       size_t n;
 
-      for (n = 16; n <= w->nmax_mf; ++n)
+      for (n = nmin; n <= nmax; ++n)
         {
           int M = (int) n;
           int m;
@@ -67,13 +74,15 @@ mfield_synth_g(gsl_vector * g, mfield_workspace * w)
           for (m = -M; m <= M; ++m)
             {
               size_t cidx = mfield_coeff_nmidx(n, m);
-              size_t didx = msynth_nmidx(n, m, crust_p);
-              mfield_set_mf(g, cidx, crust_p->c[didx], w);
+              double gnm = msynth_get_gnm(2008.0, n, m, crust_p);
+              mfield_set_mf(g, cidx, gnm, w);
             }
         }
 
       msynth_free(crust_p);
     }
+
+  printv_octave(g, "g_synth");
 
   return 0;
 }
@@ -82,8 +91,11 @@ mfield_synth_g(gsl_vector * g, mfield_workspace * w)
 int
 mfield_synth_replace(mfield_workspace *w)
 {
-  size_t i, j;
+  const gsl_rng_type * T = gsl_rng_default;
+  gsl_rng *rng_p = gsl_rng_alloc(T);
   gsl_vector *g = gsl_vector_alloc(w->p_int);
+  mfield_workspace **mfield_array;
+  size_t i, j;
 
 #if MFIELD_FIT_EULER
   /* Euler angles */
@@ -95,23 +107,67 @@ mfield_synth_replace(mfield_workspace *w)
   /* initialize synthetic gauss coefficients */
   mfield_synth_g(g, w);
 
+  mfield_array = malloc(w->max_threads * sizeof(mfield_workspace *));
+  for (i = 0; i < w->max_threads; ++i)
+    {
+      mfield_array[i] = mfield_copy(w);
+    }
+
   for (i = 0; i < w->nsat; ++i)
     {
       magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
 
+#pragma omp parallel for private(j)
       for (j = 0; j < mptr->n; ++j)
         {
+          int thread_id = omp_get_thread_num();
+          mfield_workspace *mfield_p = mfield_array[thread_id];
           double t = satdata_epoch2year(mptr->t[j]);
           double r = mptr->r[j];
           double theta = mptr->theta[j];
           double phi = mptr->phi[j];
           double B[3];
+          size_t k;
 
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
+#if MFIELD_SYNTH_HIGH_LAT_ONLY
+          /* only replace field values with synthetic values at high latitudes */
+          if (fabs(mptr->qdlat[j]) <= 50.0)
+            {
+              mptr->Bx_nec[j] -= mptr->Bx_model[j];
+              mptr->By_nec[j] -= mptr->By_model[j];
+              mptr->Bz_nec[j] -= mptr->Bz_model[j];
+              mptr->Bx_model[j] = 0.0;
+              mptr->By_model[j] = 0.0;
+              mptr->Bz_model[j] = 0.0;
+
+              if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS |
+                                    MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
+                {
+                  mptr->Bx_nec_ns[j] -= mptr->Bx_model_ns[j];
+                  mptr->By_nec_ns[j] -= mptr->By_model_ns[j];
+                  mptr->Bz_nec_ns[j] -= mptr->Bz_model_ns[j];
+                  mptr->Bx_model_ns[j] = 0.0;
+                  mptr->By_model_ns[j] = 0.0;
+                  mptr->Bz_model_ns[j] = 0.0;
+                }
+
+              continue;
+            }
+#endif
+
           /* synthesize magnetic field vector */
-          mfield_synth_calc(t, r, theta, phi, g, B, w);
+          mfield_synth_calc(t, r, theta, phi, g, B, mfield_p);
+
+#if MFIELD_SYNTH_DATA_NOISE
+          /* add some noise to measurements with 0.1 nT sigma in all vector components */
+          for (k = 0; k < 3; ++k)
+            {
+              B[k] += gsl_ran_gaussian(rng_p, 0.1);
+            }
+#endif
 
           mptr->Bx_nec[j] = B[0];
           mptr->By_nec[j] = B[1];
@@ -141,7 +197,7 @@ mfield_synth_replace(mfield_workspace *w)
                                 MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
             {
               t = satdata_epoch2year(mptr->t_ns[j]);
-              mfield_synth_calc(t, mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], g, B, w);
+              mfield_synth_calc(t, mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], g, B, mfield_p);
 
               mptr->Bx_nec_ns[j] = B[0];
               mptr->By_nec_ns[j] = B[1];
@@ -170,7 +226,13 @@ mfield_synth_replace(mfield_workspace *w)
         }
     }
 
+  gsl_rng_free(rng_p);
   gsl_vector_free(g);
+
+  for (i = 0; i < w->max_threads; ++i)
+    mfield_free(mfield_array[i]);
+
+  free(mfield_array);
 
   return 0;
 }
