@@ -27,13 +27,15 @@ static int mfield_synth_calc(const double t, const double r, const double theta,
 int
 mfield_synth_g(gsl_vector * g, mfield_workspace * w)
 {
+  const mfield_parameters *params = &(w->params);
+
   gsl_vector_set_zero(g);
 
   /* initialize MF/SV coefficients g from CHAOS */
   {
     msynth_workspace *msynth_p = msynth_swarm_read(MSYNTH_CHAOS_FILE);
     const double epoch = 2010.0;
-    size_t nmin = MFIELD_SYNTH_NMIN;
+    size_t nmin = params->synth_nmin;
     size_t nmax = GSL_MIN(GSL_MIN(msynth_p->nmax, w->nmax_mf), 15);
     size_t n;
 
@@ -62,7 +64,7 @@ mfield_synth_g(gsl_vector * g, mfield_workspace * w)
   if (w->nmax_mf >= 16)
     {
       msynth_workspace *crust_p = msynth_mf7_read(MSYNTH_MF7_FILE);
-      size_t nmin = GSL_MAX(MFIELD_SYNTH_NMIN, crust_p->eval_nmin);
+      size_t nmin = GSL_MAX(params->synth_nmin, crust_p->eval_nmin);
       size_t nmax = GSL_MIN(w->nmax_mf, crust_p->eval_nmax);
       size_t n;
 
@@ -91,6 +93,7 @@ mfield_synth_g(gsl_vector * g, mfield_workspace * w)
 int
 mfield_synth_replace(mfield_workspace *w)
 {
+  const mfield_parameters *params = &(w->params);
   const gsl_rng_type * T = gsl_rng_default;
   gsl_rng *rng_p = gsl_rng_alloc(T);
   gsl_vector *g = gsl_vector_alloc(w->p_int);
@@ -161,13 +164,12 @@ mfield_synth_replace(mfield_workspace *w)
           /* synthesize magnetic field vector */
           mfield_synth_calc(t, r, theta, phi, g, B, mfield_p);
 
-#if MFIELD_SYNTH_DATA_NOISE
-          /* add some noise to measurements with 0.1 nT sigma in all vector components */
-          for (k = 0; k < 3; ++k)
+          if (params->synth_noise)
             {
-              B[k] += gsl_ran_gaussian(rng_p, 0.1);
+              /* add some noise to measurements with 0.1 nT sigma in all vector components */
+              for (k = 0; k < 3; ++k)
+                B[k] += gsl_ran_gaussian(rng_p, 0.1);
             }
-#endif
 
           mptr->Bx_nec[j] = B[0];
           mptr->By_nec[j] = B[1];
@@ -193,8 +195,8 @@ mfield_synth_replace(mfield_workspace *w)
           }
 #endif
 
-          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS |
-                                MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DF_NS |
+                                MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW | MAGDATA_FLG_DF_EW))
             {
               t = satdata_epoch2year(mptr->t_ns[j]);
               mfield_synth_calc(t, mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], g, B, mfield_p);

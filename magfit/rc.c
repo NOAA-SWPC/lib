@@ -3,7 +3,11 @@
  *
  * Fit simple ring current model to magnetic vector data. Model is
  *
- * B_model = c1 * B_ext + c2 B_int
+ * B_model = c1 * B_ext + c2 B_int,            p = 2
+ *
+ * or
+ *
+ * B_model = c1 * (0.7 * B_ext + 0.3 * B_int), p = 1
  *
  * where B_int and B_ext are internal/external dipole fields aligned with
  * main field dipole axis, and c1,c2 are parameters to be determined from
@@ -39,19 +43,21 @@
 
 typedef struct
 {
-  size_t n;         /* total number of measurements in system */
-  size_t p;         /* number of coefficients */
-  size_t nmax;      /* maximum number of measurements in LS system */
+  size_t n;           /* total number of measurements in system */
+  size_t p;           /* number of coefficients */
+  size_t nmax;        /* maximum number of measurements in LS system */
 
   int subtract_crust; /* subtract crustal field prior to fitting RC model */
+  int fit_Y;          /* fit Y component */
 
-  gsl_matrix *X;    /* LS matrix */
-  gsl_vector *rhs;  /* rhs vector */
-  gsl_vector *wts;  /* weight vector */
-  gsl_matrix *cov;  /* covariance matrix */
-  gsl_vector *c;    /* solution vector */
+  gsl_matrix *X;      /* LS matrix */
+  gsl_vector *rhs;    /* rhs vector */
+  gsl_vector *wts;    /* weight vector */
+  gsl_matrix *cov;    /* covariance matrix */
+  gsl_vector *c;      /* solution vector */
 
   msynth_workspace *msynth_core_p;
+  msynth_workspace *msynth_crust_p;
   gsl_multifit_linear_workspace *multifit_p;
   green_workspace *green_workspace_p;
 } rc_state_t;
@@ -88,17 +94,27 @@ rc_alloc(const void * params)
   const magfit_parameters *mparams = (const magfit_parameters *) params;
   rc_state_t *state;
 
+  if (mparams->rc_p > 2)
+    {
+      fprintf(stderr, "rc_alloc: error: rc_p must be <= 2\n");
+      return 0;
+    }
+
   state = calloc(1, sizeof(rc_state_t));
   if (!state)
     return 0;
 
   state->nmax = 20000;
   state->n = 0;
-  state->p = 2;
-  state->subtract_crust = mparams->subtract_crust;
+  state->p = mparams->rc_p;
+  state->subtract_crust = mparams->rc_subtract_crust;
+  state->fit_Y = mparams->rc_fit_Y;
 
   state->msynth_core_p = msynth_read(MSYNTH_BOUMME_FILE);
   msynth_set(1, 15, state->msynth_core_p);
+
+  state->msynth_crust_p = msynth_mf7_read(MSYNTH_MF7_FILE);
+  msynth_set(16, 45, state->msynth_crust_p);
 
   state->green_workspace_p = green_alloc(1, 1, R_EARTH_KM);
 
@@ -134,6 +150,9 @@ rc_free(void * vstate)
 
   if (state->msynth_core_p)
     msynth_free(state->msynth_core_p);
+
+  if (state->msynth_crust_p)
+    msynth_free(state->msynth_crust_p);
 
   if (state->multifit_p)
     gsl_multifit_linear_free(state->multifit_p);
@@ -185,25 +204,38 @@ rc_add_datum(const double t, const double r, const double theta, const double ph
   rc_state_t *state = (rc_state_t *) vstate;
   size_t rowidx = state->n;
   double wi = 1.0;
-  gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
-  gsl_vector_view vy = gsl_matrix_row(state->X, rowidx + 1);
-  gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 2);
+  gsl_vector_view vx, vy, vz;
+  gsl_vector *X = NULL;
+  gsl_vector *Y = NULL;
+  gsl_vector *Z = NULL;
 
   (void) qdlat;
 
-  /* set rhs vector */
+  /* set rhs and weight vector */
+
+  vx = gsl_matrix_row(state->X, rowidx);
+  X = &vx.vector;
+
   gsl_vector_set(state->rhs, rowidx, B[0]);
-  gsl_vector_set(state->rhs, rowidx + 1, B[1]);
-  gsl_vector_set(state->rhs, rowidx + 2, B[2]);
+  gsl_vector_set(state->wts, rowidx++, wi);
 
-  /* set weight vector */
+  if (state->fit_Y)
+    {
+      vy = gsl_matrix_row(state->X, rowidx);
+      Y = &vy.vector;
+
+      gsl_vector_set(state->wts, rowidx, wi);
+      gsl_vector_set(state->rhs, rowidx++, B[1]);
+    }
+
+  Z = &vz.vector;
+  vz = gsl_matrix_row(state->X, rowidx);
+
   gsl_vector_set(state->wts, rowidx, wi);
-  gsl_vector_set(state->wts, rowidx + 1, wi);
-  gsl_vector_set(state->wts, rowidx + 2, wi);
+  gsl_vector_set(state->rhs, rowidx++, B[2]);
 
-  /* build 3 rows of the LS matrix */
-  build_matrix_row(t, r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
-  rowidx += 3;
+  /* build rows of the LS matrix */
+  build_matrix_row(t, r, theta, phi, X, Y, Z, state);
 
   state->n = rowidx;
 
@@ -246,12 +278,6 @@ rc_fit(double * rnorm, double * snorm, void * vstate)
   *rnorm = sqrt(chisq);
   *snorm = gsl_blas_dnrm2(state->c);
 
-#if 0
-  printf("c_ext = %f, c_int = %f, ratio = %f\n",
-         gsl_vector_get(state->c,0), gsl_vector_get(state->c,1),
-         gsl_vector_get(state->c,1) / gsl_vector_get(state->c,0));
-#endif
-
   return 0;
 }
 
@@ -280,11 +306,18 @@ rc_eval_B(const double t, const double r, const double theta, const double phi,
   gsl_vector_view vx = gsl_matrix_row(state->X, 0);
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
+  size_t i;
+
+  for (i = 0; i < 3; ++i)
+    B[i] = 0.0;
 
   build_matrix_row(t, r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
 
   gsl_blas_ddot(&vx.vector, state->c, &B[0]);
-  gsl_blas_ddot(&vy.vector, state->c, &B[1]);
+
+  if (state->fit_Y)
+    gsl_blas_ddot(&vy.vector, state->c, &B[1]);
+
   gsl_blas_ddot(&vz.vector, state->c, &B[2]);
 
   return status;
@@ -374,13 +407,35 @@ build_matrix_row(const double t, const double r, const double theta, const doubl
   green_calc_int(r, theta, phi, dX, dY, dZ, green_p);
   green_calc_ext(r, theta, phi, dX_ext, dY_ext, dZ_ext, green_p);
 
-  gsl_vector_set(X, 0, vec_dot(q, dX_ext));
-  gsl_vector_set(Y, 0, vec_dot(q, dY_ext));
-  gsl_vector_set(Z, 0, vec_dot(q, dZ_ext));
+  if (state->p == 1)
+    {
+      /* 1 parameter model */
 
-  gsl_vector_set(X, 1, vec_dot(q, dX));
-  gsl_vector_set(Y, 1, vec_dot(q, dY));
-  gsl_vector_set(Z, 1, vec_dot(q, dZ));
+      const double alpha = 0.7; /* percentage of external field contribution */
+
+      gsl_vector_set(X, 0, alpha * vec_dot(q, dX_ext) + (1.0 - alpha) * vec_dot(q, dX));
+
+      if (state->fit_Y)
+        gsl_vector_set(Y, 0, alpha * vec_dot(q, dY_ext) + (1.0 - alpha) * vec_dot(q, dY));
+
+      gsl_vector_set(Z, 0, alpha * vec_dot(q, dZ_ext) + (1.0 - alpha) * vec_dot(q, dZ));
+    }
+  else
+    {
+      /* 2 parameter model */
+
+      gsl_vector_set(X, 0, vec_dot(q, dX_ext));
+      gsl_vector_set(X, 1, vec_dot(q, dX));
+
+      if (state->fit_Y)
+        {
+          gsl_vector_set(Y, 0, vec_dot(q, dY_ext));
+          gsl_vector_set(Y, 1, vec_dot(q, dY));
+        }
+
+      gsl_vector_set(Z, 0, vec_dot(q, dZ_ext));
+      gsl_vector_set(Z, 1, vec_dot(q, dZ));
+    }
 
   return s;
 }

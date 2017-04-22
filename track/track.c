@@ -300,7 +300,7 @@ Inputs: track_idx - track index
 Return: number of data flagged
 
 Notes:
-1) satellite data is flagged with SATDATA_FLG_OUTLIER
+1) satellite data is flagged with 'flags'
 */
 
 size_t

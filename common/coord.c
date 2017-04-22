@@ -19,7 +19,7 @@ sphere2cart(double phi_rad, double lat_rad, double r, double X[3])
 
 void
 sphere2cart_vec(double phi_rad,double lat_rad,double vlat,double vphi,double vminusr,
-                     double *vx,double *vy,double *vz)
+                double *vx,double *vy,double *vz)
 {
   double sp,st,cp,ct;
 

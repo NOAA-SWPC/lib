@@ -98,6 +98,10 @@ magfit_default_parameters(void)
 
   params.qdmax = 40.0;
 
+  params.rc_p = 2;
+  params.rc_fit_Y = 1;
+  params.rc_subtract_crust = 0;
+
   return params;
 }
 

@@ -28,6 +28,7 @@
 #include <math.h>
 #include <assert.h>
 #include <omp.h>
+#include <libconfig.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_errno.h>
@@ -48,11 +49,6 @@
 #include "mfield_synth.h"
 #include "msynth.h"
 #include "track.h"
-
-/* maximum spherical harmonic degree (internal) */
-#define NMAX_MF              100
-#define NMAX_SV              1
-#define NMAX_SA              1
 
 #define MAX_BUFFER           2048
 
@@ -165,8 +161,6 @@ initial_guess(gsl_vector *c, mfield_workspace *w)
   gsl_vector_set_zero(c);
   return 0; /*XXX*/
 
-#if !MFIELD_EMAG2
-
   {
     msynth_workspace *msynth_p = msynth_igrf_read(MSYNTH_IGRF_FILE);
     const size_t nmax = GSL_MIN(w->nmax_mf, msynth_p->nmax);
@@ -199,35 +193,6 @@ initial_guess(gsl_vector *c, mfield_workspace *w)
 
     msynth_free(msynth_p);
   }
-
-#endif
-
-#if 1 /*XXX*/
-
-  {
-    msynth_workspace *msynth_p = msynth_mf7_read(MSYNTH_MF7_FILE);
-    const size_t nmax = GSL_MIN(w->nmax_mf, msynth_p->nmax);
-    size_t n;
-    int m;
-
-    for (n = 16; n <= nmax; ++n)
-      {
-        int ni = (int) n;
-
-        for (m = -ni; m <= ni; ++m)
-          {
-            size_t midx = msynth_nmidx(n, m, msynth_p);
-            size_t cidx = mfield_coeff_nmidx(n, m);
-            double gnm = msynth_get_mf(2008.0, midx, msynth_p);
-
-            mfield_set_mf(c, cidx, gnm, w);
-          }
-      }
-
-    msynth_free(msynth_p);
-  }
-
-#endif
 
   return 0;
 } /* initial_guess() */
@@ -278,8 +243,8 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
 {
   int s = 0;
   char buf[2048];
-  FILE *fp[10];
-  const size_t n = 10; /* number of components to write to disk */
+  FILE *fp[12];
+  const size_t n = 12; /* number of components to write to disk */
   const char *fmtstr = "%ld %f %.4f %.4f %.4f %.4f %.3f %.4f\n";
   size_t i;
   mfield_data_workspace *data_p = w->data_workspace_p;
@@ -313,14 +278,20 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
       sprintf(buf, "%s/res%zu_DZ_NS_iter%zu.dat", prefix, i, iter);
       fp[6] = fopen(buf, "w");
 
-      sprintf(buf, "%s/res%zu_DX_EW_iter%zu.dat", prefix, i, iter);
+      sprintf(buf, "%s/res%zu_DF_NS_iter%zu.dat", prefix, i, iter);
       fp[7] = fopen(buf, "w");
 
-      sprintf(buf, "%s/res%zu_DY_EW_iter%zu.dat", prefix, i, iter);
+      sprintf(buf, "%s/res%zu_DX_EW_iter%zu.dat", prefix, i, iter);
       fp[8] = fopen(buf, "w");
 
-      sprintf(buf, "%s/res%zu_DZ_EW_iter%zu.dat", prefix, i, iter);
+      sprintf(buf, "%s/res%zu_DY_EW_iter%zu.dat", prefix, i, iter);
       fp[9] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DZ_EW_iter%zu.dat", prefix, i, iter);
+      fp[10] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DF_EW_iter%zu.dat", prefix, i, iter);
+      fp[11] = fopen(buf, "w");
 
       fprintf(fp[0], "# X vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
       fprintf(fp[1], "# Y vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
@@ -329,9 +300,11 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
       fprintf(fp[4], "# DX gradient (N/S) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
       fprintf(fp[5], "# DY gradient (N/S) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
       fprintf(fp[6], "# DZ gradient (N/S) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
-      fprintf(fp[7], "# DX gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
-      fprintf(fp[8], "# DY gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
-      fprintf(fp[9], "# DZ gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[7], "# DZ gradient (N/S) scalar residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[8], "# DX gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[9], "# DY gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[10], "# DZ gradient (E/W) vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[11], "# DF gradient (E/W) scalar residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
 
       for (j = 0; j < n; ++j)
         {
@@ -352,9 +325,11 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
       fprintf(fp[4], "# Field %zu: DX gradient (N/S) vector residual (nT)\n", k);
       fprintf(fp[5], "# Field %zu: DY gradient (N/S) vector residual (nT)\n", k);
       fprintf(fp[6], "# Field %zu: DZ gradient (N/S) vector residual (nT)\n", k);
-      fprintf(fp[7], "# Field %zu: DX gradient (E/W) vector residual (nT)\n", k);
-      fprintf(fp[8], "# Field %zu: DY gradient (E/W) vector residual (nT)\n", k);
-      fprintf(fp[9], "# Field %zu: DZ gradient (E/W) vector residual (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: DF gradient (N/S) scalar residual (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: DX gradient (E/W) vector residual (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: DY gradient (E/W) vector residual (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: DZ gradient (E/W) vector residual (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: DF gradient (E/W) scalar residual (nT)\n", k);
       ++k;
 
       for (j = 0; j < mptr->n; ++j)
@@ -418,25 +393,39 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
               fprintf(fp[6], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
             }
 
-          if (MAGDATA_ExistDX_EW(mptr->flags[j]))
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx);
               double resj = gsl_vector_get(f, idx++);
               fprintf(fp[7], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
             }
 
-          if (MAGDATA_ExistDY_EW(mptr->flags[j]))
+          if (MAGDATA_ExistDX_EW(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx);
               double resj = gsl_vector_get(f, idx++);
               fprintf(fp[8], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
             }
 
-          if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
+          if (MAGDATA_ExistDY_EW(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx);
               double resj = gsl_vector_get(f, idx++);
               fprintf(fp[9], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[10], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+            }
+
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]))
+            {
+              double wj = gsl_vector_get(wts_spatial, idx);
+              double resj = gsl_vector_get(f, idx++);
+              fprintf(fp[11], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
             }
         }
     }
@@ -760,6 +749,127 @@ print_residuals(const char *filename, mfield_workspace *w)
   return GSL_SUCCESS;
 } /* print_residuals() */
 
+static int
+parse_config_file(const char *filename, mfield_parameters *mfield_params,
+                  mfield_data_parameters *data_params)
+{
+  int s;
+  config_t cfg;
+  double fval;
+  int ival;
+
+  config_init(&cfg);
+
+  s = config_read_file(&cfg, filename);
+  if (s != CONFIG_TRUE)
+    {
+      fprintf(stderr, "parse_config_file: %s:%d - %s\n",
+              config_error_file(&cfg),
+              config_error_line(&cfg),
+              config_error_text(&cfg));
+      config_destroy(&cfg);
+      return -1;
+    }
+
+  if (config_lookup_int(&cfg, "nmax_mf", &ival))
+    mfield_params->nmax_mf = (size_t) ival;
+  if (config_lookup_int(&cfg, "nmax_sv", &ival))
+    mfield_params->nmax_sv = (size_t) ival;
+  if (config_lookup_int(&cfg, "nmax_sa", &ival))
+    mfield_params->nmax_sa = (size_t) ival;
+
+  if (config_lookup_float(&cfg, "epoch", &fval))
+    mfield_params->epoch = fval;
+  if (config_lookup_float(&cfg, "R", &fval))
+    mfield_params->R = fval;
+  if (config_lookup_float(&cfg, "euler_period", &fval))
+    mfield_params->euler_period = fval;
+
+  if (config_lookup_int(&cfg, "max_iter", &ival))
+    mfield_params->max_iter = (size_t) ival;
+  if (config_lookup_float(&cfg, "qdlat_cutoff", &fval))
+    data_params->qdlat_cutoff = fval;
+  if (config_lookup_int(&cfg, "fit_sv", &ival))
+    mfield_params->fit_sv = ival;
+  if (config_lookup_int(&cfg, "fit_sa", &ival))
+    mfield_params->fit_sa = ival;
+  if (config_lookup_int(&cfg, "fit_euler", &ival))
+    mfield_params->fit_euler = ival;
+  if (config_lookup_int(&cfg, "fit_ext", &ival))
+    mfield_params->fit_ext = ival;
+
+  if (config_lookup_int(&cfg, "scale_time", &ival))
+    mfield_params->scale_time = ival;
+  if (config_lookup_int(&cfg, "use_weights", &ival))
+    mfield_params->use_weights = ival;
+  if (config_lookup_int(&cfg, "regularize", &ival))
+    mfield_params->regularize = ival;
+
+  if (config_lookup_float(&cfg, "weight_X", &fval))
+    mfield_params->weight_X = fval;
+  if (config_lookup_float(&cfg, "weight_Y", &fval))
+    mfield_params->weight_Y = fval;
+  if (config_lookup_float(&cfg, "weight_Z", &fval))
+    mfield_params->weight_Z = fval;
+  if (config_lookup_float(&cfg, "weight_F", &fval))
+    mfield_params->weight_F = fval;
+  if (config_lookup_float(&cfg, "weight_DX", &fval))
+    mfield_params->weight_DX = fval;
+  if (config_lookup_float(&cfg, "weight_DY", &fval))
+    mfield_params->weight_DY = fval;
+  if (config_lookup_float(&cfg, "weight_DZ", &fval))
+    mfield_params->weight_DZ = fval;
+
+  if (config_lookup_int(&cfg, "fit_X", &ival))
+    data_params->fit_X = ival;
+  if (config_lookup_int(&cfg, "fit_Y", &ival))
+    data_params->fit_Y = ival;
+  if (config_lookup_int(&cfg, "fit_Z", &ival))
+    data_params->fit_Z = ival;
+  if (config_lookup_int(&cfg, "fit_F", &ival))
+    data_params->fit_F = ival;
+  if (config_lookup_int(&cfg, "fit_DX_NS", &ival))
+    data_params->fit_DX_NS = ival;
+  if (config_lookup_int(&cfg, "fit_DY_NS", &ival))
+    data_params->fit_DY_NS = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_NS", &ival))
+    data_params->fit_DZ_NS = ival;
+  if (config_lookup_int(&cfg, "fit_DF_NS", &ival))
+    data_params->fit_DF_NS = ival;
+  if (config_lookup_int(&cfg, "fit_DX_EW", &ival))
+    data_params->fit_DX_EW = ival;
+  if (config_lookup_int(&cfg, "fit_DY_EW", &ival))
+    data_params->fit_DY_EW = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_EW", &ival))
+    data_params->fit_DZ_EW = ival;
+  if (config_lookup_int(&cfg, "fit_DF_EW", &ival))
+    data_params->fit_DF_EW = ival;
+
+  if (config_lookup_int(&cfg, "fit_Z_highlat", &ival))
+    data_params->fit_Z_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_F_highlat", &ival))
+    data_params->fit_F_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_NS_highlat", &ival))
+    data_params->fit_DZ_NS_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DF_NS_highlat", &ival))
+    data_params->fit_DF_NS_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_EW_highlat", &ival))
+    data_params->fit_DZ_EW_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DF_EW_highlat", &ival))
+    data_params->fit_DF_EW_highlat = ival;
+
+  if (config_lookup_int(&cfg, "synth_data", &ival))
+    mfield_params->synth_data = ival;
+  if (config_lookup_int(&cfg, "synth_noise", &ival))
+    mfield_params->synth_noise = ival;
+  if (config_lookup_int(&cfg, "synth_nmin", &ival))
+    mfield_params->synth_nmin = (size_t) ival;
+
+  config_destroy(&cfg);
+
+  return 0;
+}
+
 void
 print_help(char *argv[])
 {
@@ -777,27 +887,29 @@ print_help(char *argv[])
   fprintf(stderr, "\t --tmax | -c max_time            - maximum data period time in decimal years\n");
   fprintf(stderr, "\t --print_data | -d               - print data used for MF modeling to output directory\n");
   fprintf(stderr, "\t --print_map | -m                - print spatial data map files to output directory\n");
+  fprintf(stderr, "\t --config_file | -C file         - configuration file\n");
 } /* print_help() */
 
 int
 main(int argc, char *argv[])
 {
-  double epoch = MFIELD_EPOCH;
-  double R = MFIELD_RE_KM;
   char *outfile = NULL;
   char *Lfile = NULL;
   char *datamap_prefix = "output";
   char *data_prefix = "output";
   char *residual_prefix = "output";
+  char *config_file = "MF.cfg"; /* default config file */
   mfield_workspace *mfield_workspace_p;
   mfield_parameters mfield_params;
   mfield_data_workspace *mfield_data_p;
+  mfield_data_parameters data_params;
   gsl_vector *coeffs; /* model coefficients */
   size_t iter = 0;
-  size_t maxit = 1;
+  size_t maxit = 0;
   double lambda_sv = 0.0;     /* coefficient damping */
   double lambda_sa = 0.0;
-  double euler_period = 30.0; /* set to 0 for single set of angles */
+  double epoch = -1.0;        /* model epoch */
+  double euler_period = -1.0; /* set to 0 for single set of angles */
   double tmin = -1.0;         /* minimum time for data in years */
   double tmax = -1.0;         /* maximum time for data in years */
   int nsat = 0;               /* number of satellites */
@@ -825,10 +937,11 @@ main(int argc, char *argv[])
           { "euler", required_argument, NULL, 'p' },
           { "print_data", required_argument, NULL, 'd' },
           { "print_map", required_argument, NULL, 'm' },
+          { "config_file", required_argument, NULL, 'C' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:de:l:mn:o:p:rv:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:C:de:l:mn:o:p:rv:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -840,6 +953,10 @@ main(int argc, char *argv[])
 
           case 'c':
             tmax = atof(optarg);
+            break;
+
+          case 'C':
+            config_file = optarg;
             break;
 
           case 'd':
@@ -896,21 +1013,34 @@ main(int argc, char *argv[])
       exit(1);
     }
 
-  fprintf(stderr, "main: epoch = %.2f\n", epoch);
-  fprintf(stderr, "main: radius = %g [km]\n", R);
-  fprintf(stderr, "main: MF nmax = %d\n", NMAX_MF);
+  /* parse configuration file */
+  fprintf(stderr, "main: parsing configuration file %s...", config_file);
+  parse_config_file(config_file, &mfield_params, &data_params);
+  fprintf(stderr, "done\n");
+
+  /* check if any command-line arguments should override config file values */
+  if (epoch > 0.0)
+    mfield_params.epoch = epoch;
+  if (euler_period > 0.0)
+    mfield_params.euler_period = euler_period;
+  if (maxit > 0)
+    mfield_params.max_iter = maxit;
+
+  fprintf(stderr, "main: epoch = %.2f\n", mfield_params.epoch);
+  fprintf(stderr, "main: radius = %g [km]\n", mfield_params.R);
+  fprintf(stderr, "main: MF nmax = %zu\n", mfield_params.nmax_mf);
 #if MFIELD_FIT_SECVAR
-  fprintf(stderr, "main: SV nmax = %d\n", NMAX_SV);
+  fprintf(stderr, "main: SV nmax = %zu\n", mfield_params.nmax_sv);
   fprintf(stderr, "main: SV damping = %g\n", lambda_sv);
 #endif
 #if MFIELD_FIT_SECACC
-  fprintf(stderr, "main: SA nmax = %d\n", NMAX_SA);
+  fprintf(stderr, "main: SA nmax = %zu\n", mfield_params.nmax_sa);
   fprintf(stderr, "main: SA damping = %g\n", lambda_sa);
 #endif
-  fprintf(stderr, "main: euler period = %g [days]\n", euler_period);
+  fprintf(stderr, "main: euler period = %g [days]\n", mfield_params.euler_period);
   fprintf(stderr, "main: tmin = %g\n", tmin);
   fprintf(stderr, "main: tmax = %g\n", tmax);
-  fprintf(stderr, "main: number of robust iterations = %zu\n", maxit);
+  fprintf(stderr, "main: number of robust iterations = %zu\n", mfield_params.max_iter);
   fprintf(stderr, "main: number of satellites = %d\n", nsat);
   fprintf(stderr, "main: number of threads = %d\n", omp_get_max_threads());
   fprintf(stderr, "main: print_residuals = %d\n", print_residuals);
@@ -920,7 +1050,8 @@ main(int argc, char *argv[])
     fprintf(stderr, "main: L-curve output file = %s\n", Lfile);
 
   /* allocate data workspace */
-  mfield_data_p = mfield_data_alloc(nsat, epoch);
+  data_params.epoch = mfield_params.epoch;
+  mfield_data_p = mfield_data_alloc(nsat, &data_params);
 
   {
     int satnum = 0;
@@ -992,27 +1123,20 @@ main(int argc, char *argv[])
       mfield_data_map(datamap_prefix, mfield_data_p);
     }
 
-  mfield_params.epoch = epoch;
-  mfield_params.R = R;
-  mfield_params.nmax_mf = NMAX_MF;
-  mfield_params.nmax_sv = NMAX_SV;
-  mfield_params.nmax_sa = NMAX_SA;
   mfield_params.nsat = nsat;
-  mfield_params.euler_period = euler_period;
   mfield_params.mfield_data_p = mfield_data_p;
 
   /* allocate mfield workspace */
   mfield_workspace_p = mfield_alloc(&mfield_params);
 
-#if MFIELD_SYNTH_DATA
-  {
-    fprintf(stderr, "main: replacing with synthetic data...");
-    gettimeofday(&tv0, NULL);
-    mfield_synth_replace(mfield_workspace_p);
-    gettimeofday(&tv1, NULL);
-    fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-  }
-#endif
+  if (mfield_params.synth_data)
+    {
+      fprintf(stderr, "main: replacing with synthetic data...");
+      gettimeofday(&tv0, NULL);
+      mfield_synth_replace(mfield_workspace_p);
+      gettimeofday(&tv1, NULL);
+      fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+    }
 
   /* initialize model parameters */
   mfield_init(mfield_workspace_p);
@@ -1038,9 +1162,9 @@ main(int argc, char *argv[])
 
   gettimeofday(&tv0, NULL);
 
-  while (iter++ < maxit)
+  while (iter++ < mfield_params.max_iter)
     {
-      fprintf(stderr, "main: ROBUST ITERATION %zu/%zu\n", iter, maxit);
+      fprintf(stderr, "main: ROBUST ITERATION %zu/%zu\n", iter, mfield_params.max_iter);
 
       mfield_calc_nonlinear(coeffs, mfield_workspace_p);
 
@@ -1190,7 +1314,7 @@ main(int argc, char *argv[])
 #endif
 
     fprintf(stderr, "main: printing internal coefficients up to degree 3\n");
-    for (n = 1; n <= GSL_MIN(3, NMAX_MF); ++n)
+    for (n = 1; n <= GSL_MIN(3, mfield_params.nmax_mf); ++n)
       {
         int ni = (int) n;
         for (m = -ni; m <= ni; ++m)
@@ -1208,25 +1332,25 @@ main(int argc, char *argv[])
       }
   }
 
-#if MFIELD_SYNTH_DATA
-  {
-    gsl_vector *g_synth = gsl_vector_alloc(mfield_workspace_p->p_int);
-    gsl_vector_view g = gsl_vector_subvector(coeffs, 0, mfield_workspace_p->p_int);
-    double norm;
+  /* print residual norm between synthetic and computed coefficients */
+  if (mfield_params.synth_data)
+    {
+      gsl_vector *g_synth = gsl_vector_alloc(mfield_workspace_p->p_int);
+      gsl_vector_view g = gsl_vector_subvector(coeffs, 0, mfield_workspace_p->p_int);
+      double norm;
 
-    /* synthetic internal coefficients */
-    mfield_synth_g(g_synth, mfield_workspace_p);
+      /* synthetic internal coefficients */
+      mfield_synth_g(g_synth, mfield_workspace_p);
 
-    /* subtract model internal coefficients */
-    gsl_vector_sub(g_synth, &g.vector);
+      /* subtract model internal coefficients */
+      gsl_vector_sub(g_synth, &g.vector);
 
-    norm = gsl_blas_dnrm2(g_synth);
+      norm = gsl_blas_dnrm2(g_synth);
 
-    fprintf(stderr, "main: || g_synth - g || = %.12e [nT]\n", norm);
+      fprintf(stderr, "main: || g_synth - g || = %.12e [nT]\n", norm);
 
-    gsl_vector_free(g_synth);
-  }
-#endif
+      gsl_vector_free(g_synth);
+    }
 
   mfield_free(mfield_workspace_p);
   mfield_data_free(mfield_data_p);

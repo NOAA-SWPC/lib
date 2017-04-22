@@ -447,16 +447,15 @@ track_flag_lon(const double lon_min, const double lon_max,
 
 /*
 track_flag_kp()
-  Flag any tracks with kp outside of [kp_min,kp_max]. The kp for
-comparison is the kp at the time of the equator crossing. Since
-kp is a 3-hour index, it shouldn't change over the entire track.
+  Flag any tracks with kp outside of [kp_min,kp_max]. 3 kp values
+are compared: beginning of track, equator crossing, and end of track.
 
 Inputs: kp_min - minimum kp
         kp_max - maximum kp
         data   - satellite data
         w      - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
@@ -476,25 +475,35 @@ track_flag_kp(const double kp_min, const double kp_max, satdata_mag *data, track
   for (i = 0; i < w->n; ++i)
     {
       track_data *tptr = &(w->tracks[i]);
-      time_t t = satdata_epoch2timet(tptr->t_eq);
-      double kp;
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+      time_t t1 = satdata_epoch2timet(data->t[start_idx]);
+      time_t t2 = satdata_epoch2timet(tptr->t_eq);
+      time_t t3 = satdata_epoch2timet(data->t[end_idx]);
+      double kp1, kp2, kp3;
 
-      s = kp_get(t, &kp, kp_p);
-      if (s == 0 &&
-          (kp < kp_min || kp > kp_max))
+      s = kp_get(t1, &kp1, kp_p);
+      s += kp_get(t2, &kp2, kp_p);
+      s += kp_get(t3, &kp3, kp_p);
+      if (s)
+        {
+          fprintf(stderr, "track_flag_kp: error: kp not available for track %zu\n", i);
+          continue;
+        }
+
+      if ((kp1 < kp_min || kp1 > kp_max) ||
+          (kp2 < kp_min || kp2 > kp_max) ||
+          (kp3 < kp_min || kp3 > kp_max))
         {
           nflagged += track_flag_track(i, TRACK_FLG_KP, data, w);
           ++ntrack_flagged;
         }
     }
 
-  fprintf(stderr, "track_flag_kp: flagged %zu/%zu (%.1f%%) tracks due to kp\n",
-          ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
-
   kp_free(kp_p);
 
-  return nflagged;
-} /* track_flag_kp() */
+  return ntrack_flagged;
+}
 
 /*
 track_flag_meanalt()

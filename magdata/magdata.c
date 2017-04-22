@@ -1009,6 +1009,7 @@ magdata_write(const char *filename, magdata *data)
   fwrite(data->phi, sizeof(double), data->n, fp);
   fwrite(data->qdlat, sizeof(double), data->n, fp);
   fwrite(data->F, sizeof(double), data->n, fp);
+  fwrite(data->F_ns, sizeof(double), data->n, fp);
 
   /* don't write vector arrays for EMAG dataset */
   if (!(data->global_flags & MAGDATA_GLOBFLG_SCALAR_GRID))
@@ -1102,6 +1103,7 @@ magdata_read(const char *filename, magdata *data)
   fread(&(data->phi[data->n]), sizeof(double), n, fp);
   fread(&(data->qdlat[data->n]), sizeof(double), n, fp);
   fread(&(data->F[data->n]), sizeof(double), n, fp);
+  fread(&(data->F_ns[data->n]), sizeof(double), n, fp);
 
   if (!(data->global_flags & MAGDATA_GLOBFLG_SCALAR_GRID))
     {

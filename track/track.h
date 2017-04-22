@@ -20,16 +20,17 @@
 /* minimum number of along-track data points for rms calculation */
 #define TRACK_RMS_NDATA      200
 
-#define TRACK_FLG_RMS        (1 << 0) /* flagged due to high rms */
-#define TRACK_FLG_JUMP       (1 << 1) /* flagged due to data jump */
-#define TRACK_FLG_SATDIR     (1 << 2) /* flagged due to satellite direction */
-#define TRACK_FLG_UT         (1 << 3) /* flagged due to UT */
-#define TRACK_FLG_LT         (1 << 4) /* flagged due to local time */
-#define TRACK_FLG_KP         (1 << 5) /* flagged due to kp */
-#define TRACK_FLG_DOY        (1 << 6) /* flagged due to doy / season */
-#define TRACK_FLG_ALTITUDE   (1 << 7) /* flagged due to altitude */
-#define TRACK_FLG_LONGITUDE  (1 << 8) /* flagged due to longitude */
-#define TRACK_FLG_INCOMPLETE (1 << 9) /* flagged due to missing data */
+#define TRACK_FLG_RMS        (1 << 0)  /* flagged due to high rms */
+#define TRACK_FLG_JUMP       (1 << 1)  /* flagged due to data jump */
+#define TRACK_FLG_SATDIR     (1 << 2)  /* flagged due to satellite direction */
+#define TRACK_FLG_UT         (1 << 3)  /* flagged due to UT */
+#define TRACK_FLG_LT         (1 << 4)  /* flagged due to local time */
+#define TRACK_FLG_KP         (1 << 5)  /* flagged due to kp */
+#define TRACK_FLG_RC         (1 << 6)  /* flagged due to RC */
+#define TRACK_FLG_DOY        (1 << 7)  /* flagged due to doy / season */
+#define TRACK_FLG_ALTITUDE   (1 << 8)  /* flagged due to altitude */
+#define TRACK_FLG_LONGITUDE  (1 << 9)  /* flagged due to longitude */
+#define TRACK_FLG_INCOMPLETE (1 << 10) /* flagged due to missing data */
 
 typedef struct
 {
@@ -121,7 +122,7 @@ int track_fix_offsets(const satdata_mag *data, track_workspace *w);
 /* track_synth.c */
 int track_synth(const int down_sample, const satdata_mag *data_in,
                 satdata_mag *data_out, msynth_workspace *msynth_core);
-int track_synth_chaos(const int down_sample, const satdata_mag *data_in,
+int track_synth_chaos(const int down_sample, satdata_mag *data_in,
                       satdata_mag *data_out, msynth_workspace *msynth_core);
 
 #endif /* INCLUDED_track_h */

@@ -22,24 +22,26 @@
 typedef struct
 {
   /* SECS parameters */
-  double lat_spacing1d; /* latitude pole spacing for 1D SECS (degrees) */
-  double lat_spacing2d; /* latitude pole spacing for 2D SECS (degrees) */
-  double lat_min;       /* minimum geocentric latitude for SECS poles (degrees) */
-  double lat_max;       /* maximum geocentric latitude for SECS poles (degrees) */
-  double lon_spacing;   /* longitude pole spacing for 2D SECS (degrees) */
-  double lon_min;       /* minimum longitude for SECS poles (degrees) */
-  double lon_max;       /* maximum longitude for SECS poles (degrees) */
-  double R;             /* reference radius (km) */
-  size_t lmax;          /* maximum spherical harmonic degree for 1D SECS expansion */
-  size_t secs_flags;    /* MAGFIT_SECS_xxx flags */
+  double lat_spacing1d;  /* latitude pole spacing for 1D SECS (degrees) */
+  double lat_spacing2d;  /* latitude pole spacing for 2D SECS (degrees) */
+  double lat_min;        /* minimum geocentric latitude for SECS poles (degrees) */
+  double lat_max;        /* maximum geocentric latitude for SECS poles (degrees) */
+  double lon_spacing;    /* longitude pole spacing for 2D SECS (degrees) */
+  double lon_min;        /* minimum longitude for SECS poles (degrees) */
+  double lon_max;        /* maximum longitude for SECS poles (degrees) */
+  double R;              /* reference radius (km) */
+  size_t lmax;           /* maximum spherical harmonic degree for 1D SECS expansion */
+  size_t secs_flags;     /* MAGFIT_SECS_xxx flags */
 
   /* PCA parameters */
-  size_t pca_modes;     /* number of PCA modes to use */
+  size_t pca_modes;      /* number of PCA modes to use */
 
   /* RC parameters */
-  int subtract_crust;   /* subtract crustal field prior to fitting RC model */
+  int rc_subtract_crust; /* subtract degree 45 crustal field prior to fitting RC model */
+  size_t rc_p;           /* number of model parameters (1 or 2) */
+  int rc_fit_Y;          /* fit Y component for RC model? */
 
-  double qdmax;         /* latitude range for fitting data: [-qdmax,qdmax] */
+  double qdmax;          /* latitude range for fitting data: [-qdmax,qdmax] */
 } magfit_parameters;
 
 typedef struct

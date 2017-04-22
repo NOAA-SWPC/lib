@@ -22,10 +22,7 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA          0
-#define MFIELD_SYNTH_DATA_NOISE    0
 #define MFIELD_SYNTH_HIGH_LAT_ONLY 1
-#define MFIELD_SYNTH_NMIN          16
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      0
@@ -43,9 +40,6 @@
 /* fit external field model to data */
 #define MFIELD_FIT_EXTFIELD    0
 
-/* epoch to define SV and SA terms in fit */
-#define MFIELD_EPOCH          (2016.0)
-
 #define MFIELD_RE_KM          (6371.2)
 
 /*
@@ -56,9 +50,6 @@
 
 /* define if fitting to the EMAG2 grid */
 #define MFIELD_EMAG2          0
-
-/* define for no weighting in fit */
-#define MFIELD_NOWEIGHTS      0
 
 /* indices for each residual type */
 #define MFIELD_IDX_X              0
@@ -85,6 +76,30 @@ typedef struct
   size_t nmax_sa;                       /* SA nmax */
   size_t nsat;                          /* number of satellites */
   double euler_period;                  /* time period for Euler angles (decimal days) */
+
+  size_t max_iter;                      /* number of robust iterations */
+  int fit_sv;                           /* fit SV coefficients */
+  int fit_sa;                           /* fit SA coefficients */
+  int fit_euler;                        /* fit Euler angles */
+  int fit_ext;                          /* fit external field correction */
+
+  int scale_time;                       /* scale time into dimensionless units */
+  int regularize;                       /* regularize the solution vector */
+  int use_weights;                      /* use weights in the fitting */
+
+  double weight_X;                      /* relative weighting for X component */
+  double weight_Y;                      /* relative weighting for Y component */
+  double weight_Z;                      /* relative weighting for Z component */
+  double weight_F;                      /* relative weighting for F component */
+  double weight_DX;                     /* relative weighting for DX component */
+  double weight_DY;                     /* relative weighting for DY component */
+  double weight_DZ;                     /* relative weighting for DZ component */
+
+  /* synthetic data parameters */
+  int synth_data;                       /* replace real data with synthetic for testing */
+  int synth_noise;                      /* add gaussian noise to synthetic model */
+  size_t synth_nmin;                    /* minimum spherical harmonic degree for synthetic model */
+
   mfield_data_workspace *mfield_data_p; /* satellite data */
 } mfield_parameters;
 
@@ -209,6 +224,8 @@ typedef struct
   gsl_matrix **omp_JTJ;    /* max_threads matrices, each p_int-by-p_int */
   green_workspace **green_array_p; /* array of green workspaces, size max_threads */
 
+  int lls_solution;        /* 1 if inverse problem is linear (no scalar residuals or Euler angles) */
+
   gsl_vector *fvec;        /* residual vector for robust weights */
   gsl_vector *wfvec;       /* weighted residual vector */
   gsl_multifit_robust_workspace *robust_workspace_p;
@@ -230,6 +247,7 @@ typedef struct
 
 mfield_workspace *mfield_alloc(const mfield_parameters *params);
 void mfield_free(mfield_workspace *w);
+int mfield_init_params(mfield_parameters * params);
 int mfield_set_damping(const double lambda_sv, const double lambda_sa,
                        mfield_workspace *w);
 mfield_workspace *mfield_copy(const mfield_workspace *w);

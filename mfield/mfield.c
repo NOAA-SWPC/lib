@@ -57,25 +57,6 @@
 #include "oct.h"
 #include "track_weight.h"
 
-/*
- * scale time to dimensionless units for SV/SA terms - this
- * helps improve the condition of the least squares A^T A matrix
- */
-#define MFIELD_SCALE_TIME            0
-
-#define MFIELD_REGULARIZE            1
-
-/* weighting factors for data (multiplies spatial weights) */
-#define MFIELD_WEIGHT_F              (1.0)
-#define MFIELD_WEIGHT_X              (1.0)
-#define MFIELD_WEIGHT_Y              (1.0)
-#define MFIELD_WEIGHT_Z              (1.0)
-
-/* weighting factors for gradient data (N/S or E/W) */
-#define MFIELD_WEIGHT_DX             (5.0)
-#define MFIELD_WEIGHT_DY             (5.0)
-#define MFIELD_WEIGHT_DZ             (5.0)
-
 static int mfield_green(const double r, const double theta, const double phi,
                         mfield_workspace *w);
 static int mfield_eval_g(const double t, const double r, const double theta, const double phi,
@@ -335,9 +316,9 @@ mfield_alloc(const mfield_parameters *params)
   {
     /*
      * Number of components added to omp_J matrix:
-     * X, Y, Z, F, DX_NS, DY_NS, DZ_NS, DX_EW, DY_EW, DZ_EW
+     * X, Y, Z, F, DX_NS, DY_NS, DZ_NS, DF_NS, DX_EW, DY_EW, DZ_EW, DF_EW
      */
-    const size_t ncomp = 10;
+    const size_t ncomp = 12;
     size_t i;
 
     /*
@@ -493,6 +474,39 @@ mfield_free(mfield_workspace *w)
   free(w);
 } /* mfield_free() */
 
+/* initialize parameter structure */
+int
+mfield_init_params(mfield_parameters * params)
+{
+  params->epoch = 0.0;
+  params->R = 0.0;
+  params->nmax_mf = 0;
+  params->nmax_sv = 0;
+  params->nmax_sa = 0;
+  params->nsat = 0;
+  params->euler_period = 0.0;
+  params->max_iter = 0;
+  params->fit_sv = 0;
+  params->fit_sa = 0;
+  params->fit_euler = 0;
+  params->fit_ext = 0;
+  params->scale_time = 0;
+  params->regularize = 0;
+  params->use_weights = 0;
+  params->weight_X = 0.0;
+  params->weight_Y = 0.0;
+  params->weight_Z = 0.0;
+  params->weight_F = 0.0;
+  params->weight_DX = 0.0;
+  params->weight_DY = 0.0;
+  params->weight_DZ = 0.0;
+  params->synth_data = 0;
+  params->synth_noise = 0;
+  params->synth_nmin = 0;
+
+  return 0;
+}
+
 /*
 mfield_copy()
   Make a copy of an mfield workspace that can be used
@@ -568,10 +582,11 @@ mfield_init(mfield_workspace *w)
   /* initialize t_mu and t_sigma */
   mfield_data_init(w->data_workspace_p);
 
-#if MFIELD_SCALE_TIME
-  w->t_mu = w->data_workspace_p->t_mu;
-  w->t_sigma = w->data_workspace_p->t_sigma;
-#endif
+  if (w->params.scale_time)
+    {
+      w->t_mu = w->data_workspace_p->t_mu;
+      w->t_sigma = w->data_workspace_p->t_sigma;
+    }
 
   fprintf(stderr, "mfield_init: t_mu    = %g [years]\n", w->t_mu);
   fprintf(stderr, "mfield_init: t_sigma = %g [years]\n", w->t_sigma);
@@ -619,6 +634,12 @@ mfield_init(mfield_workspace *w)
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
 
           if (mptr->flags[j] & (MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DZ_EW))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
 #else
           track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);

@@ -436,10 +436,21 @@ lapack_complex_svd(const gsl_matrix_complex * A, gsl_vector * S,
     }
 }
 
-/* solve A x = b using Cholesky factorization of A */
+/*
+lapack_cholesky_solve()
+  solve A x = b using Cholesky factorization of A
+
+Inputs: A     - matrix A
+        b     - rhs vector b
+        x     - (output) solution vector
+        rcond - (output) reciprocal condition number
+        L     - (output) Cholesky factor of A in lower triangle;
+                can be set to NULL
+*/
+
 int
 lapack_cholesky_solve(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x,
-                      double * rcond)
+                      double * rcond, gsl_matrix * L)
 {
   int s;
   lapack_int N = A->size1;
@@ -452,6 +463,7 @@ lapack_cholesky_solve(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x
   gsl_matrix *work_A = gsl_matrix_alloc(N, N);
   gsl_matrix *AF = gsl_matrix_alloc(N, N);
   lapack_int ldaf = AF->size1;
+  char fact = (L == NULL) ? 'E' : 'N';
   char equed;
   double ferr, berr;
 
@@ -459,7 +471,7 @@ lapack_cholesky_solve(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x
   gsl_matrix_transpose_memcpy(work_A, A);
 
   s = LAPACKE_dposvx(LAPACK_COL_MAJOR,
-                     'E',
+                     fact,
                      'L',
                      N,
                      nrhs,
@@ -477,9 +489,47 @@ lapack_cholesky_solve(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x
                      &ferr,
                      &berr);
 
+  if (L != NULL)
+    {
+      /* store Cholesky factor in L */
+      gsl_matrix_transpose_memcpy(L, AF);
+    }
+
   gsl_vector_free(S);
   gsl_vector_free(work_b);
   gsl_matrix_free(AF);
+  gsl_matrix_free(work_A);
+
+  return s;
+}
+
+/*
+lapack_cholesky_invert()
+  Invert A using Cholesky factorization, which was previously
+computed with lapack_cholesky_solve() (the L factor output)
+
+Inputs: A - on input, the Cholesky factor L in lower triangle
+            on output, (L L^T)^{-1} in lower triangle
+*/
+
+int
+lapack_cholesky_invert(gsl_matrix * A)
+{
+  int s;
+  lapack_int N = A->size1;
+  lapack_int lda = A->size1;
+  gsl_matrix *work_A = gsl_matrix_alloc(N, N);
+
+  gsl_matrix_transpose_memcpy(work_A, A);
+
+  s = LAPACKE_dpotri(LAPACK_COL_MAJOR,
+                     'L',
+                     N,
+                     work_A->data,
+                     lda);
+
+  gsl_matrix_transpose_memcpy(A, work_A);
+
   gsl_matrix_free(work_A);
 
   return s;

@@ -28,20 +28,6 @@
 #include "euler.h"
 #include "pomme.h"
 
-#define CALC_VFM2NEC    1
-
-#define ALPHA_SWA       (11.8127)
-#define BETA_SWA        (-76.1945)
-#define GAMMA_SWA       (-12.5843)
-
-#define ALPHA_SWB       (-8.8763)
-#define BETA_SWB        (-76.4296)
-#define GAMMA_SWB       (-9.1003)
-
-#define ALPHA_SWC       (1.8232)
-#define BETA_SWC        (-76.8283)
-#define GAMMA_SWC       (-1.9911)
-
 /*
 print_data()
 
@@ -56,11 +42,6 @@ print_data(const int down_sample, const satdata_mag *data)
 {
   int s = 0;
   size_t i;
-#if CALC_VFM2NEC
-  const double alpha = ALPHA_SWA * M_PI / 180.0;
-  const double beta = BETA_SWA * M_PI / 180.0;
-  const double gamma = GAMMA_SWA * M_PI / 180.0;
-#endif
 
   i = 1;
   printf("# Field %zu: time (UT)\n", i++);
@@ -104,21 +85,9 @@ print_data(const int down_sample, const satdata_mag *data)
                    SATDATA_VEC_Z(data->B_ext, i);
       B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
 
-#if CALC_VFM2NEC
-      {
-        const size_t euler_flags = EULER_FLG_ROTSC | EULER_FLG_ZYX;
-        double B_vfm[3] = { SATDATA_VEC_X(data->B_VFM, i),
-                            SATDATA_VEC_Y(data->B_VFM, i),
-                            SATDATA_VEC_Z(data->B_VFM, i) };
-        double *q = &(data->q[4*i]);
-
-        euler_vfm2nec(euler_flags, alpha, beta, gamma, q, B_vfm, B_nec);
-      }
-#else
       B_nec[0] = SATDATA_VEC_X(data->B, i);
       B_nec[1] = SATDATA_VEC_Y(data->B, i);
       B_nec[2] = SATDATA_VEC_Z(data->B, i);
-#endif
 
       printf("%ld %f %6.2f %10.4f %10.4f %10.4f %10.4f %2d %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
              satdata_epoch2timet(data->t[i]),
@@ -155,8 +124,9 @@ main(int argc, char *argv[])
   int c;
   char *infile = NULL;
   int down_sample = 20;
+  euler_workspace *euler_p = NULL;
 
-  while ((c = getopt(argc, argv, "i:d:")) != (-1))
+  while ((c = getopt(argc, argv, "i:d:e:")) != (-1))
     {
       switch (c)
         {
@@ -168,6 +138,14 @@ main(int argc, char *argv[])
             down_sample = atoi(optarg);
             break;
 
+          case 'e':
+              fprintf(stderr, "main: reading Euler angles from %s...", optarg);
+              euler_p = euler_read(optarg);
+              if (!euler_p)
+                exit(1);
+              fprintf(stderr, "done (%zu sets of angles read)\n", euler_p->n);
+              break;
+
           default:
             break;
         }
@@ -175,7 +153,7 @@ main(int argc, char *argv[])
 
   if (!infile)
     {
-      fprintf(stderr, "Usage: %s <-i swarm_index_file> [-d down_sample]\n",
+      fprintf(stderr, "Usage: %s <-i swarm_index_file> [-d down_sample] [-e euler_file]\n",
               argv[0]);
       exit(1);
     }
@@ -197,9 +175,19 @@ main(int argc, char *argv[])
   fprintf(stderr, "done (%zu records read, %g seconds)\n", data->n,
           time_diff(tv0, tv1));
 
+  if (euler_p)
+    {
+      fprintf(stderr, "main: rotating VFM measurements with new Euler angles...");
+      euler_apply(data, euler_p);
+      fprintf(stderr, "done\n");
+    }
+
   print_data(down_sample, data);
 
   satdata_mag_free(data);
+
+  if (euler_p)
+    euler_free(euler_p);
 
   return 0;
 } /* main() */

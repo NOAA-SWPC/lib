@@ -485,6 +485,59 @@ sph_basis(const double theta, const double phi,
   return 0;
 } /* sph_basis() */
 
+/*
+sph2ecef_vec()
+  Transform a vector in a spherical coordinate basis into Cartesian (ECEF)
+coordinates
+
+Inputs: theta  - colatitude of point for transformation (radians)
+        phi    - longitude of point for transformation (radians)
+        V_sph  - vector in spherical basis:
+                 [ Vr ]
+                 [ Vt ]
+                 [ Vp ]
+        V_ecef - (output) ECEF vector (X, Y, Z)
+*/
+
+void
+sph2ecef_vec(const double theta, const double phi, const double V_sph[3], double V_ecef[3])
+{
+  const double st = sin(theta);
+  const double ct = cos(theta);
+  const double sp = sin(phi);
+  const double cp = cos(phi);
+
+  V_ecef[0] = st * cp * V_sph[0] + ct * cp * V_sph[1] - sp * V_sph[2];
+  V_ecef[1] = st * sp * V_sph[0] + ct * sp * V_sph[1] + cp * V_sph[2];
+  V_ecef[2] = ct * V_sph[0] - st * V_sph[1];
+}
+
+/*
+ecef2sph_vec()
+  Transform a vector in ECEF coordinates to spherical coordinates
+
+Inputs: theta  - colatitude of point for transformation (radians)
+        phi    - longitude of point for transformation (radians)
+        V_ecef - ECEF vector (X, Y, Z)
+        V_sph  - (output) vector in spherical basis:
+                 [ Vr ]
+                 [ Vt ]
+                 [ Vp ]
+*/
+
+void
+ecef2sph_vec(const double theta, const double phi, const double V_ecef[3], double V_sph[3])
+{
+  const double st = sin(theta);
+  const double ct = cos(theta);
+  const double sp = sin(phi);
+  const double cp = cos(phi);
+
+  V_sph[0] = st * cp * V_ecef[0] + st * sp * V_ecef[1] + ct * V_ecef[2];
+  V_sph[1] = ct * cp * V_ecef[0] + ct * sp * V_ecef[1] - st * V_ecef[2];
+  V_sph[2] = -sp * V_ecef[0] + cp * V_ecef[1];
+}
+
 double
 vec_dot(const double a[3], const double b[3])
 {
