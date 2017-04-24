@@ -419,7 +419,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   struct timeval tv0, tv1;
   track_workspace *track_p = track_alloc();
 
+#if 0
   print_unflagged_data("data_ts/data_ts.0", data);
+#endif
 
   fprintf(stderr, "preprocess_data: initializing tracks...");
   gettimeofday(&tv0, NULL);
@@ -446,7 +448,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
               nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
     }
 
+#if 0
   print_unflagged_data("data_ts/data_ts.1", data);
+#endif
 
 #if MFIELD_FILTER_SMDL
 
@@ -470,7 +474,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
 
 #endif
 
+#if 0
   print_unflagged_data("data_ts/data_ts.2", data);
+#endif
 
   /* downsample data */
   {
@@ -487,7 +493,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
     fprintf(stderr, "done\n");
   }
 
+#if 0
   print_unflagged_data("data_ts/data_ts.3", data);
+#endif
 
   {
     size_t i;
@@ -513,7 +521,9 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
             nflag, data->n, (double)nflag / (double)data->n * 100.0);
   }
 
+#if 0
   print_unflagged_data("data_ts/data_ts.4", data);
+#endif
 
   /* print track statistics */
   {
@@ -701,12 +711,14 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
+#if 0
   {
     /* XXX recompute main field with recent model */
     fprintf(stderr, "main: recomputing main field for satellite 1...");
     calc_main(data);
     fprintf(stderr, "done\n");
   }
+#endif
 
   track_p = preprocess_data(&params, magdata_flags, data);
 
