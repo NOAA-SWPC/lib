@@ -40,8 +40,8 @@ libcommon_la_SOURCES = \
   histogramNd.c        \
   interp.c             \
   julian.c             \
-  lse.c                \
   lapack_lls.c         \
+	lse.c                \
   lunar.c              \
   oct.c                \
   omni.c               \
