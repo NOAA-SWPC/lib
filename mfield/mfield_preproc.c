@@ -63,6 +63,10 @@ typedef struct
   size_t gradient_ns;  /* number of seconds between N/S gradient samples */
   int fit_track_RC;    /* fit track-by-track RC field */
 
+  double gradew_dphi_max; /* maximum longitude distance for east-west gradients (degrees) */
+  double gradew_dlat_max; /* maximum latitude distance for east-west gradients (degrees) */
+  double gradew_dt_max;   /* maximum time difference for east-west gradients (seconds) */
+
   double max_kp;       /* maximum kp */
   double max_dRC;      /* maximum dRC/dt (nT/hour) */
 } preprocess_parameters;
@@ -80,15 +84,6 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 /* local-time range for Euler angle fitting */
 #define MFIELD_EULER_LT_MIN        (18.0)
 #define MFIELD_EULER_LT_MAX        (6.0)
-
-/* maximum allowed seconds between satellite measurements for computing east-west differences */
-#define MFIELD_GRAD_DT_EW          (10.0)
-
-/* maximum allowed longitudinal separation between satellites for computing east-west differences (degrees) */
-#define MFIELD_GRAD_DPHI_MAX       (2.0)
-
-/* maximum allowed latitudinal separation between satellites for computing east-west differences (degrees) */
-#define MFIELD_GRAD_DLAT_MAX       (0.1)
 
 /* maximum zenith angle in degrees at high latitudes */
 #define MFIELD_MAX_ZENITH          (100.0)
@@ -198,6 +193,24 @@ check_parameters(preprocess_parameters * params)
       ++s;
     }
 
+  if (params->gradew_dphi_max <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: gradient_ew_dphi_max must be > 0\n");
+      ++s;
+    }
+
+  if (params->gradew_dlat_max <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: gradient_ew_dlat_max must be > 0\n");
+      ++s;
+    }
+
+  if (params->gradew_dt_max <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: gradient_ew_dt_max must be > 0\n");
+      ++s;
+    }
+
   return s;
 }
 
@@ -215,9 +228,9 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
   size_t nmodel[MFIELD_IDX_END];
 
   params.grad_dt_ns = (double) preproc_params->gradient_ns;
-  params.grad_dt_ew = MFIELD_GRAD_DT_EW;
-  params.grad_dphi_max = MFIELD_GRAD_DPHI_MAX;
-  params.grad_dlat_max = MFIELD_GRAD_DLAT_MAX;
+  params.grad_dt_ew = preproc_params->gradew_dt_max;
+  params.grad_dphi_max = preproc_params->gradew_dphi_max;
+  params.grad_dlat_max = preproc_params->gradew_dlat_max;
 
 #if MFIELD_INC_MAIN
   /* subtract main field from data prior to modeling */
@@ -938,6 +951,13 @@ parse_config_file(const char *filename, preprocess_parameters *params)
   if (config_lookup_int(&cfg, "fit_track_RC", &ival))
     params->fit_track_RC = (size_t) ival;
 
+  if (config_lookup_float(&cfg, "gradient_ew_dphi_max", &fval))
+    params->gradew_dphi_max = fval;
+  if (config_lookup_float(&cfg, "gradient_ew_dlat_max", &fval))
+    params->gradew_dlat_max = fval;
+  if (config_lookup_float(&cfg, "gradient_ew_dt_max", &fval))
+    params->gradew_dt_max = fval;
+
   if (config_lookup_float(&cfg, "rms_threshold_X", &fval))
     params->rms_thresh_X = fval;
   if (config_lookup_float(&cfg, "rms_threshold_Y", &fval))
@@ -1003,6 +1023,9 @@ main(int argc, char *argv[])
   params.rms_thresh_Z = -1.0;
   params.rms_thresh_F = -1.0;
   params.gradient_ns = 0;
+  params.gradew_dphi_max = -1.0;
+  params.gradew_dlat_max = -1.0;
+  params.gradew_dt_max = -1.0;
 
   while (1)
     {
