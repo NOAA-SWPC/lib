@@ -52,23 +52,27 @@
 
 typedef struct
 {
-  int flag_rms;        /* use track rms test */
-  size_t downsample;   /* downsampling factor */
-  double min_LT;       /* minimum local time */
-  double max_LT;       /* maximum local time */
-  double rms_thresh_X; /* rms X threshold (nT) */
-  double rms_thresh_Y; /* rms Y threshold (nT) */
-  double rms_thresh_Z; /* rms Z threshold (nT) */
-  double rms_thresh_F; /* rms F threshold (nT) */
-  size_t gradient_ns;  /* number of seconds between N/S gradient samples */
-  int fit_track_RC;    /* fit track-by-track RC field */
+  int flag_rms;           /* use track rms test */
+  size_t downsample;      /* downsampling factor */
+  double min_LT;          /* minimum local time */
+  double max_LT;          /* maximum local time */
+  double rms_thresh_X;    /* rms X threshold (nT) */
+  double rms_thresh_Y;    /* rms Y threshold (nT) */
+  double rms_thresh_Z;    /* rms Z threshold (nT) */
+  double rms_thresh_F;    /* rms F threshold (nT) */
+  size_t gradient_ns;     /* number of seconds between N/S gradient samples */
+  int fit_track_RC;       /* fit track-by-track RC field */
 
   double gradew_dphi_max; /* maximum longitude distance for east-west gradients (degrees) */
   double gradew_dlat_max; /* maximum latitude distance for east-west gradients (degrees) */
   double gradew_dt_max;   /* maximum time difference for east-west gradients (seconds) */
 
-  double max_kp;       /* maximum kp */
-  double max_dRC;      /* maximum dRC/dt (nT/hour) */
+  int subtract_B_main;    /* subtract a-priori main field from data */
+  int subtract_B_crust;   /* subtract a-priori crustal field from data */
+  int subtract_B_ext;     /* subtract a-priori external field from data */
+
+  double max_kp;          /* maximum kp */
+  double max_dRC;         /* maximum dRC/dt (nT/hour) */
 } preprocess_parameters;
 
 #include "mfield_preproc_filter.c"
@@ -87,22 +91,6 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 
 /* maximum zenith angle in degrees at high latitudes */
 #define MFIELD_MAX_ZENITH          (100.0)
-
-/*
- * subtract a priori main field from data - suitable for modeling high
- * degree crustal field
- */
-#define MFIELD_INC_MAIN            1
-
-/*
- * include apriori crustal field in modeling - set this if fitting only
- * a main field model, so that an apriori crustal field (MF7) is subtracted
- * from the satellite observations
- */
-#define MFIELD_INC_CRUSTAL         0
-
-/* subtract a priori external field from data */
-#define MFIELD_INC_EXTERNAL        1
 
 /* maximum QD latitude for fitting Euler angles */
 #define MFIELD_EULER_QDLAT         (55.0)
@@ -211,6 +199,24 @@ check_parameters(preprocess_parameters * params)
       ++s;
     }
 
+  if (params->subtract_B_main < 0)
+    {
+      fprintf(stderr, "check_parameters: subtract_B_main must be 0 or 1\n");
+      ++s;
+    }
+
+  if (params->subtract_B_crust < 0)
+    {
+      fprintf(stderr, "check_parameters: subtract_B_crust must be 0 or 1\n");
+      ++s;
+    }
+
+  if (params->subtract_B_ext < 0)
+    {
+      fprintf(stderr, "check_parameters: subtract_B_ext must be 0 or 1\n");
+      ++s;
+    }
+
   return s;
 }
 
@@ -232,26 +238,23 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
   params.grad_dphi_max = preproc_params->gradew_dphi_max;
   params.grad_dlat_max = preproc_params->gradew_dlat_max;
 
-#if MFIELD_INC_MAIN
   /* subtract main field from data prior to modeling */
-  params.model_main = 1;
-#else
-  params.model_main = 0;
-#endif
+  if (preproc_params->subtract_B_main)
+    params.model_main = 1;
+  else
+    params.model_main = 0;
 
-#if MFIELD_INC_CRUSTAL
-  /* subtract MF7 crustal field from data prior to modeling */
-  params.model_crust = 1;
-#else
-  params.model_crust = 0;
-#endif
+  /* subtract crustal field model from data prior to modeling */
+  if (preproc_params->subtract_B_crust)
+    params.model_crust = 1;
+  else
+    params.model_crust = 0;
 
-#if MFIELD_INC_EXTERNAL
   /* subtract external field from data prior to modeling */
-  params.model_ext = 1;
-#else
-  params.model_ext = 0;
-#endif
+  if (preproc_params->subtract_B_ext)
+    params.model_ext = 1;
+  else
+    params.model_ext = 0;
 
   /* initialize arrays */
   for (i = 0; i < MFIELD_IDX_END; ++i)
@@ -951,6 +954,13 @@ parse_config_file(const char *filename, preprocess_parameters *params)
   if (config_lookup_int(&cfg, "fit_track_RC", &ival))
     params->fit_track_RC = (size_t) ival;
 
+  if (config_lookup_int(&cfg, "subtract_B_main", &ival))
+    params->subtract_B_main = (size_t) ival;
+  if (config_lookup_int(&cfg, "subtract_B_crust", &ival))
+    params->subtract_B_crust = (size_t) ival;
+  if (config_lookup_int(&cfg, "subtract_B_ext", &ival))
+    params->subtract_B_ext = (size_t) ival;
+
   if (config_lookup_float(&cfg, "gradient_ew_dphi_max", &fval))
     params->gradew_dphi_max = fval;
   if (config_lookup_float(&cfg, "gradient_ew_dlat_max", &fval))
@@ -1026,6 +1036,9 @@ main(int argc, char *argv[])
   params.gradew_dphi_max = -1.0;
   params.gradew_dlat_max = -1.0;
   params.gradew_dt_max = -1.0;
+  params.subtract_B_main = -1;
+  params.subtract_B_crust = -1;
+  params.subtract_B_ext = -1;
 
   while (1)
     {

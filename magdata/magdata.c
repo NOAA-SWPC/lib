@@ -1477,15 +1477,28 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
   int flagged_start = 0;
 
   /* first locate the track of the second satellite close in time to the first */
-  s = track_find(tptr->t_eq, tptr->lon_eq, params->grad_dt_ew / 60.0, params->grad_dphi_max, &track_idx2, track_p2);
+  s = track_find_t(tptr->t_eq, &track_idx2, track_p2);
 
   if (s != GSL_SUCCESS)
     {
       /* track for second satellite not found, nothing to do */
+      fprintf(stderr, "magdata_copy_track_EW: track for satellite 2 not found, timestamp: %f\n", tptr->t_eq);
       return 0;
     }
 
   tptr2 = &(track_p2->tracks[track_idx2]);
+
+  /* check time difference between tracks */
+  {
+    double dt = fabs(tptr->t_eq - tptr2->t_eq) * 1.0e-3; /* time difference in seconds */
+    if (dt > params->grad_dt_ew)
+      {
+        /* time difference too large */
+        fprintf(stderr, "magdata_copy_track_EW: track for satellite 2 not found due to dt [%.1f sec] [limit = %.1f sec]\n",\
+                dt, params->grad_dt_ew);
+        return 0;
+      }
+  }
 
   for (i = start_idx; i <= end_idx; ++i)
     {
@@ -1496,6 +1509,7 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       if (!SATDATA_AvailableData(data->flags[i]))
         continue;
 
+#if 0
       /* attempt to find a measurement for satellite 2 with approximately the
        * same latitude as satellite 1 */
       if (tptr->satdir == 1)
@@ -1508,12 +1522,18 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
           j = bsearch_desc_double(data2->latitude, data->latitude[i],
                                   tptr2->start_idx, tptr2->end_idx);
         }
+#else
+      /* attempt to find a measurement for satellite 2 with approximately the
+       * same time as satellite 1 */
+      j = bsearch_double(data2->t, data->t[i],
+                         tptr2->start_idx, tptr2->end_idx);
+#endif
 
       /* now check that the latitude separation and time separation are within
        * allowed tolerances */
       if (fabs(data->latitude[i] - data2->latitude[j]) > params->grad_dlat_max)
         continue;
-      if (fabs(data->t[i] - data2->t[j]) > params->grad_dt_ew * 1000.0)
+      else if (fabs(data->t[i] - data2->t[j]) > params->grad_dt_ew * 1000.0)
         continue;
 
       /*

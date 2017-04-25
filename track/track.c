@@ -526,6 +526,38 @@ track_find(const double t_eq, const double phi_eq, const double dt_min,
   return s;
 }
 
+/*
+track_find_t()
+  Find track whose equator crossing is closest in time to a given timestamp
+
+Inputs: t   - timestamp for comparison (CDF_EPOCH)
+        idx - (output) index of track
+        w   - track workspace
+*/
+
+int
+track_find_t(const double t, size_t *idx, const track_workspace *w)
+{
+  int s = GSL_FAILURE;
+  size_t i;
+  double dt_min = 1.0e9;
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      double dt = fabs(t - tptr->t_eq);
+
+      if (dt < dt_min)
+        {
+          dt_min = dt;
+          *idx = i;
+          s = GSL_SUCCESS;
+        }
+    }
+
+  return s;
+}
+
 int
 track_print(const char *filename, const size_t flags,
             const satdata_mag *data, track_workspace *w)

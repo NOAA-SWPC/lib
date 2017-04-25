@@ -441,6 +441,15 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
       sprintf(buf, "%s/data%zu_DF_EW.dat", dir_prefix, i);
       fp[11] = fopen(buf, "w");
 
+      for (i = 0; i < n; ++i)
+        {
+          if (fp[i] == NULL)
+            {
+              fprintf(stderr, "mfield_data_print: fp[%zu] is NULL\n", i);
+              return -1;
+            }
+        }
+
       /* header line */
       fprintf(fp[0], "# X vector data for MF modeling (satellite %zu)\n", i);
       fprintf(fp[1], "# Y vector data for MF modeling (satellite %zu)\n", i);
