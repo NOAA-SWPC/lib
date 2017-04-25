@@ -36,7 +36,6 @@
 #include "common.h"
 #include "eci.h"
 #include "ellipsoid.h"
-#include "levmar.h"
 #include "magdata.h"
 
 #include "euler.h"

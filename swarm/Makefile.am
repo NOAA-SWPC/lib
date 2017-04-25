@@ -1,11 +1,10 @@
 #bin_PROGRAMS = calc_crf2s calc_euler crust dynamo plot_tracks print print_all print_crust print_alt residuals stage1 swarmcdf2fday testcal
 bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust print_alt print_tracks residuals plotsep stage1 swarmcdf2fday
 
-check_PROGRAMS = print_eph
-
-commonlibs = -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas
+commonlibs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ~/usr/lib/liblapack.a ~/usr/lib/libf77blas.a ~/usr/lib/libatlas.a -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas -lgfortran -lmwmclmcrrt $(top_builddir)/chaos/libchaosext.so
 
 stage1_SOURCES = stage1.c
+stage1_LDFLAGS = -fopenmp
 stage1_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lmwmclmcrrt $(abs_top_builddir)/chaos/libchaosext.so
 
 plotsep_SOURCES = plotsep.c
@@ -37,9 +36,6 @@ print_tracks_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/common/li
 
 print_lt_SOURCES = print_lt.c
 print_lt_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
-
-print_eph_SOURCES = print_eph.c
-print_eph_LDADD = $(top_builddir)/common/libcommon.la -lm ${commonlibs}
 
 print_all_SOURCES = print_all.c
 print_all_LDADD = $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/euler/libeuler.la -lm ${commonlibs}

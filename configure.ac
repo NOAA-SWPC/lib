@@ -38,7 +38,6 @@ AC_CONFIG_FILES([            \
   julia/Makefile             \
   julia/julia.h              \
   lapack_wrapper/Makefile    \
-  levmar/Makefile            \
   lis/Makefile               \
   lls/Makefile               \
   magdata/Makefile           \

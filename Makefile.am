@@ -12,7 +12,6 @@ SUBDIRS =         \
   iri             \
   julia           \
   lapack_wrapper  \
-  levmar          \
   lis             \
   lls             \
   msis            \

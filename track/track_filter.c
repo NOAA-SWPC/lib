@@ -241,7 +241,7 @@ track_filter_proc(const size_t track_idx, track_filter_params *params,
                log(h * cnorm));
       }
     exit(1);
-#else
+#elif 0
     /* perform damped least squares fit */
     s = gsl_multifit_linear_ridge(h, &Xv.matrix, &bv.vector, c,
                                   cov, &chisq, multifit_p);

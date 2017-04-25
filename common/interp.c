@@ -12,7 +12,6 @@
 
 #include "bsearch.h"
 #include "interp.h"
-#include "interp/libinterp.h"
 
 /*
 interp1d()

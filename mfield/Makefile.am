@@ -2,16 +2,18 @@ bin_PROGRAMS = mfield mfield_preproc
 
 check_PROGRAMS = mfield_emag mfield_ascii mfield_covar mfield_eval_main mfield_residuals mfield_compare mfield_plot
 
+common_libs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -L/home/palken/usr/lib -lflow -lm -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -llapacke -llapack -lptcblas -lptf77blas -latlas -lpthread -lgfortran -lmwmclmcrrt $(top_builddir)/chaos/libchaosext.so
+
 mfield_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_main.c
 mfield_CFLAGS = -fopenmp
 mfield_LDFLAGS = -fopenmp
-mfield_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la $(top_builddir)/common/libcommon.la $(top_builddir)/green/libgreen.la -lm -llapack -lcdf -lgsl -lptcblas -lptf77blas -latlas -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib
+mfield_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/euler/libeuler.la $(top_builddir)/green/libgreen.la -lm -lfftw3 -L/home/palken/usr/lib ${common_libs}
 
 mfield_emag_SOURCES = mfield_emag.c
 mfield_emag_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -llapack -lcdf -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib -lgsl -lptcblas -lptf77blas -latlas -lz
 
 mfield_preproc_SOURCES = mfield_preproc.c
-mfield_preproc_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/lls/liblls.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm -llapack -lcdf -lsatdata -lindices -lfftw3 -lgfortran -lpthread -L/home/palken/usr/lib -lgsl -lptcblas -lptf77blas -latlas
+mfield_preproc_LDADD = $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/euler/libeuler.la -lm -lfftw3 -L/home/palken/usr/lib ${common_libs}
 
 mfield_ascii_SOURCES = mfield.c mfield_data.c mfield_green.c mfield_ascii.c
 mfield_ascii_CFLAGS = -fopenmp
