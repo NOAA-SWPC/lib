@@ -25,7 +25,9 @@ AC_CONFIG_FILES([            \
   common/Makefile            \
   cond/Makefile              \
   curvefit/Makefile          \
+  dmsp/Makefile              \
   efi/Makefile               \
+  ephemeris/Makefile         \
   estist/Makefile            \
   euler/Makefile             \
   gd/Makefile                \

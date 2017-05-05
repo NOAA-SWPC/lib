@@ -396,8 +396,8 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
   char buf[2048];
   FILE *fp[12];
   const size_t n = 12; /* number of components to print */
-  const char *fmtstr = "%ld %f %.4f %.4f %.4f %.4f %.3f %.4f %.4f\n";
-  const char *fmtstr_grad = "%ld %f %.4f %.4f %.4f %.4f %.3f %.4f %.4f %.4f %.4f\n";
+  const char *fmtstr = "%ld %.8f %.4f %.4f %.4f %.4f %.3f %.4f %.4f\n";
+  const char *fmtstr_grad = "%ld %.8f %.4f %.4f %.4f %.4f %.3f %.4f %.4f %.4f %.4f\n";
   size_t idx = 0;
 
   for (i = 0; i < w->nsources; ++i)
@@ -441,11 +441,11 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
       sprintf(buf, "%s/data%zu_DF_EW.dat", dir_prefix, i);
       fp[11] = fopen(buf, "w");
 
-      for (i = 0; i < n; ++i)
+      for (j = 0; j < n; ++j)
         {
-          if (fp[i] == NULL)
+          if (fp[j] == NULL)
             {
-              fprintf(stderr, "mfield_data_print: fp[%zu] is NULL\n", i);
+              fprintf(stderr, "mfield_data_print: fp[%zu] is NULL\n", j);
               return -1;
             }
         }
@@ -558,32 +558,13 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
           B_grad_model[2] = mptr->Bz_model_ns[j];
           B_grad_model[3] = gsl_hypot3(B_grad_model[0], B_grad_model[1], B_grad_model[2]);
 
-#if 0
-          /* XXX: convert gradient measurement and model into the coordinate system at the
-           * original point
-           */
-          {
-            double V[3], W[3];
+          if ((j > 0) && (mptr->flags[j] & MAGDATA_FLG_TRACK_START))
+            {
+              size_t k;
 
-            V[0] = -B_grad[2];
-            V[1] = -B_grad[0];
-            V[2] = B_grad[1];
-            sph2ecef_vec(mptr->theta_ns[j], mptr->phi_ns[j], V, W);
-            ecef2sph_vec(mptr->theta[j], mptr->phi[j], W, V);
-            B_grad[0] = -V[1];
-            B_grad[1] = V[2];
-            B_grad[2] = -V[0];
-
-            V[0] = -B_grad_model[2];
-            V[1] = -B_grad_model[0];
-            V[2] = B_grad_model[1];
-            sph2ecef_vec(mptr->theta_ns[j], mptr->phi_ns[j], V, W);
-            ecef2sph_vec(mptr->theta[j], mptr->phi[j], W, V);
-            B_grad_model[0] = -V[1];
-            B_grad_model[1] = V[2];
-            B_grad_model[2] = -V[0];
-          }
-#endif
+              for (k = 0; k < n; ++k)
+                fprintf(fp[k], "\n\n");
+            }
 
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
@@ -656,16 +637,6 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
               double wj = gsl_vector_get(wts_spatial, idx++);
               fprintf(fp[11], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[3], B_model[3], B_grad[3], B_grad_model[3]);
             }
-
-#if 1
-          if (mptr->flags[j] & MAGDATA_FLG_TRACK_START)
-            {
-              size_t k;
-
-              for (k = 0; k < n; ++k)
-                fprintf(fp[k], "\n\n");
-            }
-#endif
         }
 
       for (j = 0; j < n; ++j)

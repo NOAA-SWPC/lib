@@ -245,11 +245,11 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
   char buf[2048];
   FILE *fp[12];
   const size_t n = 12; /* number of components to write to disk */
-  const char *fmtstr = "%ld %f %.4f %.4f %.4f %.4f %.3f %.4f\n";
+  const char *fmtstr = "%ld %.8f %.4f %.4f %.4f %.4f %.3f %.4f %.4f %.4f\n";
+  const char *fmtstr_grad = "%ld %.8f %.4f %.4f %.4f %.4f %.3f %.4f %.4f %.4f %.4f %.4f %.4f\n";
   size_t i;
   mfield_data_workspace *data_p = w->data_workspace_p;
   size_t idx = 0;
-  gsl_vector *f = mfield_residual(c, w);
   gsl_vector *wts_spatial = w->wts_spatial;
 
   for (i = 0; i < data_p->nsources; ++i)
@@ -293,6 +293,7 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
       sprintf(buf, "%s/res%zu_DF_EW_iter%zu.dat", prefix, i, iter);
       fp[11] = fopen(buf, "w");
 
+      /* header line */
       fprintf(fp[0], "# X vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
       fprintf(fp[1], "# Y vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
       fprintf(fp[2], "# Z vector residuals for MF modeling (satellite %zu, iteration %zu)\n", i, iter);
@@ -318,18 +319,76 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
           fprintf(fp[j], "# Field %zu: total weight factor\n", k++);
         }
 
-      fprintf(fp[0], "# Field %zu: X vector residual (nT)\n", k);
-      fprintf(fp[1], "# Field %zu: Y vector residual (nT)\n", k);
-      fprintf(fp[2], "# Field %zu: Z vector residual (nT)\n", k);
-      fprintf(fp[3], "# Field %zu: F vector residual (nT)\n", k);
-      fprintf(fp[4], "# Field %zu: DX gradient (N/S) vector residual (nT)\n", k);
-      fprintf(fp[5], "# Field %zu: DY gradient (N/S) vector residual (nT)\n", k);
-      fprintf(fp[6], "# Field %zu: DZ gradient (N/S) vector residual (nT)\n", k);
-      fprintf(fp[7], "# Field %zu: DF gradient (N/S) scalar residual (nT)\n", k);
-      fprintf(fp[8], "# Field %zu: DX gradient (E/W) vector residual (nT)\n", k);
-      fprintf(fp[9], "# Field %zu: DY gradient (E/W) vector residual (nT)\n", k);
-      fprintf(fp[10], "# Field %zu: DZ gradient (E/W) vector residual (nT)\n", k);
-      fprintf(fp[11], "# Field %zu: DF gradient (E/W) scalar residual (nT)\n", k);
+      fprintf(fp[0], "# Field %zu: X vector measurement (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y vector measurement (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z vector measurement (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: F scalar measurement (nT)\n", k);
+      fprintf(fp[4], "# Field %zu: X vector measurement (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: Y vector measurement (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: Z vector measurement (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: F scalar measurement (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: X vector measurement (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y vector measurement (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z vector measurement (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F scalar measurement (nT)\n", k);
+      ++k;
+
+      fprintf(fp[0], "# Field %zu: X a priori model (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y a priori model (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z a priori model (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: F a priori model (nT)\n", k);
+      fprintf(fp[4], "# Field %zu: X a priori model (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: Y a priori model (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: Z a priori model (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: F a priori model (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: X a priori model (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y a priori model (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z a priori model (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F a priori model (nT)\n", k);
+      ++k;
+
+      fprintf(fp[0], "# Field %zu: X fitted model (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y fitted model (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z fitted model (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: F fitted model (nT)\n", k);
+      fprintf(fp[4], "# Field %zu: X fitted model (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: Y fitted model (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: Z fitted model (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: F fitted model (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: X fitted model (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y fitted model (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z fitted model (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F fitted model (nT)\n", k);
+      ++k;
+
+      fprintf(fp[4], "# Field %zu: X vector measurement at N/S gradient point (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: Y vector measurement at N/S gradient point (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: Z vector measurement at N/S gradient point (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: F scalar measurement at N/S gradient point (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: X vector measurement at E/W gradient point (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y vector measurement at E/W gradient point (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z vector measurement at E/W gradient point (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F scalar measurement at E/W gradient point (nT)\n", k);
+      ++k;
+
+      fprintf(fp[4], "# Field %zu: X a priori model at N/S gradient point (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: Y a priori model at N/S gradient point (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: Z a priori model at N/S gradient point (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: F a priori model at N/S gradient point (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: X a priori model at E/W gradient point (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y a priori model at E/W gradient point (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z a priori model at E/W gradient point (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F a priori model at E/W gradient point (nT)\n", k);
+      ++k;
+
+      fprintf(fp[4], "# Field %zu: X fitted model at N/S gradient point (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: Y fitted model at N/S gradient point (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: Z fitted model at N/S gradient point (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: F fitted model at N/S gradient point (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: X fitted model at E/W gradient point (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y fitted model at E/W gradient point (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z fitted model at E/W gradient point (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F fitted model at E/W gradient point (nT)\n", k);
       ++k;
 
       for (j = 0; j < mptr->n; ++j)
@@ -337,95 +396,118 @@ mfield_print_residual(const char *prefix, const size_t iter, const gsl_vector *c
           double t = satdata_epoch2year(mptr->t[j]);
           time_t unix_time = satdata_epoch2timet(mptr->t[j]);
           double phi = wrap180(mptr->phi[j] * 180.0 / M_PI);
-          double lat = 90.0 - mptr->theta[j] * 180.0 / M_PI;
+          double theta = mptr->theta[j];
+          double lat = 90.0 - theta * 180.0 / M_PI;
           double qdlat = mptr->qdlat[j];
           double r = mptr->r[j];
+          double B[4], B_grad[4];             /* observations */
+          double B_model[4], B_grad_model[4]; /* a priori models */
+          double B_fit[4], B_grad_fit[4];     /* fitted field model */
 
           if (MAGDATA_Discarded(mptr->flags[j]) || !MAGDATA_FitMF(mptr->flags[j]))
             continue;
 
+          /* evaluate internal field models */
+          mfield_eval(mptr->t[j], r, theta, phi, B_fit, w);
+
+          if (MAGDATA_ExistDX_NS(mptr->flags[j]) || MAGDATA_ExistDY_NS(mptr->flags[j]) ||
+              MAGDATA_ExistDZ_NS(mptr->flags[j]) || MAGDATA_ExistDF_NS(mptr->flags[j]) ||
+              MAGDATA_ExistDX_EW(mptr->flags[j]) || MAGDATA_ExistDY_EW(mptr->flags[j]) ||
+              MAGDATA_ExistDZ_EW(mptr->flags[j]) || MAGDATA_ExistDF_EW(mptr->flags[j]))
+            {
+              mfield_eval(mptr->t_ns[j], mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], B_grad_fit, w);
+            }
+
+          B[0] = mptr->Bx_nec[j];
+          B[1] = mptr->By_nec[j];
+          B[2] = mptr->Bz_nec[j];
+          B[3] = mptr->F[j];
+
+          B_model[0] = mptr->Bx_model[j];
+          B_model[1] = mptr->By_model[j];
+          B_model[2] = mptr->Bz_model[j];
+          B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
+
+          B_grad[0] = mptr->Bx_nec_ns[j];
+          B_grad[1] = mptr->By_nec_ns[j];
+          B_grad[2] = mptr->Bz_nec_ns[j];
+          B_grad[3] = mptr->F_ns[j];
+
+          B_grad_model[0] = mptr->Bx_model_ns[j];
+          B_grad_model[1] = mptr->By_model_ns[j];
+          B_grad_model[2] = mptr->Bz_model_ns[j];
+          B_grad_model[3] = gsl_hypot3(B_grad_model[0], B_grad_model[1], B_grad_model[2]);
+
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0], B_fit[0]);
             }
 
           if (MAGDATA_ExistY(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1], B_fit[1]);
             }
 
           if (MAGDATA_ExistZ(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2], B_fit[2]);
             }
 
           if (MAGDATA_ExistScalar(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[3], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[3], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[3], B_model[3], B_fit[3]);
             }
 
           if (MAGDATA_ExistDX_NS(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[4], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[4], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0], B_fit[0], B_grad[0], B_grad_model[0], B_grad_fit[0]);
             }
 
           if (MAGDATA_ExistDY_NS(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[5], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[5], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1], B_fit[1], B_grad[1], B_grad_model[1], B_grad_fit[1]);
             }
 
           if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[6], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2], B_fit[2], B_grad[2], B_grad_model[2], B_grad_fit[2]);
             }
 
           if (MAGDATA_ExistDF_NS(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[7], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[7], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[3], B_model[3], B_fit[3], B_grad[3], B_grad_model[3], B_grad_fit[3]);
             }
 
           if (MAGDATA_ExistDX_EW(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[8], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[8], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0], B_fit[0], B_grad[0], B_grad_model[0], B_grad_fit[0]);
             }
 
           if (MAGDATA_ExistDY_EW(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[9], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[9], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1], B_fit[1], B_grad[1], B_grad_model[1], B_grad_fit[1]);
             }
 
           if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[10], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2], B_fit[2], B_grad[2], B_grad_model[2], B_grad_fit[2]);
             }
 
           if (MAGDATA_ExistDF_EW(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts_spatial, idx);
-              double resj = gsl_vector_get(f, idx++);
-              fprintf(fp[11], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, resj);
+              double wj = gsl_vector_get(wts_spatial, idx++);
+              fprintf(fp[11], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[3], B_model[3], B_fit[3], B_grad[3], B_grad_model[3], B_grad_fit[3]);
             }
         }
     }

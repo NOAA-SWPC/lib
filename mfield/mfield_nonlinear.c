@@ -98,8 +98,6 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   gsl_vector *f;
   struct timeval tv0, tv1;
   double res0;                    /* initial residual */
-  FILE *fp_res;
-  char resfile[2048];
 
   fdf.f = mfield_calc_f;
   fdf.df = mfield_calc_df;
@@ -121,10 +119,6 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   mfield_nonlinear_histogram(c, w);
 #endif
 
-  sprintf(resfile, "res.nlin.iter%zu.txt", w->niter);
-  fp_res = fopen(resfile, "w");
-  mfield_print_residuals(1, fp_res, NULL, NULL, NULL);
-
   /* compute robust weights with coefficients from previous iteration */
   if (w->niter > 0)
     {
@@ -139,8 +133,6 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
       mfield_robust_weights(w->fvec, w->wts_final, w);
       fprintf(stderr, "done\n");
 
-      /*mfield_print_residuals(0, fp_res, w->fvec, w->wts_final, w->wts_spatial);*/
-
       /* compute final weights = wts_robust .* wts_spatial */
       gsl_vector_mul(w->wts_final, w->wts_spatial);
     }
@@ -148,10 +140,6 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
     {
       gsl_vector_memcpy(w->wts_final, w->wts_spatial);
     }
-
-  fprintf(stderr, "mfield_calc_nonlinear: wrote residuals to %s\n",
-          resfile);
-  fclose(fp_res);
 
   if (!params->use_weights)
     gsl_vector_set_all(w->wts_final, 1.0);
@@ -312,7 +300,6 @@ mfield_calc_nonlinear_multilarge(const gsl_vector *c, mfield_workspace *w)
       {
         const char *error_file = "error.txt";
         gsl_vector_const_view d = gsl_matrix_const_diagonal(L);
-        double err_max;
         FILE *fp;
         size_t n;
 
@@ -324,8 +311,6 @@ mfield_calc_nonlinear_multilarge(const gsl_vector *c, mfield_workspace *w)
 
         gettimeofday(&tv1, NULL);
         fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-
-        err_max = gsl_vector_max(&d.vector);
 
         fprintf(stderr, "mfield_calc_nonlinear: printing parameter uncertainties to %s...", error_file);
 

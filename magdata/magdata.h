@@ -94,6 +94,7 @@ typedef struct
   double q[4];           /* quaternions */
   double ne;             /* electron density cm^{-3} */
   int satdir;            /* +1 north, -1 south */
+  double lt_eq;          /* local time of equator crossing */
 
   double t_ns;           /* timestamp for along-track point (CDF_EPOCH) */
   double r_ns;           /* radius for along-track point (km) */
@@ -105,6 +106,7 @@ typedef struct
   double B_model_ns[3];  /* along-track main/crustal/external field model in NEC frame (nT) */
   double F_ns;           /* along-track magnetic field scalar measurement (nT) */
   double q_ns[4];        /* along-track quaternions */
+  double lt_eq_ns;       /* local time of equator crossing for gradient point */
 
   size_t flags;          /* MAGDATA_FLG_xxx flags */
 } magdata_datum;
@@ -130,6 +132,7 @@ typedef struct
   double *q;           /* quaternions */
   double *weights;     /* spatial weights */
   int *satdir;         /* +1 north, -1 south */
+  double *lt_eq;       /* local time of equator crossing */
 
   double *ne;          /* electron density cm^{-3} */
 
@@ -150,6 +153,7 @@ typedef struct
   double *Bz_model_ns; /* NEC along-track Z main/crustal/external field (nT) */
   double *F_ns;        /* along-track scalar measurement (nT) */
   double *q_ns;        /* along-track quaternions */
+  double *lt_eq_ns;    /* along-track local time of equator crossing */
 
   size_t *flags;       /* MAGDATA_FLG_xxx flags */
 

@@ -22,7 +22,7 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_HIGH_LAT_ONLY 0
+#define MFIELD_SYNTH_HIGH_LAT_ONLY 1
 
 /* define to fit secular variation coefficients */
 #define MFIELD_FIT_SECVAR      0

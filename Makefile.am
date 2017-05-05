@@ -5,7 +5,9 @@ SUBDIRS =         \
   apex            \
   chaos           \
   curvefit        \
+  dmsp            \
   efi             \
+  ephemeris       \
   green           \
   grid            \
   grobs           \

@@ -31,6 +31,7 @@
 #define TRACK_FLG_ALTITUDE   (1 << 8)  /* flagged due to altitude */
 #define TRACK_FLG_LONGITUDE  (1 << 9)  /* flagged due to longitude */
 #define TRACK_FLG_INCOMPLETE (1 << 10) /* flagged due to missing data */
+#define TRACK_FLG_PB         (1 << 11) /* flagged due to plasma bubble detected */
 
 typedef struct
 {

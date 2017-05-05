@@ -84,6 +84,9 @@ magdata_print2(const char *filename, const magdata *data)
 
       msynth_eval(satdata_epoch2year(data->t[i]), data->r[i], data->theta[i], data->phi[i], B_core, msynth_p);
 
+      if ((i > 0) && (data->flags[i] & MAGDATA_FLG_TRACK_START))
+        fprintf(fp, "\n");
+
       fprintf(fp, "%ld %.4f %.3f %.3f %.5e %.5e %.5e %.5e %.5e %.5e\n",
               unix_time,
               data->r[i],

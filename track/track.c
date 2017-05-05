@@ -643,9 +643,6 @@ track_print_track(const int header, FILE *fp, const track_data *tptr,
       double ut = get_ut(unix_time);
       double lt = get_localtime(unix_time, data->longitude[didx] * M_PI / 180.0);
 
-      if (!SATDATA_AvailableData(data->flags[didx]))
-        continue;
-
       fprintf(fp, "%ld %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
               unix_time,
               ut,

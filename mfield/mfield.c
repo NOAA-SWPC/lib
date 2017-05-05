@@ -61,10 +61,6 @@ static int mfield_green(const double r, const double theta, const double phi,
                         mfield_workspace *w);
 static int mfield_eval_g(const double t, const double r, const double theta, const double phi,
                          const gsl_vector *c, double B[4], mfield_workspace *w);
-static int mfield_print_residuals(const int header, FILE *fp,
-                                  const gsl_vector *r,
-                                  const gsl_vector *w_rob,
-                                  const gsl_vector *w_spatial);
 static int mfield_update_histogram(const gsl_vector *r, gsl_histogram *h);
 static int mfield_print_histogram(FILE *fp, gsl_histogram *h);
 static int mfield_compare_int(const void *a, const void *b);
@@ -1750,42 +1746,6 @@ mfield_set_sa(gsl_vector *c, const size_t idx,
 #endif
   return GSL_SUCCESS;
 }
-
-static int
-mfield_print_residuals(const int header, FILE *fp,
-                       const gsl_vector *r,
-                       const gsl_vector *w_rob,
-                       const gsl_vector *w_spatial)
-{
-  size_t i;
-
-  if (!fp)
-    return GSL_SUCCESS;
-
-  if (header)
-    {
-      i = 1;
-      fprintf(fp, "# Field %zu: residual (nT)\n", i++);
-      fprintf(fp, "# Field %zu: robust weight\n", i++);
-      fprintf(fp, "# Field %zu: spatial weight\n", i++);
-      fprintf(fp, "# Field %zu: final weight (robust x spatial)\n", i++);
-      return GSL_SUCCESS;
-    }
-
-  for (i = 0; i < r->size; ++i)
-    {
-      double robi = gsl_vector_get(w_rob, i);
-      double spati = gsl_vector_get(w_spatial, i);
-
-      fprintf(fp, "%.5e %.5e %.5e %.5e\n",
-              gsl_vector_get(r, i),
-              robi,
-              spati,
-              robi * spati);
-    }
-
-  return GSL_SUCCESS;
-} /* mfield_print_residuals() */
 
 static int
 mfield_update_histogram(const gsl_vector *r, gsl_histogram *h)

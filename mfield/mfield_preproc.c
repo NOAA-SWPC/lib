@@ -54,12 +54,13 @@ typedef struct
 {
   int flag_rms;           /* use track rms test */
   size_t downsample;      /* downsampling factor */
-  double min_LT;          /* minimum local time */
-  double max_LT;          /* maximum local time */
-  double rms_thresh_X;    /* rms X threshold (nT) */
-  double rms_thresh_Y;    /* rms Y threshold (nT) */
-  double rms_thresh_Z;    /* rms Z threshold (nT) */
-  double rms_thresh_F;    /* rms F threshold (nT) */
+  double min_LT;          /* minimum local time for field modeling */
+  double max_LT;          /* maximum local time for field modeling */
+  double euler_min_LT;    /* minimum local time for Euler angles */
+  double euler_max_LT;    /* maximum local time for Euler angles */
+  double rms_thresh[4];   /* rms thresholds (X,Y,Z,F) (nT) */
+  double qdlat_cutoff;    /* QD latitude cutoff for high-latitudes */
+  double min_zenith;      /* minimum zenith angle for high-latitude data selection */
   size_t gradient_ns;     /* number of seconds between N/S gradient samples */
   int fit_track_RC;       /* fit track-by-track RC field */
 
@@ -73,30 +74,17 @@ typedef struct
 
   double max_kp;          /* maximum kp */
   double max_dRC;         /* maximum dRC/dt (nT/hour) */
+
+  int pb_flag;            /* flag tracks with plasma bubble signatures */
+  double pb_qdmax;        /* QD latitude range for PB search */
+  double pb_thresh[4];    /* threshold values for N/S gradients (X,Y,Z,F) (nT) */
 } preprocess_parameters;
 
-#include "mfield_preproc_filter.c"
-
+static int mfield_check_LT(const double lt, const double lt_min, const double lt_max);
 static size_t model_flags(const size_t magdata_flags, const double t,
                           const double theta, const double phi, const double qdlat,
                           const preprocess_parameters * params);
 void print_unflagged_data(const char *filename, const satdata_mag *data);
-
-/* use SMDL index for filtering instead of WMM criteria */
-#define MFIELD_FILTER_SMDL         0
-
-/* local-time range for Euler angle fitting */
-#define MFIELD_EULER_LT_MIN        (18.0)
-#define MFIELD_EULER_LT_MAX        (6.0)
-
-/* maximum zenith angle in degrees at high latitudes */
-#define MFIELD_MAX_ZENITH          (100.0)
-
-/* maximum QD latitude for fitting Euler angles */
-#define MFIELD_EULER_QDLAT         (55.0)
-
-/* geocentric latitude cutoff for using local time vs zenith selection */
-#define MFIELD_HIGH_LATITUDE      (60.0)
 
 #define MFIELD_IDX_X              0
 #define MFIELD_IDX_Y              1
@@ -115,6 +103,8 @@ void print_unflagged_data(const char *filename, const satdata_mag *data);
 
 /* Global */
 solarpos_workspace *solarpos_workspace_p = NULL;
+
+#include "mfield_preproc_filter.c"
 
 static int
 check_parameters(preprocess_parameters * params)
@@ -151,25 +141,49 @@ check_parameters(preprocess_parameters * params)
       ++s;
     }
 
-  if (params->rms_thresh_X <= 0.0)
+  if (params->euler_min_LT < 0.0)
+    {
+      fprintf(stderr, "check_parameters: euler_min_LT must be > 0\n");
+      ++s;
+    }
+
+  if (params->euler_max_LT < 0.0)
+    {
+      fprintf(stderr, "check_parameters: euler_max_LT must be > 0\n");
+      ++s;
+    }
+
+  if (params->qdlat_cutoff < 0.0)
+    {
+      fprintf(stderr, "check_parameters: qdlat_cutoff must be > 0\n");
+      ++s;
+    }
+
+  if (params->min_zenith < 0.0)
+    {
+      fprintf(stderr, "check_parameters: min_zenith must be > 0\n");
+      ++s;
+    }
+
+  if (params->rms_thresh[0] <= 0.0)
     {
       fprintf(stderr, "check_parameters: rms_thresh_X must be > 0\n");
       ++s;
     }
 
-  if (params->rms_thresh_Y <= 0.0)
+  if (params->rms_thresh[1] <= 0.0)
     {
       fprintf(stderr, "check_parameters: rms_thresh_Y must be > 0\n");
       ++s;
     }
 
-  if (params->rms_thresh_Z <= 0.0)
+  if (params->rms_thresh[2] <= 0.0)
     {
       fprintf(stderr, "check_parameters: rms_thresh_Z must be > 0\n");
       ++s;
     }
 
-  if (params->rms_thresh_F <= 0.0)
+  if (params->rms_thresh[3] <= 0.0)
     {
       fprintf(stderr, "check_parameters: rms_thresh_F must be > 0\n");
       ++s;
@@ -214,6 +228,42 @@ check_parameters(preprocess_parameters * params)
   if (params->subtract_B_ext < 0)
     {
       fprintf(stderr, "check_parameters: subtract_B_ext must be 0 or 1\n");
+      ++s;
+    }
+
+  if (params->pb_flag < 0)
+    {
+      fprintf(stderr, "check_parameters: pb_flag must be 0 or 1\n");
+      ++s;
+    }
+
+  if (params->pb_qdmax <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: pb_qdmax must be > 0\n");
+      ++s;
+    }
+
+  if (params->pb_thresh[0] <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: pb_threshold_dX must be > 0\n");
+      ++s;
+    }
+
+  if (params->pb_thresh[1] <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: pb_threshold_dY must be > 0\n");
+      ++s;
+    }
+
+  if (params->pb_thresh[2] <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: pb_threshold_dZ must be > 0\n");
+      ++s;
+    }
+
+  if (params->pb_thresh[3] <= 0.0)
+    {
+      fprintf(stderr, "check_parameters: pb_threshold_dF must be > 0\n");
       ++s;
     }
 
@@ -292,10 +342,31 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
    */
   for (i = 0; i < mdata->n; ++i)
     {
-      size_t fitting_flags = model_flags(mdata->global_flags,
-                                         mdata->t[i], mdata->theta[i],
-                                         mdata->phi[i], mdata->qdlat[i],
-                                         preproc_params);
+      size_t fitting_flags = 0;
+
+      if (fabs(mdata->qdlat[i]) <= preproc_params->qdlat_cutoff)
+        {
+          /*
+           * mid-latitude point: check local time of equator crossing to determine whether
+           * to fit field model and/or Euler angles
+           */
+
+          double LT = mdata->lt_eq[i];
+          int fit_MF = mfield_check_LT(LT, preproc_params->min_LT, preproc_params->max_LT);
+          int fit_euler = mfield_check_LT(LT, preproc_params->euler_min_LT, preproc_params->euler_max_LT) &&
+                          (mdata->global_flags & MAGDATA_GLOBFLG_EULER);
+
+          if (fit_MF)
+            fitting_flags |= MAGDATA_FLG_FIT_MF;
+
+          if (fit_euler)
+            fitting_flags |= MAGDATA_FLG_FIT_EULER;
+        }
+      else
+        {
+          /* high-latitude point - fit field model but not Euler angles */
+          fitting_flags |= MAGDATA_FLG_FIT_MF;
+        }
 
       if (fitting_flags & MAGDATA_FLG_FIT_MF)
         {
@@ -446,7 +517,7 @@ read_champ(const char *filename)
 } /* read_champ() */
 
 /*
-check_lt()
+mfield_check_LT()
   Check if a given LT is within [lt_min,lt_max] accounting for mod 24. So it
 is possible to have input lt_min < lt_max in order to select data across midnight.
 
@@ -454,10 +525,12 @@ Example: [lt_min,lt_max] = [6,18] will select daytime data between 6am and 6pm
          [lt_min,lt_max] = [18,6] will select nighttime data between 6pm and 6am
          [lt_min,lt_max] = [22,5] will select nighttime data between 10pm and 5am
          [lt_min,lt_max] = [0,5] will select data between midnight and 5am
+
+Return: 1 if LT \in [lt_min,lt_max] (mod 24); 0 otherwise
 */
 
 static int
-check_lt(const double lt, const double lt_min, const double lt_max)
+mfield_check_LT(const double lt, const double lt_min, const double lt_max)
 {
   double a, b;
 
@@ -475,6 +548,8 @@ check_lt(const double lt, const double lt_min, const double lt_max)
   /* valid local time */
   return 1;
 }
+
+#if 0
 
 /*
 model_flags()
@@ -513,7 +588,7 @@ model_flags(const size_t magdata_flags, const double t,
   int status;
 
   /* check if we should fit Euler angles to this data point */
-  status = check_lt(lt, MFIELD_EULER_LT_MIN, MFIELD_EULER_LT_MAX);
+  status = mfield_check_LT(lt, MFIELD_EULER_LT_MIN, MFIELD_EULER_LT_MAX);
   if ((status == 1) &&
       (magdata_flags & MAGDATA_GLOBFLG_EULER) &&
       (fabs(qdlat) <= MFIELD_EULER_QDLAT))
@@ -524,14 +599,13 @@ model_flags(const size_t magdata_flags, const double t,
   /* check if we should fit main field model to this data point */
   if (fabs(lat_deg) <= MFIELD_HIGH_LATITUDE)
     {
-      status = check_lt(lt, params->min_LT, params->max_LT);
+      status = mfield_check_LT(lt, params->min_LT, params->max_LT);
 
       if (status == 1)
         flags |= MAGDATA_FLG_FIT_MF;
     }
   else
     {
-#if !MFIELD_FILTER_SMDL
       double lat_rad = lat_deg * M_PI / 180.0;
       double zenith;
 
@@ -542,15 +616,12 @@ model_flags(const size_t magdata_flags, const double t,
       /* large zenith angle means darkness */
       if (zenith >= MFIELD_MAX_ZENITH)
         flags |= MAGDATA_FLG_FIT_MF;
-#else
-      /* if using SMDL filtering, don't use zenith criteria, use all high
-       * latitude points which pass the SMDL filter */
-      flags |= MAGDATA_FLG_FIT_MF;
-#endif
     }
 
   return flags;
 }
+
+#endif
 
 int
 print_track_stats(const satdata_mag *data, const track_workspace *track_p)
@@ -601,46 +672,17 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
     {
       const char *rmsfile = "satrms.dat";
       size_t nrms;
-      double thresh[4];
 
-      thresh[0] = params->rms_thresh_X;
-      thresh[1] = params->rms_thresh_Y;
-      thresh[2] = params->rms_thresh_Z;
-      thresh[3] = params->rms_thresh_F;
-#if 0
-      double thresh[] = { 20.0, 25.0, 15.0, 15.0 };
-#elif 0
-      /* 2 Jan 2017: since the main field model used for rms is out of date,
-       * need to increase thresholds to prevent throwing out good data
-       */
-      double thresh[] = { 30.0, 30.0, 30.0, 30.0 };
-#endif
-
-      nrms = track_flag_rms(rmsfile, thresh, NULL, data, track_p);
+      nrms = track_flag_rms(rmsfile, params->rms_thresh, NULL, data, track_p);
       fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
               nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
     }
 
-#if MFIELD_FILTER_SMDL
-
-  /* flag according to SMDL index */
-  {
-    size_t nsmdl;
-    const double smdl_lo = 6.0;
-    const double smdl_hi = 50.0;
-
-    fprintf(stderr, "main: flagging according to SMDL thresholds (lo = %g, hi = %g)...",
-            smdl_lo, smdl_hi);
-    nsmdl = satdata_filter_smdl(smdl_lo, smdl_hi, data);
-    fprintf(stderr, "done (%zu/%zu (%.1f%%) points flagged\n",
-            nsmdl, data->n, (double)nsmdl / (double)data->n * 100.0);
-  }
-
-#elif 1
+#if 1
 
   /* select geomagnetically quiet data */
   fprintf(stderr, "preprocess_data: selecting geomagnetically quiet data...");
-  mfield_preprocess_filter(params, track_p, data);
+  mfield_preprocess_filter(magdata_flags, params, track_p, data);
   fprintf(stderr, "done\n");
 
 #else
@@ -671,35 +713,6 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
 
 #if 0
   print_unflagged_data("data.dat.2", data);
-#endif
-
-  {
-    size_t i;
-    size_t nflag = 0;
-
-    fprintf(stderr, "preprocess_data: flagging points due to modeling criteria...");
-    for (i = 0; i < data->n; ++i)
-      {
-        double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
-        double phi = data->longitude[i] * M_PI / 180.0;
-        size_t fitting_flags = model_flags(magdata_flags,
-                                           data->t[i], theta,
-                                           phi, data->qdlat[i],
-                                           params);
-
-        /* flag point if it will not be used in any modeling */
-        if (fitting_flags == 0)
-          {
-            data->flags[i] |= SATDATA_FLG_OUTLIER;
-            ++nflag;
-          }
-      }
-    fprintf(stderr, "done (%zu/%zu (%.1f%%) points flagged)\n",
-            nflag, data->n, (double)nflag / (double)data->n * 100.0);
-  }
-
-#if 0
-  print_unflagged_data("data.dat.3", data);
 #endif
 
   /* print track statistics */
@@ -946,6 +959,14 @@ parse_config_file(const char *filename, preprocess_parameters *params)
     params->min_LT = fval;
   if (config_lookup_float(&cfg, "max_LT", &fval))
     params->max_LT = fval;
+  if (config_lookup_float(&cfg, "euler_min_LT", &fval))
+    params->euler_min_LT = fval;
+  if (config_lookup_float(&cfg, "euler_max_LT", &fval))
+    params->euler_max_LT = fval;
+  if (config_lookup_float(&cfg, "qdlat_cutoff", &fval))
+    params->qdlat_cutoff = fval;
+  if (config_lookup_float(&cfg, "min_zenith", &fval))
+    params->min_zenith = fval;
 
   if (config_lookup_int(&cfg, "downsample", &ival))
     params->downsample = (size_t) ival;
@@ -969,13 +990,26 @@ parse_config_file(const char *filename, preprocess_parameters *params)
     params->gradew_dt_max = fval;
 
   if (config_lookup_float(&cfg, "rms_threshold_X", &fval))
-    params->rms_thresh_X = fval;
+    params->rms_thresh[0] = fval;
   if (config_lookup_float(&cfg, "rms_threshold_Y", &fval))
-    params->rms_thresh_Y = fval;
+    params->rms_thresh[1] = fval;
   if (config_lookup_float(&cfg, "rms_threshold_Z", &fval))
-    params->rms_thresh_Z = fval;
+    params->rms_thresh[2] = fval;
   if (config_lookup_float(&cfg, "rms_threshold_F", &fval))
-    params->rms_thresh_F = fval;
+    params->rms_thresh[3] = fval;
+
+  if (config_lookup_int(&cfg, "pb_flag", &ival))
+    params->pb_flag = ival;
+  if (config_lookup_float(&cfg, "pb_qdmax", &fval))
+    params->pb_qdmax = fval;
+  if (config_lookup_float(&cfg, "pb_threshold_dX", &fval))
+    params->pb_thresh[0] = fval;
+  if (config_lookup_float(&cfg, "pb_threshold_dY", &fval))
+    params->pb_thresh[1] = fval;
+  if (config_lookup_float(&cfg, "pb_threshold_dZ", &fval))
+    params->pb_thresh[2] = fval;
+  if (config_lookup_float(&cfg, "pb_threshold_dF", &fval))
+    params->pb_thresh[3] = fval;
 
   config_destroy(&cfg);
 
@@ -1028,10 +1062,14 @@ main(int argc, char *argv[])
   params.max_dRC = -1.0;
   params.min_LT = -1.0;
   params.max_LT = -1.0;
-  params.rms_thresh_X = -1.0;
-  params.rms_thresh_Y = -1.0;
-  params.rms_thresh_Z = -1.0;
-  params.rms_thresh_F = -1.0;
+  params.euler_min_LT = -1.0;
+  params.euler_max_LT = -1.0;
+  params.qdlat_cutoff = -1.0;
+  params.min_zenith = -1.0;
+  params.rms_thresh[0] = -1.0;
+  params.rms_thresh[1] = -1.0;
+  params.rms_thresh[2] = -1.0;
+  params.rms_thresh[3] = -1.0;
   params.gradient_ns = 0;
   params.gradew_dphi_max = -1.0;
   params.gradew_dlat_max = -1.0;
@@ -1039,6 +1077,12 @@ main(int argc, char *argv[])
   params.subtract_B_main = -1;
   params.subtract_B_crust = -1;
   params.subtract_B_ext = -1;
+  params.pb_flag = -1;
+  params.pb_qdmax = -1.0;
+  params.pb_thresh[0] = -1.0;
+  params.pb_thresh[1] = -1.0;
+  params.pb_thresh[2] = -1.0;
+  params.pb_thresh[3] = -1.0;
 
   while (1)
     {
@@ -1149,14 +1193,14 @@ main(int argc, char *argv[])
 
   fprintf(stderr, "main: downsample       = %zu\n", params.downsample);
   fprintf(stderr, "main: gradient_ns      = %zu [s]\n", params.gradient_ns);
-  fprintf(stderr, "main: rms X threshold  = %.1f [nT]\n", params.rms_thresh_X);
-  fprintf(stderr, "main: rms Y threshold  = %.1f [nT]\n", params.rms_thresh_Y);
-  fprintf(stderr, "main: rms Z threshold  = %.1f [nT]\n", params.rms_thresh_Z);
-  fprintf(stderr, "main: rms F threshold  = %.1f [nT]\n", params.rms_thresh_F);
+  fprintf(stderr, "main: rms X threshold  = %.1f [nT]\n", params.rms_thresh[0]);
+  fprintf(stderr, "main: rms Y threshold  = %.1f [nT]\n", params.rms_thresh[1]);
+  fprintf(stderr, "main: rms Z threshold  = %.1f [nT]\n", params.rms_thresh[2]);
+  fprintf(stderr, "main: rms F threshold  = %.1f [nT]\n", params.rms_thresh[3]);
   fprintf(stderr, "main: LT minimum       = %.1f\n", params.min_LT);
   fprintf(stderr, "main: LT maximum       = %.1f\n", params.max_LT);
-  fprintf(stderr, "main: Euler LT minimum = %.1f\n", MFIELD_EULER_LT_MIN);
-  fprintf(stderr, "main: Euler LT maximum = %.1f\n", MFIELD_EULER_LT_MAX);
+  fprintf(stderr, "main: Euler LT minimum = %.1f\n", params.euler_min_LT);
+  fprintf(stderr, "main: Euler LT maximum = %.1f\n", params.euler_max_LT);
 
   if (euler_p)
     {

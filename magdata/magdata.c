@@ -106,6 +106,7 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   data->Bz_model = realloc(data->Bz_model, n * sizeof(double));
   data->F = realloc(data->F, n * sizeof(double));
   data->q = realloc(data->q, 4 * n * sizeof(double));
+  data->lt_eq = realloc(data->lt_eq, n * sizeof(double));
 
   data->satdir = realloc(data->satdir, n * sizeof(int));
   data->ne = realloc(data->ne, n * sizeof(double));
@@ -127,6 +128,7 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   data->Bz_model_ns = realloc(data->Bz_model_ns, n * sizeof(double));
   data->F_ns = realloc(data->F_ns, n * sizeof(double));
   data->q_ns = realloc(data->q_ns, 4 * n * sizeof(double));
+  data->lt_eq_ns = realloc(data->lt_eq_ns, n * sizeof(double));
 
   data->flags = realloc(data->flags, n * sizeof(size_t));
   data->index = realloc(data->index, n * sizeof(size_t));
@@ -134,12 +136,12 @@ magdata_realloc(const size_t n, const double R, magdata *data)
 
   if (!data->t || !data->ts || !data->r || !data->theta || !data->phi || !data->qdlat || !data->flags ||
       !data->Bx_nec || !data->By_nec || !data->Bz_nec || !data->Bx_vfm || !data->By_vfm ||
-      !data->Bz_vfm || !data->Bx_model || !data->By_model || !data->Bz_model ||
+      !data->Bz_vfm || !data->Bx_model || !data->By_model || !data->Bz_model || !data->lt_eq ||
       !data->F || !data->q || !data->weights || !data->t_ns || !data->ts_ns || !data->r_ns || !data->index ||
       !data->theta_ns || !data->phi_ns || !data->qdlat_ns || !data->satdir || !data->ne ||
       !data->Bx_nec_ns || !data->By_nec_ns || !data->Bz_nec_ns ||
       !data->Bx_vfm_ns || !data->By_vfm_ns || !data->Bz_vfm_ns ||
-      !data->Bx_model_ns || !data->By_model_ns || !data->Bz_model_ns || !data->F_ns || !data->q_ns)
+      !data->Bx_model_ns || !data->By_model_ns || !data->Bz_model_ns || !data->F_ns || !data->q_ns || !data->lt_eq_ns)
     {
       magdata_free(data);
       fprintf(stderr, "magdata_realloc: error reallocating variables\n");
@@ -253,11 +255,17 @@ magdata_free(magdata *data)
   if (data->q_ns)
     free(data->q_ns);
 
+  if (data->lt_eq_ns)
+    free(data->lt_eq_ns);
+
   if (data->F)
     free(data->F);
 
   if (data->q)
     free(data->q);
+
+  if (data->lt_eq)
+    free(data->lt_eq);
 
   if (data->weights)
     free(data->weights);
@@ -366,6 +374,7 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->ne[n] = datum->ne;
   data->satdir[n] = datum->satdir;
   data->weights[n] = 1.0; /* computed in magdata_calc() */
+  data->lt_eq[n] = datum->lt_eq;
 
   for (i = 0; i < 4; ++i)
     {
@@ -393,6 +402,7 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->Bx_model_ns[n] = datum->B_model_ns[0];
   data->By_model_ns[n] = datum->B_model_ns[1];
   data->Bz_model_ns[n] = datum->B_model_ns[2];
+  data->lt_eq_ns[n] = datum->lt_eq_ns;
 
   ++(data->n);
 
@@ -575,7 +585,7 @@ magdata_print(const char *filename, const magdata *data)
   fprintf(fp, "# Field %zu: UT (hours)\n", i++);
   fprintf(fp, "# Field %zu: local time (hours)\n", i++);
   fprintf(fp, "# Field %zu: season (doy)\n", i++);
-  fprintf(fp, "# Field %zu: altitude (km)\n", i++);
+  fprintf(fp, "# Field %zu: geocentric radius (km)\n", i++);
   fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: geocentric latitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
@@ -626,7 +636,7 @@ magdata_print(const char *filename, const magdata *data)
               ut,
               lt,
               get_season(unix_time),
-              data->r[i] - data->R,
+              data->r[i],
               wrap180(data->phi[i] * 180.0 / M_PI),
               90.0 - data->theta[i] * 180.0 / M_PI,
               data->qdlat[i],
@@ -1025,6 +1035,7 @@ magdata_write(const char *filename, magdata *data)
       fwrite(data->Bz_model, sizeof(double), data->n, fp);
       fwrite(data->q, sizeof(double), 4 * data->n, fp);
       fwrite(data->satdir, sizeof(int), data->n, fp);
+      fwrite(data->lt_eq, sizeof(double), data->n, fp);
 
       fwrite(data->t_ns, sizeof(double), data->n, fp);
       fwrite(data->r_ns, sizeof(double), data->n, fp);
@@ -1041,6 +1052,7 @@ magdata_write(const char *filename, magdata *data)
       fwrite(data->By_model_ns, sizeof(double), data->n, fp);
       fwrite(data->Bz_model_ns, sizeof(double), data->n, fp);
       fwrite(data->q_ns, sizeof(double), 4 * data->n, fp);
+      fwrite(data->lt_eq_ns, sizeof(double), data->n, fp);
     }
 
   fwrite(data->flags, sizeof(size_t), data->n, fp);
@@ -1118,6 +1130,7 @@ magdata_read(const char *filename, magdata *data)
       fread(&(data->Bz_model[data->n]), sizeof(double), n, fp);
       fread(&(data->q[4 * data->n]), sizeof(double), 4 * n, fp);
       fread(&(data->satdir[data->n]), sizeof(int), n, fp);
+      fread(&(data->lt_eq[data->n]), sizeof(double), n, fp);
 
       fread(&(data->t_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->r_ns[data->n]), sizeof(double), n, fp);
@@ -1134,6 +1147,7 @@ magdata_read(const char *filename, magdata *data)
       fread(&(data->By_model_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->Bz_model_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->q_ns[4 * data->n]), sizeof(double), 4 * n, fp);
+      fread(&(data->lt_eq_ns[data->n]), sizeof(double), n, fp);
     }
 
   fread(&(data->flags[data->n]), sizeof(size_t), n, fp);
@@ -1398,21 +1412,23 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
               }
 
             datum.t_ns = data->t[j];
-            datum.r_ns = data->altitude[j] + data->R;
+            datum.r_ns = data->r[j];
             datum.theta_ns = M_PI / 2.0 - data->latitude[j] * M_PI / 180.0;
             datum.phi_ns = data->longitude[j] * M_PI / 180.0;
             datum.qdlat_ns = data->qdlat[j];
+            datum.lt_eq_ns = tptr->lt_eq;
           }
       }
 
       datum.t = data->t[i];
-      datum.r = data->altitude[i] + data->R;
+      datum.r = data->r[i];
       datum.theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
       datum.phi = data->longitude[i] * M_PI / 180.0;
       datum.qdlat = data->qdlat[i];
       datum.ne = 0.0; /* filled in later */
       datum.satdir = satdata_mag_satdir(i, data);
       datum.flags = flags;
+      datum.lt_eq = tptr->lt_eq;
 
       s = magdata_add(&datum, mdata);
       if (s)
@@ -1488,6 +1504,12 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
 
   tptr2 = &(track_p2->tracks[track_idx2]);
 
+  if (tptr2->flags)
+    {
+      /*fprintf(stderr, "magdata_copy_track_EW: track for satellite 2 is flagged\n");*/
+      return 0;
+    }
+
   /* check time difference between tracks */
   {
     double dt = fabs(tptr->t_eq - tptr2->t_eq) * 1.0e-3; /* time difference in seconds */
@@ -1509,7 +1531,7 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       if (!SATDATA_AvailableData(data->flags[i]))
         continue;
 
-#if 0
+#if 1
       /* attempt to find a measurement for satellite 2 with approximately the
        * same latitude as satellite 1 */
       if (tptr->satdir == 1)
@@ -1643,6 +1665,7 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       datum.theta_ns = M_PI / 2.0 - data2->latitude[j] * M_PI / 180.0;
       datum.phi_ns = data2->longitude[j] * M_PI / 180.0;
       datum.qdlat_ns = data2->qdlat[j];
+      datum.lt_eq_ns = tptr2->lt_eq;
 
       datum.t = data->t[i];
       datum.r = data->r[i];
@@ -1652,6 +1675,7 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       datum.ne = 0.0; /* filled in later */
       datum.satdir = satdata_mag_satdir(i, data);
       datum.flags = flags;
+      datum.lt_eq = tptr->lt_eq;
 
 #if 0
       if (MAGDATA_ExistDZ_EW(flags))
