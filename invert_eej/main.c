@@ -145,7 +145,7 @@ main(int argc, char *argv[])
   params.log_dir = "log";
   params.output_file = NULL;
   params.curr_altitude = 110.0;
-  params.ncurr = 161;
+  params.ncurr = 81;
   params.qdlat_max = 20.0;
   params.lt_min = 6.0;
   params.lt_max = 18.0;
