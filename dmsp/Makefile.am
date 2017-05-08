@@ -1,4 +1,4 @@
-bin_PROGRAMS = print stage0 stage1
+bin_PROGRAMS = print stage0 stage1 stage2
 
 commonlibs = -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas -lm -lcdf
 
@@ -10,6 +10,10 @@ stage0_LDADD = $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/
 stage1_SOURCES = stage1.c
 stage1_LDFLAGS = -fopenmp
 stage1_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lmwmclmcrrt $(abs_top_builddir)/chaos/libchaosext.so
+
+stage2_SOURCES = stage2.c
+stage2_LDFLAGS = -fopenmp
+stage2_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lz
 
 print_SOURCES = print.c
 print_LDADD = $(top_builddir)/common/libcommon.la -lm -lcdf ${commonlibs}
