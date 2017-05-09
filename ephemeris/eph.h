@@ -33,8 +33,7 @@ typedef struct
 
 eph_workspace *eph_alloc(const eph_data *data);
 void eph_free(eph_workspace *w);
-int eph_interp(const double t, double r_ECI[3], double v_ECI[3],
-               eph_workspace *w);
+int eph_interp(const double t, double r[3], double v[3], eph_workspace *w);
 int eph_interp_sph(const double t, double r_sph[3], eph_workspace *w);
 
 #endif /* INCLUDED_eph_h */

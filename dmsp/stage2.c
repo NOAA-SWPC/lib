@@ -49,10 +49,12 @@
 #include <indices/indices.h>
 
 #include "common.h"
-#include "eci.h"
 #include "eph.h"
+#include "magcal.h"
 #include "msynth.h"
 #include "track.h"
+
+#include "stage2_filter.c"
 
 /*
 correct_track()
@@ -177,6 +179,8 @@ main(int argc, char *argv[])
   satdata_mag *data = NULL;
   eph_data *eph = NULL;
   track_workspace *track_p;
+  magcal_workspace *magcal_p;
+  gsl_vector *coef = gsl_vector_alloc(MAGCAL_P);
   struct timeval tv0, tv1;
   double lt_min = 6.0;  /* local time interval for data selection at low/mid latitudes */
   double lt_max = 18.0;
@@ -249,10 +253,81 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
+  fprintf(stderr, "main: filtering tracks for quiet periods...");
+  gettimeofday(&tv0, NULL);
+  stage2_filter(track_p, data);
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+  /* add unflagged data to magcal workspace */
+  fprintf(stderr, "main: adding data for scalar calibration...");
+  gettimeofday(&tv0, NULL);
+
+  {
+    size_t nflagged = satdata_nflagged(data);
+    size_t n = data->n - nflagged;
+    size_t i, j;
+
+    magcal_p = magcal_alloc(n);
+
+    for (i = 0; i < track_p->n; ++i)
+      {
+        track_data *tptr = &(track_p->tracks[i]);
+        size_t start_idx = tptr->start_idx;
+        size_t end_idx = tptr->end_idx;
+
+        if (tptr->flags)
+          continue;
+
+        for (j = start_idx; j <= end_idx; ++j)
+          {
+            double B_VFM[3], B_model[4];
+
+            if (data->flags[j])
+              continue;
+
+            if (fabs(data->qdlat[j]) > 55.0)
+              continue;
+
+            B_VFM[0] = SATDATA_VEC_X(data->B_VFM, j);
+            B_VFM[1] = SATDATA_VEC_Y(data->B_VFM, j);
+            B_VFM[2] = SATDATA_VEC_Z(data->B_VFM, j);
+
+            satdata_mag_model(j, B_model, data);
+
+            magcal_add_datum(data->t[j], B_VFM, B_model[3], magcal_p);
+          }
+      }
+  }
+
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+  /* set initial values of calibration parameters */
+  gsl_vector_set(coef, MAGCAL_IDX_SX, 1.0);
+  gsl_vector_set(coef, MAGCAL_IDX_SY, 1.0);
+  gsl_vector_set(coef, MAGCAL_IDX_SZ, 1.0);
+  gsl_vector_set(coef, MAGCAL_IDX_OX, 0.0);
+  gsl_vector_set(coef, MAGCAL_IDX_OY, 0.0);
+  gsl_vector_set(coef, MAGCAL_IDX_OZ, 0.0);
+  gsl_vector_set(coef, MAGCAL_IDX_AXY, M_PI / 2.0);
+  gsl_vector_set(coef, MAGCAL_IDX_AXZ, M_PI / 2.0);
+  gsl_vector_set(coef, MAGCAL_IDX_AYZ, M_PI / 2.0);
+
+  fprintf(stderr, "main: performing scalar calibration...");
+  gettimeofday(&tv0, NULL);
+  magcal_proc(coef, magcal_p);
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+#if 0
   fprintf(stderr, "main: fixing track jumps...");
   fix_track_jumps(track_file, data, track_p);
   fprintf(stderr, "done (data written to %s)\n", track_file);
+#endif
 
+  gsl_vector_free(coef);
+  magcal_free(magcal_p);
   track_free(track_p);
   satdata_mag_free(data);
   eph_data_free(eph);

@@ -536,7 +536,7 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
 
   lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 1.0e-3*smax);
 
-  w->reg_idx = bsearch_desc_double(w->reg_param->data, lambda, 0, w->nreg - 1);
+  w->reg_idx = bsearch_double(w->reg_param->data, lambda, 0, w->nreg - 1);
   lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 
   /* solve LS system with optimal lambda */

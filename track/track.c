@@ -149,10 +149,7 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
 
           /* there is an equator crossing, find time and longitude */
 
-          if (data->latitude[eidx] > data->latitude[sidx])
-            idx = bsearch_double(data->latitude, 0.0, sidx, eidx);
-          else if (data->latitude[eidx] < data->latitude[sidx])
-            idx = bsearch_desc_double(data->latitude, 0.0, sidx, eidx);
+          idx = bsearch_double(data->latitude, 0.0, sidx, eidx);
 
           /* sanity check we found equator crossing */
           assert(data->latitude[idx] * data->latitude[idx + 1] < 0.0);
@@ -404,8 +401,8 @@ track_smooth(const double alpha, satdata_mag *data, track_workspace *w)
         }
       else
         {
-          idxn = bsearch_desc_double(&data->qdlat[sidx], 55.0, 0, tptr->n - 1);
-          idxs = bsearch_desc_double(&data->qdlat[sidx], -55.0, 0, tptr->n - 1);
+          idxn = bsearch_double(&data->qdlat[sidx], 55.0, 0, tptr->n - 1);
+          idxs = bsearch_double(&data->qdlat[sidx], -55.0, 0, tptr->n - 1);
 
           npts = idxn + 1;
           track_ema_reverse(alpha, &data->flags[sidx], tptr->Bf, npts);

@@ -605,3 +605,36 @@ progress_bar(FILE *fp, const double progress, const size_t bar_width)
 
   return 0;
 }
+
+/*
+check_LT()
+  Check if a given LT is within [lt_min,lt_max] accounting for mod 24. So it
+is possible to have input lt_min < lt_max in order to select data across midnight.
+
+Example: [lt_min,lt_max] = [6,18] will select daytime data between 6am and 6pm
+         [lt_min,lt_max] = [18,6] will select nighttime data between 6pm and 6am
+         [lt_min,lt_max] = [22,5] will select nighttime data between 10pm and 5am
+         [lt_min,lt_max] = [0,5] will select data between midnight and 5am
+
+Return: 1 if LT \in [lt_min,lt_max] (mod 24); 0 otherwise
+*/
+
+int
+check_LT(const double lt, const double lt_min, const double lt_max)
+{
+  double a, b;
+
+  b = fmod(lt_max - lt_min, 24.0);
+  if (b < 0.0)
+    b += 24.0;
+
+  a = fmod(lt - lt_min, 24.0);
+  if (a < 0.0)
+    a += 24.0;
+
+  if (a > b)
+    return 0; /* invalid local time */
+
+  /* valid local time */
+  return 1;
+}

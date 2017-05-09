@@ -1534,16 +1534,8 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
 #if 1
       /* attempt to find a measurement for satellite 2 with approximately the
        * same latitude as satellite 1 */
-      if (tptr->satdir == 1)
-        {
-          j = bsearch_double(data2->latitude, data->latitude[i],
-                             tptr2->start_idx, tptr2->end_idx);
-        }
-      else
-        {
-          j = bsearch_desc_double(data2->latitude, data->latitude[i],
-                                  tptr2->start_idx, tptr2->end_idx);
-        }
+      j = bsearch_double(data2->latitude, data->latitude[i],
+                         tptr2->start_idx, tptr2->end_idx);
 #else
       /* attempt to find a measurement for satellite 2 with approximately the
        * same time as satellite 1 */

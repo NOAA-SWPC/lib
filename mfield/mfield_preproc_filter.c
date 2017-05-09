@@ -62,7 +62,6 @@ mfield_flag_kp(const double kp_min, const double kp_max, satdata_mag *data, trac
       s += kp_get(t2, &kp2, kp_p);
       s += kp_get(t3, &kp3, kp_p);
       s += kp_get(t1 - 2*3600, &kp4, kp_p); /* 2 hours before track */
-      kp4 = 0.0;/*XXX*/
       if (s)
         {
           fprintf(stderr, "mfield_flag_kp: error: kp not available for track %zu\n", i);
@@ -526,7 +525,6 @@ mfield_flag_pb(const char *pb_datafile, const preprocess_parameters * params, tr
 
   return ntrack_flagged;
 }
-
 
 /*
 mfield_preprocess_filter()

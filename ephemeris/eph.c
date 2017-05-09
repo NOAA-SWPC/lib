@@ -87,17 +87,16 @@ eph_free(eph_workspace *w)
 eph_interp()
   Interpolate ephemeris to a given time t
 
-Inputs: t     - timestamp (CDF_EPOCH)
-        r_ECI - (output) ECI X,Y,Z of interpolated time t
-        v_ECI - (output) ECI VX,VY,VZ of interpolated time t
-        w     - workspace
+Inputs: t - timestamp (CDF_EPOCH)
+        r - (output) X,Y,Z of interpolated time t (ECI or ECEF)
+        v - (output) VX,VY,VZ of interpolated time t (ECI or ECEF)
+        w - workspace
 
 Return: success/error
 */
 
 int
-eph_interp(const double t, double r_ECI[3], double v_ECI[3],
-           eph_workspace *w)
+eph_interp(const double t, double r[3], double v[3], eph_workspace *w)
 {
   int s = 0;
   const eph_data *data = w->data;
@@ -110,13 +109,13 @@ eph_interp(const double t, double r_ECI[3], double v_ECI[3],
       return -1;
     }
 
-  r_ECI[0] = hermite_eval(w->t, data->X, data->VX, t_sec, w->acc, w->hermite_x);
-  r_ECI[1] = hermite_eval(w->t, data->Y, data->VY, t_sec, w->acc, w->hermite_y);
-  r_ECI[2] = hermite_eval(w->t, data->Z, data->VZ, t_sec, w->acc, w->hermite_z);
+  r[0] = hermite_eval(w->t, data->X, data->VX, t_sec, w->acc, w->hermite_x);
+  r[1] = hermite_eval(w->t, data->Y, data->VY, t_sec, w->acc, w->hermite_y);
+  r[2] = hermite_eval(w->t, data->Z, data->VZ, t_sec, w->acc, w->hermite_z);
 
-  v_ECI[0] = hermite_eval_deriv(w->t, data->X, data->VX, t_sec, w->acc, w->hermite_x);
-  v_ECI[1] = hermite_eval_deriv(w->t, data->Y, data->VY, t_sec, w->acc, w->hermite_y);
-  v_ECI[2] = hermite_eval_deriv(w->t, data->Z, data->VZ, t_sec, w->acc, w->hermite_z);
+  v[0] = hermite_eval_deriv(w->t, data->X, data->VX, t_sec, w->acc, w->hermite_x);
+  v[1] = hermite_eval_deriv(w->t, data->Y, data->VY, t_sec, w->acc, w->hermite_y);
+  v[2] = hermite_eval_deriv(w->t, data->Z, data->VZ, t_sec, w->acc, w->hermite_z);
 
   return s;
 }

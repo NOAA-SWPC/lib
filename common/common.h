@@ -69,6 +69,7 @@ double vec_norm(const double v[3]);
 int vec_unit(const double v[3], double unit[3]);
 double time_diff(struct timeval a, struct timeval b);
 int progress_bar(FILE *fp, const double progress, const size_t bar_width);
+int check_LT(const double lt, const double lt_min, const double lt_max);
 
 extern int putenv(char *string);
 

@@ -230,7 +230,7 @@ mag_sqfilt_scalar(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
 
   lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 0.05*smax);
 
-  w->reg_idx = bsearch_desc_double(w->reg_param->data, lambda, 0, w->nreg - 1);
+  w->reg_idx = bsearch_double(w->reg_param->data, lambda, 0, w->nreg - 1);
   lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 
   /* solve system with optimal lambda */

@@ -35,31 +35,31 @@ bsearch_double(const double x_array[], double x,
 {
   size_t ilo = index_lo;
   size_t ihi = index_hi;
-  while(ihi > ilo + 1) {
-    size_t i = (ihi + ilo)/2;
-    if(x_array[i] > x)
-      ihi = i;
-    else
-      ilo = i;
-  }
-  
-  return ilo;
-}
 
-/* binary search of descending sorted array */
-size_t
-bsearch_desc_double(const double x_array[], double x,
-                    size_t index_lo, size_t index_hi)
-{
-  size_t ilo = index_lo;
-  size_t ihi = index_hi;
-  while(ihi > ilo + 1) {
-    size_t i = (ihi + ilo)/2;
-    if(-x_array[i] > -x)
-      ihi = i;
-    else
-      ilo = i;
-  }
+  if (x_array[ihi] >= x_array[ilo])
+    {
+      /* x_array is sorted ascending */
+      while (ihi > ilo + 1)
+        {
+          size_t i = (ihi + ilo)/2;
+          if(x_array[i] > x)
+            ihi = i;
+          else
+            ilo = i;
+        }
+    }
+  else
+    {
+      /* x_array is sorted descending */
+      while (ihi > ilo + 1)
+        {
+          size_t i = (ihi + ilo)/2;
+          if(-x_array[i] > -x)
+            ihi = i;
+          else
+            ilo = i;
+        }
+    }
   
   return ilo;
 }
