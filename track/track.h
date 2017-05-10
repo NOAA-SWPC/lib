@@ -32,6 +32,7 @@
 #define TRACK_FLG_LONGITUDE  (1 << 9)  /* flagged due to longitude */
 #define TRACK_FLG_INCOMPLETE (1 << 10) /* flagged due to missing data */
 #define TRACK_FLG_PB         (1 << 11) /* flagged due to plasma bubble detected */
+#define TRACK_FLG_TIME       (1 << 12) /* flagged due to timestamp */
 
 typedef struct
 {
@@ -102,6 +103,7 @@ size_t track_flag_rms(const char *outfile, const double thresh[4],
                       size_t *ndata_flagged, satdata_mag *data, track_workspace *w);
 size_t track_flag_jumps(const double thresh, satdata_mag *data, track_workspace *w);
 size_t track_flag_satdir(const int satdir, satdata_mag *data, track_workspace *w);
+size_t track_flag_time(const double t_min, const double t_max, satdata_mag *data, track_workspace *w);
 size_t track_flag_ut(const double ut_min, const double ut_max, satdata_mag *data,
                      track_workspace *w);
 size_t track_flag_lt(const double lt_min, const double lt_max, size_t *ndata_flagged,

@@ -172,10 +172,61 @@ fix_track_jumps(const char *filename, satdata_mag *data, track_workspace *w)
 }
 
 int
+print_residuals(const char *filename, satdata_mag *data, track_workspace *w)
+{
+  int s = 0;
+  FILE *fp;
+  size_t i, j;
+
+  fp = fopen(filename, "w");
+
+  i = 1;
+  fprintf(fp, "# Field %zu: timestamp\n", i++);
+  fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: scalar measurement (nT)\n", i++);
+  fprintf(fp, "# Field %zu: scalar model (nT)\n", i++);
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+
+      if (tptr->flags)
+        continue;
+
+      for (j = start_idx; j <= end_idx; ++j)
+        {
+          double B_model[4];
+
+          if (data->flags[j])
+            continue;
+
+          if (fabs(data->qdlat[j]) > 55.0)
+            continue;
+
+          satdata_mag_model(j, B_model, data);
+
+          fprintf(fp, "%ld %.4f %f %f\n",
+                  satdata_epoch2timet(data->t[j]),
+                  data->qdlat[j],
+                  data->F[j],
+                  B_model[3]);
+        }
+    }
+
+  fclose(fp);
+
+  return s;
+}
+
+int
 main(int argc, char *argv[])
 {
   const char *track_file = "track_data.dat";
   char *outfile = NULL;
+  char *param_file = NULL;
+  char *res_file = NULL;
   satdata_mag *data = NULL;
   eph_data *eph = NULL;
   track_workspace *track_p;
@@ -184,6 +235,8 @@ main(int argc, char *argv[])
   struct timeval tv0, tv1;
   double lt_min = 6.0;  /* local time interval for data selection at low/mid latitudes */
   double lt_max = 18.0;
+  double t_min = -1.0;
+  double t_max = -1.0;
 
   while (1)
     {
@@ -193,10 +246,12 @@ main(int argc, char *argv[])
         {
           { "lt_min", required_argument, NULL, 'c' },
           { "lt_max", required_argument, NULL, 'd' },
+          { "t_min", required_argument, NULL, 'e' },
+          { "t_max", required_argument, NULL, 'f' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:o:b:", long_options, &option_index);
+      c = getopt_long(argc, argv, "i:o:b:p:r:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -230,6 +285,22 @@ main(int argc, char *argv[])
             lt_max = atof(optarg);
             break;
 
+          case 'e':
+            t_min = atof(optarg);
+            break;
+
+          case 'f':
+            t_max = atof(optarg);
+            break;
+
+          case 'p':
+            param_file = optarg;
+            break;
+
+          case 'r':
+            res_file = optarg;
+            break;
+
           default:
             break;
         }
@@ -237,7 +308,7 @@ main(int argc, char *argv[])
 
   if (!data)
     {
-      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [--lt_min lt_min] [--lt_max lt_max]\n",
+      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [--lt_min lt_min] [--lt_max lt_max] [--t_min t_min_year] [--t_max t_max_year] [-p param_file] [-r residual_file]\n",
               argv[0]);
       exit(1);
     }
@@ -259,6 +330,18 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
+  if (t_min > 0.0 && t_max > 0.0)
+    {
+      size_t nflagged_time;
+
+      fprintf(stderr, "main: filtering tracks for time in [%.2f,%.2f]...", t_min, t_max);
+
+      nflagged_time = track_flag_time(t_min, t_max, data, track_p);
+
+      fprintf(stderr, "done (%zu/%zu [%.1f%%] tracks flagged)\n",
+              nflagged_time, track_p->n, (double)nflagged_time / (double)track_p->n * 100.0);
+    }
+
   /* add unflagged data to magcal workspace */
   fprintf(stderr, "main: adding data for scalar calibration...");
   gettimeofday(&tv0, NULL);
@@ -268,6 +351,7 @@ main(int argc, char *argv[])
     size_t n = data->n - nflagged;
     size_t i, j;
 
+    fprintf(stderr, "n = %zu\n", n);
     magcal_p = magcal_alloc(n);
 
     for (i = 0; i < track_p->n; ++i)
@@ -319,6 +403,39 @@ main(int argc, char *argv[])
   magcal_proc(coef, magcal_p);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+  if (param_file)
+    {
+      FILE *fp_param = fopen(param_file, "a");
+      double rms = magcal_rms(magcal_p);
+      time_t t_mean = magcal_mean_time(magcal_p);
+
+      fprintf(fp_param, "%ld %f %f %f %f %f %f %f %f %f %f\n",
+              t_mean,
+              rms,
+              gsl_vector_get(coef, MAGCAL_IDX_SX),
+              gsl_vector_get(coef, MAGCAL_IDX_SY),
+              gsl_vector_get(coef, MAGCAL_IDX_SZ),
+              gsl_vector_get(coef, MAGCAL_IDX_OX),
+              gsl_vector_get(coef, MAGCAL_IDX_OY),
+              gsl_vector_get(coef, MAGCAL_IDX_OZ),
+              gsl_vector_get(coef, MAGCAL_IDX_AXY) * 180.0 / M_PI,
+              gsl_vector_get(coef, MAGCAL_IDX_AXZ) * 180.0 / M_PI,
+              gsl_vector_get(coef, MAGCAL_IDX_AYZ) * 180.0 / M_PI);
+
+      fclose(fp_param);
+    }
+
+  fprintf(stderr, "main: applying calibration parameters to data...");
+  magcal_apply(coef, data);
+  fprintf(stderr, "done\n");
+
+  if (res_file)
+    {
+      fprintf(stderr, "main: printing residuals to %s...", res_file);
+      print_residuals(res_file, data, track_p);
+      fprintf(stderr, "done\n");
+    }
 
 #if 0
   fprintf(stderr, "main: fixing track jumps...");
