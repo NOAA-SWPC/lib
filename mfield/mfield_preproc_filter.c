@@ -273,7 +273,7 @@ mfield_flag_LT(const size_t magdata_flags, const preprocess_parameters * params,
 
       for (j = start_idx; j <= end_idx; ++j)
         {
-          if (fabs(data->qdlat[j]) <= params->qdlat_cutoff)
+          if (fabs(data->qdlat[j]) <= params->qdlat_preproc_cutoff)
             {
               /* we are at mid-latitudes and this point won't be used for field modeling
                * or Euler angle fitting, so flag the point */
@@ -292,7 +292,7 @@ mfield_flag_zenith()
 
 Reject point if:
 
-1. qdlat > qdlat_cutoff
+1. qdlat > qdlat_preproc_cutoff
 2. zenith < min_zenith
 
 Inputs: params        - parameters
@@ -325,7 +325,7 @@ mfield_flag_zenith(const preprocess_parameters * params, track_workspace *track_
         {
           int flag_point = 0;
 
-          if (fabs(data->qdlat[j]) > params->qdlat_cutoff)
+          if (fabs(data->qdlat[j]) > params->qdlat_preproc_cutoff)
             {
               time_t unix_time = satdata_epoch2timet(data->t[j]);
               double lat_rad = data->latitude[j] * M_PI / 180.0;
@@ -358,7 +358,7 @@ mfield_flag_IMF()
 
 Reject point if:
 
-1. qdlat > qdlat_cutoff
+1. qdlat > qdlat_preproc_cutoff
 2. IMF_Bz < 0
 
 Inputs: params        - parameters
@@ -420,7 +420,7 @@ mfield_flag_IMF(const preprocess_parameters * params, track_workspace *track_p, 
 
       for (j = start_idx; j <= end_idx; ++j)
         {
-          if (fabs(data->qdlat[j]) > params->qdlat_cutoff)
+          if (fabs(data->qdlat[j]) > params->qdlat_preproc_cutoff)
             {
               data->flags[j] |= SATDATA_FLG_OUTLIER;
               ++nflagged;
@@ -560,15 +560,15 @@ mfield_preprocess_filter(const size_t magdata_flags, const preprocess_parameters
 
   nflagged_LT = mfield_flag_LT(magdata_flags, params, track_p, data);
   fprintf(stderr, "\t mfield_preprocess_filter: flagged %zu/%zu (%.1f%%) mid-latitude points due to LT [cutoff: %.1f deg]\n",
-          nflagged_LT, data->n, (double) nflagged_LT / (double) data->n * 100.0, params->qdlat_cutoff);
+          nflagged_LT, data->n, (double) nflagged_LT / (double) data->n * 100.0, params->qdlat_preproc_cutoff);
 
   nflagged_zenith = mfield_flag_zenith(params, track_p, data);
   fprintf(stderr, "\t mfield_preprocess_filter: flagged %zu/%zu (%.1f%%) high-latitude points due to zenith angle [cutoff: %.1f deg]\n",
-          nflagged_zenith, data->n, (double) nflagged_zenith / (double) data->n * 100.0, params->qdlat_cutoff);
+          nflagged_zenith, data->n, (double) nflagged_zenith / (double) data->n * 100.0, params->qdlat_preproc_cutoff);
 
   nflagged_IMF = mfield_flag_IMF(params, track_p, data);
   fprintf(stderr, "\t mfield_preprocess_filter: flagged %zu/%zu (%.1f%%) high-latitude points due to IMF [cutoff: %.1f deg]\n",
-          nflagged_IMF, data->n, (double) nflagged_IMF / (double) data->n * 100.0, params->qdlat_cutoff);
+          nflagged_IMF, data->n, (double) nflagged_IMF / (double) data->n * 100.0, params->qdlat_preproc_cutoff);
 
   /* look for plasma bubbles last, after LT selection */
   if (params->pb_flag)

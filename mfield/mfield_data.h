@@ -13,7 +13,7 @@
 typedef struct
 {
   double epoch;          /* model epoch in decimal years */
-  double qdlat_cutoff;   /* QD latitude cutoff for high-latitudes (degrees) */
+  double qdlat_fit_cutoff; /* QD latitude cutoff separating high-latitudes for fitting components (degrees) */
 
   /* mid/low latitude components for fitting */
 

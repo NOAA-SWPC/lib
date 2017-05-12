@@ -40,8 +40,6 @@ static int mfield_vector_green(const double t, const double weight, const gsl_ve
                                gsl_vector *G, mfield_workspace *w);
 static int mfield_vector_green_grad(const double t, const double t_grad, const double weight, const gsl_vector *g,
                                     const gsl_vector *g_grad, gsl_vector *G, mfield_workspace *w);
-static double mfield_nonlinear_model_int(const double t, const gsl_vector *v,
-                                         const gsl_vector *g, const mfield_workspace *w);
 static int mfield_nonlinear_model_ext(const double r, const double theta,
                                       const double phi, const gsl_vector *g,
                                       double dB[3], const mfield_workspace *w);
@@ -122,8 +120,6 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   /* compute robust weights with coefficients from previous iteration */
   if (w->niter > 0)
     {
-      size_t i;
-
       /* compute residuals f = Y_model - y_data with previous coefficients */
       mfield_calc_f(c, w, w->fvec);
 
@@ -556,7 +552,7 @@ mfield_init_nonlinear(mfield_workspace *w)
     gsl_multilarge_nlinear_parameters fdf_params =
       gsl_multilarge_nlinear_default_parameters();
 
-    fdf_params.trs = gsl_multilarge_nlinear_trs_dogleg;
+    fdf_params.trs = gsl_multilarge_nlinear_trs_ddogleg;
     fdf_params.scale = gsl_multilarge_nlinear_scale_levenberg;
     fdf_params.h_fvv = 0.5;
     w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, nres, p);
@@ -681,6 +677,7 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
   for (i = 0; i < w->nsat; ++i)
     {
       magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      int fit_euler = w->params.fit_euler && (mptr->global_flags & MAGDATA_GLOBFLG_EULER);
 
       /* loop over data for individual satellite */
 #pragma omp parallel for private(j)
@@ -713,9 +710,7 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
 #if MFIELD_FIT_EXTFIELD
           double extcoeff = 0.0;
 #endif
-#if MFIELD_FIT_EULER
           double B_vfm[3];        /* observation vector VFM frame */
-#endif
 
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
@@ -766,9 +761,8 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
           for (k = 0; k < 3; ++k)
             B_total[k] = B_int[k] + B_model[k] + B_extcorr[k];
 
-#if MFIELD_FIT_EULER
           /* compute Euler angle derivatives of B vector */
-          if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+          if (fit_euler)
             {
               const double *q = &(mptr->q[4*j]);
               double alpha, beta, gamma;
@@ -792,7 +786,6 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
               /* compute gamma derivative of: R_q R_3 B_vfm */
               euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec_gamma);
             }
-#endif
 
           if (mptr->flags[j] & MAGDATA_FLG_X)
             {
@@ -1045,13 +1038,6 @@ mfield_jacobian_JTu(const double t, const size_t flags, const double weight,
 {
   const double y = gsl_vector_get(u, ridx);
   const double sWy = sqrt(weight) * y;
-  gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
-#if MFIELD_FIT_SECVAR
-  gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
-#endif
-#if MFIELD_FIT_SECACC
-  gsl_vector_view g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
-#endif
 
   (void) extidx;
   (void) dB_ext;
@@ -1063,21 +1049,28 @@ mfield_jacobian_JTu(const double t, const size_t flags, const double weight,
   /* check if fitting MF to this data point */
   if (MAGDATA_FitMF(flags))
     {
+      gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
       gsl_vector_view v;
 
       /* update J^T y */
       v = gsl_vector_subvector(JTu, 0, w->nnm_mf);
       gsl_blas_daxpy(sWy, &g_mf.vector, &v.vector);
 
-#if MFIELD_FIT_SECVAR
-      v = gsl_vector_subvector(JTu, w->sv_offset, w->nnm_sv);
-      gsl_blas_daxpy(t * sWy, &g_sv.vector, &v.vector);
-#endif
+      if (w->nnm_sv > 0)
+        {
+          gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
 
-#if MFIELD_FIT_SECACC
-      v = gsl_vector_subvector(JTu, w->sa_offset, w->nnm_sa);
-      gsl_blas_daxpy(0.5 * t * t * sWy, &g_sa.vector, &v.vector);
-#endif
+          v = gsl_vector_subvector(JTu, w->sv_offset, w->nnm_sv);
+          gsl_blas_daxpy(t * sWy, &g_sv.vector, &v.vector);
+        }
+
+      if (w->nnm_sa > 0)
+        {
+          gsl_vector_view g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
+
+          v = gsl_vector_subvector(JTu, w->sa_offset, w->nnm_sa);
+          gsl_blas_daxpy(0.5 * t * t * sWy, &g_sa.vector, &v.vector);
+        }
 
 #if MFIELD_FIT_EXTFIELD
       {
@@ -1089,9 +1082,8 @@ mfield_jacobian_JTu(const double t, const size_t flags, const double weight,
 #endif /* MFIELD_FIT_EXTFIELD */
     }
 
-#if MFIELD_FIT_EULER
   /* check if fitting Euler angles to this data point */
-  if (MAGDATA_FitEuler(flags))
+  if (w->params.fit_euler && MAGDATA_FitEuler(flags))
     {
       double x_data[3];
       gsl_vector_view vJTu = gsl_vector_subvector(JTu, euler_idx, 3);
@@ -1104,7 +1096,6 @@ mfield_jacobian_JTu(const double t, const size_t flags, const double weight,
       /* update J^T y */
       gsl_blas_daxpy(sWy, &v.vector, &vJTu.vector);
     }
-#endif /* MFIELD_FIT_EULER */
 
   return GSL_SUCCESS;
 }
@@ -1133,22 +1124,13 @@ mfield_jacobian_grad_JTu(const double t, const double t_grad, const size_t flags
                          const gsl_vector * u, const size_t ridx, gsl_vector * dB_int, gsl_vector * dB_int_grad,
                          gsl_vector *JTu, const mfield_workspace *w)
 {
-  const double y = gsl_vector_get(u, ridx);
-  const double sWy = sqrt(weight) * y;
-  gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
-  gsl_vector_view dg_mf = gsl_vector_subvector(dB_int_grad, 0, w->nnm_mf);
-#if MFIELD_FIT_SECVAR
-  gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
-  gsl_vector_view dg_sv = gsl_vector_subvector(dB_int_grad, 0, w->nnm_sv);
-#endif
-#if MFIELD_FIT_SECACC
-  gsl_vector_view g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
-  gsl_vector_view dg_sa = gsl_vector_subvector(dB_int_grad, 0, w->nnm_sa);
-#endif
-
   /* check if fitting MF to this data point */
   if (MAGDATA_FitMF(flags))
     {
+      const double y = gsl_vector_get(u, ridx);
+      const double sWy = sqrt(weight) * y;
+      gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
+      gsl_vector_view dg_mf = gsl_vector_subvector(dB_int_grad, 0, w->nnm_mf);
       gsl_vector_view v;
 
       /* update J^T y */
@@ -1156,17 +1138,25 @@ mfield_jacobian_grad_JTu(const double t, const double t_grad, const size_t flags
       gsl_blas_daxpy(sWy, &dg_mf.vector, &v.vector);
       gsl_blas_daxpy(-sWy, &g_mf.vector, &v.vector);
 
-#if MFIELD_FIT_SECVAR
-      v = gsl_vector_subvector(JTu, w->sv_offset, w->nnm_sv);
-      gsl_blas_daxpy(t_grad * sWy, &dg_sv.vector, &v.vector);
-      gsl_blas_daxpy(-t * sWy, &g_sv.vector, &v.vector);
-#endif
+      if (w->nnm_sv > 0)
+        {
+          gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
+          gsl_vector_view dg_sv = gsl_vector_subvector(dB_int_grad, 0, w->nnm_sv);
 
-#if MFIELD_FIT_SECACC
-      v = gsl_vector_subvector(JTu, w->sa_offset, w->nnm_sa);
-      gsl_blas_daxpy(0.5 * t_grad * t_grad * sWy, &dg_sa.vector, &v.vector);
-      gsl_blas_daxpy(-0.5 * t * t * sWy, &g_sa.vector, &v.vector);
-#endif
+          v = gsl_vector_subvector(JTu, w->sv_offset, w->nnm_sv);
+          gsl_blas_daxpy(t_grad * sWy, &dg_sv.vector, &v.vector);
+          gsl_blas_daxpy(-t * sWy, &g_sv.vector, &v.vector);
+        }
+
+      if (w->nnm_sa > 0)
+        {
+          gsl_vector_view g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
+          gsl_vector_view dg_sa = gsl_vector_subvector(dB_int_grad, 0, w->nnm_sa);
+
+          v = gsl_vector_subvector(JTu, w->sa_offset, w->nnm_sa);
+          gsl_blas_daxpy(0.5 * t_grad * t_grad * sWy, &dg_sa.vector, &v.vector);
+          gsl_blas_daxpy(-0.5 * t * t * sWy, &g_sa.vector, &v.vector);
+        }
     }
 
   return GSL_SUCCESS;
@@ -1209,13 +1199,6 @@ mfield_jacobian_Ju(const double t, const size_t flags, const double weight,
                    gsl_vector *Ju, const mfield_workspace *w)
 {
   double *Ju_ptr = gsl_vector_ptr(Ju, ridx);
-  gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
-#if MFIELD_FIT_SECVAR
-  gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
-#endif
-#if MFIELD_FIT_SECACC
-  gsl_vector_view g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
-#endif
 
   (void) extidx;
   (void) dB_ext;
@@ -1227,6 +1210,7 @@ mfield_jacobian_Ju(const double t, const size_t flags, const double weight,
   /* check if fitting MF to this data point */
   if (MAGDATA_FitMF(flags))
     {
+      gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
       gsl_vector_const_view u_mf = gsl_vector_const_subvector(u, 0, w->nnm_mf);
       double tmp;
 
@@ -1234,21 +1218,23 @@ mfield_jacobian_Ju(const double t, const size_t flags, const double weight,
       gsl_blas_ddot(&g_mf.vector, &u_mf.vector, &tmp);
       *Ju_ptr = tmp;
 
-#if MFIELD_FIT_SECVAR
-      {
-        gsl_vector_const_view u_sv = gsl_vector_const_subvector(u, w->sv_offset, w->nnm_sv);
-        gsl_blas_ddot(&g_sv.vector, &u_sv.vector, &tmp);
-        *Ju_ptr += t * tmp;
-      }
-#endif
+      if (w->nnm_sv > 0)
+        {
+          gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
+          gsl_vector_const_view u_sv = gsl_vector_const_subvector(u, w->sv_offset, w->nnm_sv);
 
-#if MFIELD_FIT_SECACC
-      {
-        gsl_vector_const_view u_sa = gsl_vector_const_subvector(u, w->sa_offset, w->nnm_sa);
-        gsl_blas_ddot(&g_sa.vector, &u_sa.vector, &tmp);
-        *Ju_ptr += 0.5 * t * t * tmp;
-      }
-#endif
+          gsl_blas_ddot(&g_sv.vector, &u_sv.vector, &tmp);
+          *Ju_ptr += t * tmp;
+        }
+
+      if (w->nnm_sa > 0)
+        {
+          gsl_vector_view g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
+          gsl_vector_const_view u_sa = gsl_vector_const_subvector(u, w->sa_offset, w->nnm_sa);
+
+          gsl_blas_ddot(&g_sa.vector, &u_sa.vector, &tmp);
+          *Ju_ptr += 0.5 * t * t * tmp;
+        }
 
 #if MFIELD_FIT_EXTFIELD
 
@@ -1258,9 +1244,8 @@ mfield_jacobian_Ju(const double t, const size_t flags, const double weight,
 #endif /* MFIELD_FIT_EXTFIELD */
     }
 
-#if MFIELD_FIT_EULER
   /* check if fitting Euler angles to this data point */
-  if (MAGDATA_FitEuler(flags))
+  if (w->params.fit_euler && MAGDATA_FitEuler(flags))
     {
       double x_data[3];
       gsl_vector_const_view vu = gsl_vector_const_subvector(u, euler_idx, 3);
@@ -1274,7 +1259,6 @@ mfield_jacobian_Ju(const double t, const size_t flags, const double weight,
       gsl_blas_ddot(&vu.vector, &v.vector, &tmp);
       *Ju_ptr += tmp;
     }
-#endif /* MFIELD_FIT_EULER */
 
   *Ju_ptr *= sqrt(weight);
 
@@ -1315,12 +1299,7 @@ mfield_jacobian_JTJ(const double t, const size_t flags, const double weight,
                     gsl_matrix *JTJ, const mfield_workspace *w)
 {
   gsl_vector_view g_mf = gsl_vector_subvector(dB_int, 0, w->nnm_mf);
-#if MFIELD_FIT_SECVAR
-  gsl_vector_view g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
-#endif
-#if MFIELD_FIT_SECACC
-  gsl_vector_view g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
-#endif
+  gsl_vector_view g_sv, g_sa;
 
   (void) extidx;
   (void) dB_ext;
@@ -1329,10 +1308,17 @@ mfield_jacobian_JTJ(const double t, const size_t flags, const double weight,
   (void) B_nec_beta;
   (void) B_nec_gamma;
 
+  if (w->nnm_sv > 0)
+    g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
+
+  if (w->nnm_sa > 0)
+    g_sa = gsl_vector_subvector(dB_int, 0, w->nnm_sa);
+
   /* check if fitting MF to this data point */
   if (MAGDATA_FitMF(flags))
     {
 #if MFIELD_FIT_EXTFIELD
+
       /* update J^T J */
       gsl_vector_view v;
       double *ptr33 = gsl_matrix_ptr(JTJ, extidx, extidx);
@@ -1344,22 +1330,23 @@ mfield_jacobian_JTJ(const double t, const size_t flags, const double weight,
       v = gsl_matrix_subrow(JTJ, extidx, 0, w->nnm_mf);
       gsl_blas_daxpy(dB_ext * weight, &g_mf.vector, &v.vector);
 
-#if MFIELD_FIT_SECVAR
-      v = gsl_matrix_subrow(JTJ, extidx, w->sv_offset, w->nnm_sv);
-      gsl_blas_daxpy(t * dB_ext * weight, &g_sv.vector, &v.vector);
-#endif
+      if (w->nnm_sv > 0)
+        {
+          v = gsl_matrix_subrow(JTJ, extidx, w->sv_offset, w->nnm_sv);
+          gsl_blas_daxpy(t * dB_ext * weight, &g_sv.vector, &v.vector);
+        }
 
-#if MFIELD_FIT_SECACC
-      v = gsl_matrix_subrow(JTJ, extidx, w->sa_offset, w->nnm_sa);
-      gsl_blas_daxpy(0.5 * t * t * dB_ext * weight, &g_sa.vector, &v.vector);
-#endif
+      if (w->nnm_sa > 0)
+        {
+          v = gsl_matrix_subrow(JTJ, extidx, w->sa_offset, w->nnm_sa);
+          gsl_blas_daxpy(0.5 * t * t * dB_ext * weight, &g_sa.vector, &v.vector);
+        }
 
 #endif /* MFIELD_FIT_EXTFIELD */
     }
 
-#if MFIELD_FIT_EULER
   /* check if fitting Euler angles to this data point */
-  if (MAGDATA_FitEuler(flags))
+  if (w->params.fit_euler && MAGDATA_FitEuler(flags))
     {
       double x_data[3];
       gsl_vector_view v = gsl_vector_view_array(x_data, 3);
@@ -1380,15 +1367,17 @@ mfield_jacobian_JTJ(const double t, const size_t flags, const double weight,
           m = gsl_matrix_submatrix(JTJ, euler_idx, 0, 3, w->nnm_mf);
           gsl_blas_dger(weight, &v.vector, &g_mf.vector, &m.matrix);
 
-#if MFIELD_FIT_SECVAR
-          m = gsl_matrix_submatrix(JTJ, euler_idx, w->sv_offset, 3, w->nnm_sv);
-          gsl_blas_dger(t * weight, &v.vector, &g_sv.vector, &m.matrix);
-#endif
+          if (w->nnm_sv > 0)
+            {
+              m = gsl_matrix_submatrix(JTJ, euler_idx, w->sv_offset, 3, w->nnm_sv);
+              gsl_blas_dger(t * weight, &v.vector, &g_sv.vector, &m.matrix);
+            }
 
-#if MFIELD_FIT_SECACC
-          m = gsl_matrix_submatrix(JTJ, euler_idx, w->sa_offset, 3, w->nnm_sa);
-          gsl_blas_dger(0.5 * t * t * weight, &v.vector, &g_sa.vector, &m.matrix);
-#endif
+          if (w->nnm_sa > 0)
+            {
+              m = gsl_matrix_submatrix(JTJ, euler_idx, w->sa_offset, 3, w->nnm_sa);
+              gsl_blas_dger(0.5 * t * t * weight, &v.vector, &g_sa.vector, &m.matrix);
+            }
 
 #if MFIELD_FIT_EXTFIELD
           /* update (J^T J)_32 */
@@ -1399,7 +1388,6 @@ mfield_jacobian_JTJ(const double t, const size_t flags, const double weight,
 #endif
         }
     }
-#endif /* MFIELD_FIT_EULER */
 
   return GSL_SUCCESS;
 }
@@ -1801,52 +1789,6 @@ mfield_vector_green_grad(const double t, const double t_grad, const double weigh
 }
 
 /*
-mfield_nonlinear_model_int()
-  Evaluate internal field model for a given coefficient vector
-
-Inputs: t - scaled time
-        v - vector of basis functions (dX/dg,dY/dg,dZ/dg)
-        g - model coefficients
-        w - workspace
-
-Return: model = v . g_mf + t*(v . g_sv) + 1/2*t^2*(v . g_sa)
-*/
-
-static double
-mfield_nonlinear_model_int(const double t, const gsl_vector *v,
-                           const gsl_vector *g, const mfield_workspace *w)
-{
-  gsl_vector_const_view gmf = gsl_vector_const_subvector(g, 0, w->nnm_mf);
-  gsl_vector_const_view vmf = gsl_vector_const_subvector(v, 0, w->nnm_mf);
-  double mf, sv = 0.0, sa = 0.0, val;
-
-  /* compute v . x_mf */
-  gsl_blas_ddot(&vmf.vector, &gmf.vector, &mf);
-
-#if MFIELD_FIT_SECVAR
-  {
-    /* compute v . x_sv */
-    gsl_vector_const_view gsv = gsl_vector_const_subvector(g, w->sv_offset, w->nnm_sv);
-    gsl_vector_const_view vsv = gsl_vector_const_subvector(v, 0, w->nnm_sv);
-    gsl_blas_ddot(&vsv.vector, &gsv.vector, &sv);
-  }
-#endif
-
-#if MFIELD_FIT_SECACC
-  {
-    /* compute v . x_sa */
-    gsl_vector_const_view gsa = gsl_vector_const_subvector(g, w->sa_offset, w->nnm_sa);
-    gsl_vector_const_view vsa = gsl_vector_const_subvector(v, 0, w->nnm_sa);
-    gsl_blas_ddot(&vsa.vector, &gsa.vector, &sa);
-  }
-#endif
-
-  val = mf + t * sv + 0.5 * t * t * sa;
-
-  return val;
-}
-
-/*
 mfield_nonlinear_model_ext()
   Compute external field model:
 
@@ -1979,7 +1921,7 @@ mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
   const size_t nmin_sa = 8;
   const size_t nmax = w->nmax_mf;
   const double c = 3485.0;       /* Earth core radius */
-  const double a = MFIELD_RE_KM; /* Earth surface radius */
+  const double a = w->params.R;  /* Earth surface radius */
   const double ratio = a / c;
   size_t n;
   int m;
@@ -2272,30 +2214,29 @@ mfield_nonlinear_callback(const size_t iter, void *params,
           gsl_vector_get(x, mfield_coeff_nmidx(1, 1)),
           gsl_vector_get(x, mfield_coeff_nmidx(1, -1)));
 
-#if MFIELD_FIT_EULER
-  {
-    size_t i;
+  if (w->params.fit_euler)
+    {
+      size_t i;
 
-    for (i = 0; i < w->nsat; ++i)
-      {
-        magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      for (i = 0; i < w->nsat; ++i)
+        {
+          magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+  
+          if (mptr->n == 0)
+            continue;
 
-        if (mptr->n == 0)
-          continue;
+          if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+            {
+              double t0 = w->data_workspace_p->t0[i];
+              size_t euler_idx = mfield_euler_idx(i, t0, w);
 
-        if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
-          {
-            double t0 = w->data_workspace_p->t0[i];
-            size_t euler_idx = mfield_euler_idx(i, t0, w);
-
-            fprintf(stderr, "\t euler : %12.4f %12.4f %12.4f [deg]\n",
-                    gsl_vector_get(x, euler_idx) * 180.0 / M_PI,
-                    gsl_vector_get(x, euler_idx + 1) * 180.0 / M_PI,
-                    gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI);
-          }
-      }
-  }
-#endif
+              fprintf(stderr, "\t euler : %12.4f %12.4f %12.4f [deg]\n",
+                      gsl_vector_get(x, euler_idx) * 180.0 / M_PI,
+                      gsl_vector_get(x, euler_idx + 1) * 180.0 / M_PI,
+                      gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI);
+            }
+        }
+    }
 
   fprintf(stderr, "\t |a|/|v|:    %12g\n", avratio);
   fprintf(stderr, "\t ||f(x)||:   %12g\n", gsl_blas_dnrm2(f));
@@ -2313,7 +2254,7 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
   gsl_vector *dx = gsl_multilarge_nlinear_step(multilarge_p);
   gsl_vector *f = gsl_multilarge_nlinear_residual(multilarge_p);
   double avratio = gsl_multilarge_nlinear_avratio(multilarge_p);
-  double rcond, max_dx = 0.0;
+  double rcond, normf, max_dx = 0.0;
   size_t i;
 
   /* print out state every 5 iterations */
@@ -2327,30 +2268,29 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
           gsl_vector_get(x, mfield_coeff_nmidx(1, 1)),
           gsl_vector_get(x, mfield_coeff_nmidx(1, -1)));
 
-#if MFIELD_FIT_EULER
-  {
-    size_t i;
+  if (w->params.fit_euler)
+    {
+      size_t i;
 
-    for (i = 0; i < w->nsat; ++i)
-      {
-        magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      for (i = 0; i < w->nsat; ++i)
+        {
+          magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
 
-        if (mptr->n == 0)
-          continue;
+          if (mptr->n == 0)
+            continue;
 
-        if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
-          {
-            double t0 = w->data_workspace_p->t0[i];
-            size_t euler_idx = mfield_euler_idx(i, t0, w);
+          if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+            {
+              double t0 = w->data_workspace_p->t0[i];
+              size_t euler_idx = mfield_euler_idx(i, t0, w);
 
-            fprintf(stderr, "\t euler : %12.4f %12.4f %12.4f [deg]\n",
-                    gsl_vector_get(x, euler_idx) * 180.0 / M_PI,
-                    gsl_vector_get(x, euler_idx + 1) * 180.0 / M_PI,
-                    gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI);
-          }
-      }
-  }
-#endif
+              fprintf(stderr, "\t euler : %12.4f %12.4f %12.4f [deg]\n",
+                      gsl_vector_get(x, euler_idx) * 180.0 / M_PI,
+                      gsl_vector_get(x, euler_idx + 1) * 180.0 / M_PI,
+                      gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI);
+            }
+        }
+    }
 
   /* compute max | dx_i / x_i | */
   for (i = 0; i < w->p; ++i)
@@ -2364,9 +2304,11 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
       max_dx = GSL_MAX(max_dx, fabs(dxi / xi));
     }
 
+  normf = gsl_blas_dnrm2(f);
+
   fprintf(stderr, "\t max |dx/x|:  %12g\n", max_dx);
   fprintf(stderr, "\t |a|/|v|:     %12g\n", avratio);
-  fprintf(stderr, "\t |f(x)|:      %12g\n", gsl_blas_dnrm2(f));
+  fprintf(stderr, "\t |f(x)|:      %12g\n", normf);
 
   gsl_multilarge_nlinear_rcond(&rcond, multilarge_p);
   fprintf(stderr, "\t cond(J(x)):  %12g\n", 1.0 / rcond);

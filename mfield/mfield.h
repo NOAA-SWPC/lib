@@ -22,25 +22,10 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_HIGH_LAT_ONLY 1
-
-/* define to fit secular variation coefficients */
-#define MFIELD_FIT_SECVAR      0
-
-/* define to fit secular acceleration coefficients */
-#define MFIELD_FIT_SECACC      0
-
-#if !MFIELD_FIT_SECVAR
-#define MFIELD_FIT_SECACC      0
-#endif
-
-/* fit Euler angles to data */
-#define MFIELD_FIT_EULER       0
+#define MFIELD_SYNTH_HIGH_LAT_ONLY 0
 
 /* fit external field model to data */
 #define MFIELD_FIT_EXTFIELD    0
-
-#define MFIELD_RE_KM          (6371.2)
 
 /*
  * approximate matrix size in bytes for precomputing J^T J; each
@@ -94,6 +79,8 @@ typedef struct
   double weight_DX;                     /* relative weighting for DX component */
   double weight_DY;                     /* relative weighting for DY component */
   double weight_DZ;                     /* relative weighting for DZ component */
+
+  double qdlat_fit_cutoff;              /* QD latitude separating high and mid-latitudes for fitting components (degrees) */
 
   /* synthetic data parameters */
   int synth_data;                       /* replace real data with synthetic for testing */
@@ -288,15 +275,12 @@ int mfield_write_ascii(const char *filename, const double epoch,
 int mfield_new_epoch(const double new_epoch, mfield_workspace *w);
 size_t mfield_coeff_nmidx(const size_t n, const int m);
 size_t mfield_extidx(const double t, const mfield_workspace *w);
-double mfield_get_mf(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
-double mfield_get_sv(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
-double mfield_get_sa(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
-int mfield_set_mf(gsl_vector *c, const size_t idx, const double x,
-                  const mfield_workspace *w);
-int mfield_set_sv(gsl_vector *c, const size_t idx, const double x,
-                  const mfield_workspace *w);
-int mfield_set_sa(gsl_vector *c, const size_t idx, const double x,
-                  const mfield_workspace *w);
+extern inline double mfield_get_mf(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
+extern inline double mfield_get_sv(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
+extern inline double mfield_get_sa(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
+extern inline int mfield_set_mf(gsl_vector *c, const size_t idx, const double x, const mfield_workspace *w);
+extern inline int mfield_set_sv(gsl_vector *c, const size_t idx, const double x, const mfield_workspace *w);
+extern inline int mfield_set_sa(gsl_vector *c, const size_t idx, const double x, const mfield_workspace *w);
 
 /* mfield_euler.c */
 size_t mfield_euler_idx(const size_t sat_idx, const double t, const mfield_workspace *w);

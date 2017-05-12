@@ -1,31 +1,12 @@
 /*
- * stage2.c
+ * stage2a.c
  *
- * 1. Read DMSP cdf file
- * 2. Filter out day-time data and disturbed times
- * 3. Compute timing shift from filtered scalar data
- * 4. Compute 9 calibration parameters (scale factors, offsets,
- *    non-orthogonality angles) from vector data
- * 5. Iterate steps 3-4 until time shift and scalar calibration parameters
- *    converge
- * 6. Search calibrated scalar residuals for large outliers and flag
- * 7. Re-compute time shift and scalar calibration ignoring outliers from step 6.
- * 8. Apply time shift and calibration to dataset
- * 9. Compute Euler angles and apply to dataset
+ * 1. Read DMSP file(s)
+ * 2. Select quiet-time tracks (stage2_filter)
+ * 3. Calculate scalar calibration parameters (scale factors, offsets, non-orthogonality angles)
  *
- * Usage: ./stage2 <-i residual_index_file> <-o residual_output_file>
- *                 [-f] [-p parameter_file]
- *
- *
- * Files output:
- * If WRITE_DEBUG_FILES is defined, the following files are written:
- *
- * step0.dat - initial dataset before data selection (ASCII)
- * step1.dat - dataset after dF selection (ASCII)
- * step2.dat - dataset after QD latitude selection (ASCII)
- * step3.dat - dataset after local time selection selection (ASCII)
- * step4.dat - dataset after WMM data selection (ASCII)
- * step5.dat - final calibrated dataset with outliers removed (ASCII)
+ * Usage: ./stage2a <-i residual_index_file> <-o residual_output_file>
+ *                  [-f] [-p parameter_file]
  */
 
 #include <stdio.h>
@@ -60,7 +41,8 @@
 correct_track()
   Correct a track for possible (multiple) data jumps
 
-Inputs: tol    - tolerance to detect a jump (nT)
+Inputs: fp_log - log file to record detected jumps
+        tol    - tolerance to detect a jump (nT)
         offset - (input/output)
                  on output,
                    offset(:,0) = offsets to add to X VFM data
@@ -72,7 +54,7 @@ Inputs: tol    - tolerance to detect a jump (nT)
 */
 
 int
-correct_track(const double tol, gsl_matrix * offset, satdata_mag * data, track_data * tptr)
+correct_track(FILE *fp_log, const double tol, gsl_matrix * offset, satdata_mag * data, track_data * tptr)
 {
   int s = 0;
   double alpha[4] = { 0.0, 0.0, 0.0, 0.0 };
@@ -105,7 +87,18 @@ correct_track(const double tol, gsl_matrix * offset, satdata_mag * data, track_d
       delta[3] = (B_VFM_next[3] - B_model_next[3]) - (B_VFM[3] - B_model[3]);
 
       if (fabs(delta[3]) > tol)
-        alpha[3] -= delta[3];
+        {
+          /* jump detected */
+          alpha[3] -= delta[3];
+
+          fprintf(fp_log, "%ld %10.4f %10.4f %10.4f %10.4f %10.4f\n",
+                  satdata_epoch2timet(data->t[didx]),
+                  data->r[didx],
+                  data->latitude[didx],
+                  data->longitude[didx],
+                  data->qdlat[didx],
+                  delta[3]);
+        }
     }
 
   return s;
@@ -116,7 +109,8 @@ fix_track_jumps(const char *filename, satdata_mag *data, track_workspace *w)
 {
   int s = 0;
   const double tol = 4.0; /* maximum allowed jump in nT for any vector component between adjacent samples */
-  FILE *fp;
+  const char *jump_file = "jumps.txt";
+  FILE *fp, *fp_jumps;
   size_t i;
 
   fp = fopen(filename, "w");
@@ -124,6 +118,14 @@ fix_track_jumps(const char *filename, satdata_mag *data, track_workspace *w)
     {
       fprintf(stderr, "fix_track_jumps: unable to open %s: %s\n",
               filename, strerror(errno));
+      return -1;
+    }
+
+  fp_jumps = fopen(jump_file, "w");
+  if (!fp_jumps)
+    {
+      fprintf(stderr, "fix_track_jumps: unable to open %s: %s\n",
+              jump_file, strerror(errno));
       return -1;
     }
 
@@ -140,7 +142,7 @@ fix_track_jumps(const char *filename, satdata_mag *data, track_workspace *w)
       gsl_matrix *offset = gsl_matrix_calloc(tptr->n, 4);
       size_t j;
 
-      s = correct_track(tol, offset, data, tptr);
+      s = correct_track(fp_jumps, tol, offset, data, tptr);
       if (s)
         return s;
 
@@ -167,6 +169,120 @@ fix_track_jumps(const char *filename, satdata_mag *data, track_workspace *w)
     }
 
   fclose(fp);
+  fclose(fp_jumps);
+
+  return s;
+}
+
+/*
+stage2_scalar_calibrate()
+  Perform scalar calibration
+
+Inputs: tmin    - minimum time to use in inversion
+        tmax    - maximum time to use in inversion
+        data    - satellite data
+        track_p - track workspace
+        c       - (output) scalar calibration parameters
+        rms     - (output) scalar residual rms after calibration (nT)
+
+Return: success/error
+*/
+
+int
+stage2_scalar_calibrate(const time_t tmin, const time_t tmax, satdata_mag * data,
+                        track_workspace * track_p, gsl_vector * c, double *rms)
+{
+  int s = 0;
+  size_t nflagged = satdata_nflagged(data);
+  size_t n = data->n - nflagged;
+  size_t i, j;
+  magcal_workspace *magcal_p = magcal_alloc(n);
+  struct timeval tv0, tv1;
+
+  /* add unflagged data to magcal workspace */
+  fprintf(stderr, "main: adding data for scalar calibration...");
+  gettimeofday(&tv0, NULL);
+
+  for (i = 0; i < track_p->n; ++i)
+    {
+      track_data *tptr = &(track_p->tracks[i]);
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+      time_t unix_time = satdata_epoch2timet(tptr->t_eq);
+
+      if (tptr->flags)
+        continue;
+
+      if (tmin > 0 && tmax > 0 &&
+          (unix_time < tmin || unix_time > tmax))
+        continue;
+
+      for (j = start_idx; j <= end_idx; ++j)
+        {
+          double B_VFM[3], B_model[4];
+
+          if (data->flags[j])
+            continue;
+
+          if (fabs(data->qdlat[j]) > 55.0)
+            continue;
+
+          B_VFM[0] = SATDATA_VEC_X(data->B_VFM, j);
+          B_VFM[1] = SATDATA_VEC_Y(data->B_VFM, j);
+          B_VFM[2] = SATDATA_VEC_Z(data->B_VFM, j);
+
+          satdata_mag_model(j, B_model, data);
+
+          magcal_add_datum(data->t[j], B_VFM, B_model[3], magcal_p);
+        }
+    }
+
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+  /* set initial values of calibration parameters */
+  gsl_vector_set(c, MAGCAL_IDX_SX, 1.0);
+  gsl_vector_set(c, MAGCAL_IDX_SY, 1.0);
+  gsl_vector_set(c, MAGCAL_IDX_SZ, 1.0);
+  gsl_vector_set(c, MAGCAL_IDX_OX, 0.0);
+  gsl_vector_set(c, MAGCAL_IDX_OY, 0.0);
+  gsl_vector_set(c, MAGCAL_IDX_OZ, 0.0);
+  gsl_vector_set(c, MAGCAL_IDX_AXY, M_PI / 2.0);
+  gsl_vector_set(c, MAGCAL_IDX_AXZ, M_PI / 2.0);
+  gsl_vector_set(c, MAGCAL_IDX_AYZ, M_PI / 2.0);
+
+  fprintf(stderr, "main: performing scalar calibration...");
+  gettimeofday(&tv0, NULL);
+  magcal_proc(c, magcal_p);
+  gettimeofday(&tv1, NULL);
+  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+
+  *rms = magcal_rms(magcal_p);
+
+  magcal_free(magcal_p);
+
+  return s;
+}
+
+int
+print_parameters(FILE *fp, const gsl_vector *c, const time_t t, const double rms)
+{
+  int s = 0;
+
+  fprintf(fp, "%ld %f %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e\n",
+          t,
+          rms,
+          gsl_vector_get(c, MAGCAL_IDX_SX),
+          gsl_vector_get(c, MAGCAL_IDX_SY),
+          gsl_vector_get(c, MAGCAL_IDX_SZ),
+          gsl_vector_get(c, MAGCAL_IDX_OX),
+          gsl_vector_get(c, MAGCAL_IDX_OY),
+          gsl_vector_get(c, MAGCAL_IDX_OZ),
+          gsl_vector_get(c, MAGCAL_IDX_AXY) * 180.0 / M_PI,
+          gsl_vector_get(c, MAGCAL_IDX_AXZ) * 180.0 / M_PI,
+          gsl_vector_get(c, MAGCAL_IDX_AYZ) * 180.0 / M_PI);
+
+  fflush(fp);
 
   return s;
 }
@@ -230,13 +346,11 @@ main(int argc, char *argv[])
   satdata_mag *data = NULL;
   eph_data *eph = NULL;
   track_workspace *track_p;
-  magcal_workspace *magcal_p;
   gsl_vector *coef = gsl_vector_alloc(MAGCAL_P);
   struct timeval tv0, tv1;
   double lt_min = 6.0;  /* local time interval for data selection at low/mid latitudes */
   double lt_max = 18.0;
-  double t_min = -1.0;
-  double t_max = -1.0;
+  double rms;
 
   while (1)
     {
@@ -246,8 +360,6 @@ main(int argc, char *argv[])
         {
           { "lt_min", required_argument, NULL, 'c' },
           { "lt_max", required_argument, NULL, 'd' },
-          { "t_min", required_argument, NULL, 'e' },
-          { "t_max", required_argument, NULL, 'f' },
           { 0, 0, 0, 0 }
         };
 
@@ -285,14 +397,6 @@ main(int argc, char *argv[])
             lt_max = atof(optarg);
             break;
 
-          case 'e':
-            t_min = atof(optarg);
-            break;
-
-          case 'f':
-            t_max = atof(optarg);
-            break;
-
           case 'p':
             param_file = optarg;
             break;
@@ -308,7 +412,7 @@ main(int argc, char *argv[])
 
   if (!data)
     {
-      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [--lt_min lt_min] [--lt_max lt_max] [--t_min t_min_year] [--t_max t_max_year] [-p param_file] [-r residual_file]\n",
+      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [--lt_min lt_min] [--lt_max lt_max] [-p param_file] [-r residual_file]\n",
               argv[0]);
       exit(1);
     }
@@ -324,111 +428,58 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
+#if 1
+  fprintf(stderr, "main: fixing track jumps...");
+  fix_track_jumps(track_file, data, track_p);
+  fprintf(stderr, "done (data written to %s)\n", track_file);
+#endif
+
   fprintf(stderr, "main: filtering tracks for quiet periods...");
   gettimeofday(&tv0, NULL);
   stage2_filter(track_p, data);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-  if (t_min > 0.0 && t_max > 0.0)
-    {
-      size_t nflagged_time;
-
-      fprintf(stderr, "main: filtering tracks for time in [%.2f,%.2f]...", t_min, t_max);
-
-      nflagged_time = track_flag_time(t_min, t_max, data, track_p);
-
-      fprintf(stderr, "done (%zu/%zu [%.1f%%] tracks flagged)\n",
-              nflagged_time, track_p->n, (double)nflagged_time / (double)track_p->n * 100.0);
-    }
-
-  /* add unflagged data to magcal workspace */
-  fprintf(stderr, "main: adding data for scalar calibration...");
-  gettimeofday(&tv0, NULL);
-
+#if 0
   {
-    size_t nflagged = satdata_nflagged(data);
-    size_t n = data->n - nflagged;
-    size_t i, j;
+    const time_t t0 = satdata_epoch2timet(data->t[0]);
+    const time_t t1 = satdata_epoch2timet(data->t[data->n - 1]);
+    const time_t window_size = 60 * 86400;  /* number of days of data to process at once */
+    const time_t window_slide = 10 * 86400; /* number of days to slide forward */
+    time_t t;
+    FILE *fp_param = NULL;
 
-    fprintf(stderr, "n = %zu\n", n);
-    magcal_p = magcal_alloc(n);
+    if (param_file)
+      fp_param = fopen(param_file, "w");
 
-    for (i = 0; i < track_p->n; ++i)
+    for (t = t0 + window_size / 2; t <= t1 - window_size / 2; t += window_slide)
       {
-        track_data *tptr = &(track_p->tracks[i]);
-        size_t start_idx = tptr->start_idx;
-        size_t end_idx = tptr->end_idx;
+        stage2_scalar_calibrate(t - window_size / 2, t + window_size / 2, data, track_p, coef, &rms);
 
-        if (tptr->flags)
-          continue;
-
-        for (j = start_idx; j <= end_idx; ++j)
-          {
-            double B_VFM[3], B_model[4];
-
-            if (data->flags[j])
-              continue;
-
-            if (fabs(data->qdlat[j]) > 55.0)
-              continue;
-
-            B_VFM[0] = SATDATA_VEC_X(data->B_VFM, j);
-            B_VFM[1] = SATDATA_VEC_Y(data->B_VFM, j);
-            B_VFM[2] = SATDATA_VEC_Z(data->B_VFM, j);
-
-            satdata_mag_model(j, B_model, data);
-
-            magcal_add_datum(data->t[j], B_VFM, B_model[3], magcal_p);
-          }
+        if (fp_param)
+          print_parameters(fp_param, coef);
       }
+
+    fclose(fp_param);
   }
 
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+#else
 
-  /* set initial values of calibration parameters */
-  gsl_vector_set(coef, MAGCAL_IDX_SX, 1.0);
-  gsl_vector_set(coef, MAGCAL_IDX_SY, 1.0);
-  gsl_vector_set(coef, MAGCAL_IDX_SZ, 1.0);
-  gsl_vector_set(coef, MAGCAL_IDX_OX, 0.0);
-  gsl_vector_set(coef, MAGCAL_IDX_OY, 0.0);
-  gsl_vector_set(coef, MAGCAL_IDX_OZ, 0.0);
-  gsl_vector_set(coef, MAGCAL_IDX_AXY, M_PI / 2.0);
-  gsl_vector_set(coef, MAGCAL_IDX_AXZ, M_PI / 2.0);
-  gsl_vector_set(coef, MAGCAL_IDX_AYZ, M_PI / 2.0);
-
-  fprintf(stderr, "main: performing scalar calibration...");
-  gettimeofday(&tv0, NULL);
-  magcal_proc(coef, magcal_p);
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-
-  if (param_file)
-    {
-      FILE *fp_param = fopen(param_file, "a");
-      double rms = magcal_rms(magcal_p);
-      time_t t_mean = magcal_mean_time(magcal_p);
-
-      fprintf(fp_param, "%ld %f %f %f %f %f %f %f %f %f %f\n",
-              t_mean,
-              rms,
-              gsl_vector_get(coef, MAGCAL_IDX_SX),
-              gsl_vector_get(coef, MAGCAL_IDX_SY),
-              gsl_vector_get(coef, MAGCAL_IDX_SZ),
-              gsl_vector_get(coef, MAGCAL_IDX_OX),
-              gsl_vector_get(coef, MAGCAL_IDX_OY),
-              gsl_vector_get(coef, MAGCAL_IDX_OZ),
-              gsl_vector_get(coef, MAGCAL_IDX_AXY) * 180.0 / M_PI,
-              gsl_vector_get(coef, MAGCAL_IDX_AXZ) * 180.0 / M_PI,
-              gsl_vector_get(coef, MAGCAL_IDX_AYZ) * 180.0 / M_PI);
-
-      fclose(fp_param);
-    }
+  stage2_scalar_calibrate(-1, -1, data, track_p, coef, &rms);
 
   fprintf(stderr, "main: applying calibration parameters to data...");
   magcal_apply(coef, data);
   fprintf(stderr, "done\n");
+
+  if (param_file)
+    {
+      FILE *fp = fopen(param_file, "w");
+      time_t t = satdata_epoch2timet(data->t[data->n / 2]);
+
+      print_parameters(fp, coef, t, rms);
+
+      fclose(fp);
+    }
 
   if (res_file)
     {
@@ -437,14 +488,9 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
-#if 0
-  fprintf(stderr, "main: fixing track jumps...");
-  fix_track_jumps(track_file, data, track_p);
-  fprintf(stderr, "done (data written to %s)\n", track_file);
 #endif
 
   gsl_vector_free(coef);
-  magcal_free(magcal_p);
   track_free(track_p);
   satdata_mag_free(data);
   eph_data_free(eph);

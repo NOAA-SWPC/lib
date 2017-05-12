@@ -59,7 +59,7 @@ typedef struct
   double euler_min_LT;    /* minimum local time for Euler angles */
   double euler_max_LT;    /* maximum local time for Euler angles */
   double rms_thresh[4];   /* rms thresholds (X,Y,Z,F) (nT) */
-  double qdlat_cutoff;    /* QD latitude cutoff for high-latitudes */
+  double qdlat_preproc_cutoff; /* QD latitude cutoff for high-latitudes */
   double min_zenith;      /* minimum zenith angle for high-latitude data selection */
   size_t gradient_ns;     /* number of seconds between N/S gradient samples */
   int fit_track_RC;       /* fit track-by-track RC field */
@@ -153,39 +153,15 @@ check_parameters(preprocess_parameters * params)
       ++s;
     }
 
-  if (params->qdlat_cutoff < 0.0)
+  if (params->qdlat_preproc_cutoff < 0.0)
     {
-      fprintf(stderr, "check_parameters: qdlat_cutoff must be > 0\n");
+      fprintf(stderr, "check_parameters: qdlat_preproc_cutoff must be > 0\n");
       ++s;
     }
 
   if (params->min_zenith < 0.0)
     {
       fprintf(stderr, "check_parameters: min_zenith must be > 0\n");
-      ++s;
-    }
-
-  if (params->rms_thresh[0] <= 0.0)
-    {
-      fprintf(stderr, "check_parameters: rms_thresh_X must be > 0\n");
-      ++s;
-    }
-
-  if (params->rms_thresh[1] <= 0.0)
-    {
-      fprintf(stderr, "check_parameters: rms_thresh_Y must be > 0\n");
-      ++s;
-    }
-
-  if (params->rms_thresh[2] <= 0.0)
-    {
-      fprintf(stderr, "check_parameters: rms_thresh_Z must be > 0\n");
-      ++s;
-    }
-
-  if (params->rms_thresh[3] <= 0.0)
-    {
-      fprintf(stderr, "check_parameters: rms_thresh_F must be > 0\n");
       ++s;
     }
 
@@ -344,7 +320,7 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
     {
       size_t fitting_flags = 0;
 
-      if (fabs(mdata->qdlat[i]) <= preproc_params->qdlat_cutoff)
+      if (fabs(mdata->qdlat[i]) <= preproc_params->qdlat_preproc_cutoff)
         {
           /*
            * mid-latitude point: check local time of equator crossing to determine whether
@@ -963,8 +939,8 @@ parse_config_file(const char *filename, preprocess_parameters *params)
     params->euler_min_LT = fval;
   if (config_lookup_float(&cfg, "euler_max_LT", &fval))
     params->euler_max_LT = fval;
-  if (config_lookup_float(&cfg, "qdlat_cutoff", &fval))
-    params->qdlat_cutoff = fval;
+  if (config_lookup_float(&cfg, "qdlat_preproc_cutoff", &fval))
+    params->qdlat_preproc_cutoff = fval;
   if (config_lookup_float(&cfg, "min_zenith", &fval))
     params->min_zenith = fval;
 
@@ -1064,7 +1040,7 @@ main(int argc, char *argv[])
   params.max_LT = -1.0;
   params.euler_min_LT = -1.0;
   params.euler_max_LT = -1.0;
-  params.qdlat_cutoff = -1.0;
+  params.qdlat_preproc_cutoff = -1.0;
   params.min_zenith = -1.0;
   params.rms_thresh[0] = -1.0;
   params.rms_thresh[1] = -1.0;

@@ -14,6 +14,7 @@
 
 #include <satdata/satdata.h>
 
+#include "common.h"
 #include "mfield.h"
 
 int
@@ -56,21 +57,21 @@ main(int argc, char *argv[])
 
 #if 1
   /* KOU */
-  r = MFIELD_RE_KM + 10.0 * 1.0e-3;
+  r = R_EARTH_KM + 10.0 * 1.0e-3;
   theta = M_PI / 2.0 - 5.21 * M_PI / 180.0;
   phi = 307.269 * M_PI / 180.0;
 #endif
 
 #if 0
   /* TAM */
-  r = MFIELD_RE_KM + 1.373;
+  r = R_EARTH_KM + 1.373;
   theta = M_PI / 2.0 - 22.79 * M_PI / 180.0;
   phi = 5.53 * M_PI / 180.0;
 #endif
 
 #if 0
   /* MBO */
-  r = MFIELD_RE_KM + 7.0 * 1.0e-3;
+  r = R_EARTH_KM + 7.0 * 1.0e-3;
   theta = M_PI / 2.0 - 14.38 * M_PI / 180.0;
   phi = 343.03 * M_PI / 180.0;
 #endif

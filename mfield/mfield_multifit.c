@@ -8,6 +8,8 @@ static int mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f);
 static int mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J);
 static int mfield_nonlinear_model(const int res_flag, const gsl_vector * x, const magdata * mptr, const size_t idx,
                                   const size_t thread_id, double B_model[3], mfield_workspace *w);
+static double mfield_nonlinear_model_int(const double t, const gsl_vector *v,
+                                         const gsl_vector *g, const mfield_workspace *w);
 static inline int jacobian_row_int(const double t, const gsl_vector * dB, gsl_vector * J, mfield_workspace * w);
 static inline int jacobian_row_int_grad(const double t, const double t2, const gsl_vector * dB, const gsl_vector * dB2,
                                         gsl_vector * J, mfield_workspace * w);
@@ -48,16 +50,12 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
   for (i = 0; i < w->nsat; ++i)
     {
       magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      int fit_euler = w->params.fit_euler && (mptr->global_flags & MAGDATA_GLOBFLG_EULER);
 
 #pragma omp parallel for private(j)
       for (j = 0; j < mptr->n; ++j)
         {
           int thread_id = omp_get_thread_num();
-          size_t k;
-          double t = mptr->ts[j];       /* use scaled time */
-          double r = mptr->r[j];
-          double theta = mptr->theta[j];
-          double phi = mptr->phi[j];
           size_t ridx = mptr->index[j]; /* residual index for this data point */
           double B_model[3];            /* internal + external */
           double B_obs[3];              /* observation vector NEC frame */
@@ -75,8 +73,7 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
                                 MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
             mfield_nonlinear_model(1, x, mptr, j, thread_id, B_model_ns, w);
 
-#if MFIELD_FIT_EULER
-          if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+          if (fit_euler)
             {
               /*
                * get the Euler angles for this satellite and time period,
@@ -110,7 +107,6 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
                 }
             }
           else
-#endif
             {
               /* use supplied NEC vector */
               B_obs[0] = mptr->Bx_nec[j];
@@ -305,6 +301,7 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
   for (i = 0; i < w->nsat; ++i)
     {
       magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      int fit_euler = w->params.fit_euler && (mptr->global_flags & MAGDATA_GLOBFLG_EULER);
 
 #pragma omp parallel for private(j)
       for (j = 0; j < mptr->n; ++j)
@@ -326,11 +323,9 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
           gsl_vector_view vy_ns = gsl_matrix_row(w->omp_dY_grad, thread_id);
           gsl_vector_view vz_ns = gsl_matrix_row(w->omp_dZ_grad, thread_id);
 
-#if MFIELD_FIT_EULER
           size_t euler_idx;
           double B_vfm[3], B_nec_alpha[3], B_nec_beta[3], B_nec_gamma[3];
           double B_nec_alpha_ns[3], B_nec_beta_ns[3], B_nec_gamma_ns[3];
-#endif
 
 #if MFIELD_FIT_EXTFIELD
           size_t extidx = 0;
@@ -368,9 +363,8 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
             }
 #endif
 
-#if MFIELD_FIT_EULER
           /* compute Euler angle derivatives of B vector */
-          if (mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+          if (fit_euler)
             {
               double *q = &(mptr->q[4*j]);
               double alpha, beta, gamma;
@@ -414,7 +408,6 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
                   euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec_gamma_ns);
                 }
             }
-#endif
 
           if (mptr->flags[j] & MAGDATA_FLG_X)
             {
@@ -430,15 +423,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 #endif
                 }
 
-#if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (MAGDATA_FitEuler(mptr->flags[j]))
+              if (fit_euler && MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, -B_nec_alpha[0]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, -B_nec_beta[0]);
                   gsl_matrix_set(J, ridx, euler_idx + 2, -B_nec_gamma[0]);
                 }
-#endif
 
               ++ridx;
             }
@@ -457,15 +448,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 #endif
                 }
 
-#if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (MAGDATA_FitEuler(mptr->flags[j]))
+              if (fit_euler && MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, -B_nec_alpha[1]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, -B_nec_beta[1]);
                   gsl_matrix_set(J, ridx, euler_idx + 2, -B_nec_gamma[1]);
                 }
-#endif
 
               ++ridx;
             }
@@ -484,15 +473,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
 #endif
                 }
 
-#if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (MAGDATA_FitEuler(mptr->flags[j]))
+              if (fit_euler && MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, -B_nec_alpha[2]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, -B_nec_beta[2]);
                   gsl_matrix_set(J, ridx, euler_idx + 2, -B_nec_gamma[2]);
                 }
-#endif
 
               ++ridx;
             }
@@ -553,15 +540,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
                   jacobian_row_int_grad(t, mptr->ts_ns[j], &vx.vector, &vx_ns.vector, &Jv.vector, w);
                 }
 
-#if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (MAGDATA_FitEuler(mptr->flags[j]))
+              if (fit_euler && MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, B_nec_alpha[0] - B_nec_alpha_ns[0]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, B_nec_beta[0] - B_nec_beta_ns[0]);
                   gsl_matrix_set(J, ridx, euler_idx + 2, B_nec_gamma[0] - B_nec_gamma_ns[0]);
                 }
-#endif
 
               ++ridx;
             }
@@ -575,15 +560,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
                   jacobian_row_int_grad(t, mptr->ts_ns[j], &vy.vector, &vy_ns.vector, &Jv.vector, w);
                 }
 
-#if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (MAGDATA_FitEuler(mptr->flags[j]))
+              if (fit_euler && MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, B_nec_alpha[1] - B_nec_alpha_ns[1]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, B_nec_beta[1] - B_nec_beta_ns[1]);
                   gsl_matrix_set(J, ridx, euler_idx + 2, B_nec_gamma[1] - B_nec_gamma_ns[1]);
                 }
-#endif
 
               ++ridx;
             }
@@ -597,15 +580,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
                   jacobian_row_int_grad(t, mptr->ts_ns[j], &vz.vector, &vz_ns.vector, &Jv.vector, w);
                 }
 
-#if MFIELD_FIT_EULER
               /* check if fitting Euler angles to this data point */
-              if (MAGDATA_FitEuler(mptr->flags[j]))
+              if (fit_euler && MAGDATA_FitEuler(mptr->flags[j]))
                 {
                   gsl_matrix_set(J, ridx, euler_idx, B_nec_alpha[2] - B_nec_alpha_ns[2]);
                   gsl_matrix_set(J, ridx, euler_idx + 1, B_nec_beta[2] - B_nec_beta_ns[2]);
                   gsl_matrix_set(J, ridx, euler_idx + 2, B_nec_gamma[2] - B_nec_gamma_ns[2]);
                 }
-#endif
 
               ++ridx;
             }
@@ -720,6 +701,50 @@ mfield_nonlinear_model(const int res_flag, const gsl_vector * x, const magdata *
     B_model[k] = B_int[k] + B_prior[k] + B_extcorr[k];
 
   return s;
+}
+
+/*
+mfield_nonlinear_model_int()
+  Evaluate internal field model for a given coefficient vector
+
+Inputs: t - scaled time
+        v - vector of basis functions (dX/dg,dY/dg,dZ/dg)
+        g - model coefficients
+        w - workspace
+
+Return: model = v . g_mf + t*(v . g_sv) + 1/2*t^2*(v . g_sa)
+*/
+
+static double
+mfield_nonlinear_model_int(const double t, const gsl_vector *v,
+                           const gsl_vector *g, const mfield_workspace *w)
+{
+  gsl_vector_const_view gmf = gsl_vector_const_subvector(g, 0, w->nnm_mf);
+  gsl_vector_const_view vmf = gsl_vector_const_subvector(v, 0, w->nnm_mf);
+  double mf, sv = 0.0, sa = 0.0, val;
+
+  /* compute v . x_mf */
+  gsl_blas_ddot(&vmf.vector, &gmf.vector, &mf);
+
+  if (w->nnm_sv > 0)
+    {
+      /* compute v . x_sv */
+      gsl_vector_const_view gsv = gsl_vector_const_subvector(g, w->sv_offset, w->nnm_sv);
+      gsl_vector_const_view vsv = gsl_vector_const_subvector(v, 0, w->nnm_sv);
+      gsl_blas_ddot(&vsv.vector, &gsv.vector, &sv);
+    }
+
+  if (w->nnm_sa > 0)
+    {
+      /* compute v . x_sa */
+      gsl_vector_const_view gsa = gsl_vector_const_subvector(g, w->sa_offset, w->nnm_sa);
+      gsl_vector_const_view vsa = gsl_vector_const_subvector(v, 0, w->nnm_sa);
+      gsl_blas_ddot(&vsa.vector, &gsa.vector, &sa);
+    }
+
+  val = mf + t * sv + 0.5 * t * t * sa;
+
+  return val;
 }
 
 /*

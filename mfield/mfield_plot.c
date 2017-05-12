@@ -10,6 +10,7 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
 
+#include "common.h"
 #include "mfield.h"
 #include "msynth.h"
 
@@ -17,7 +18,7 @@ int
 plot_field(msynth_workspace *w)
 {
 #if 1
-  const double r = MFIELD_RE_KM;
+  const double r = R_EARTH_KM;
 #else
   const double r = 3485.0;
 #endif

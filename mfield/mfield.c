@@ -127,20 +127,17 @@ mfield_alloc(const mfield_parameters *params)
   w->nnm_sv = (w->nmax_sv + 1) * (w->nmax_sv + 1) - 1;
   w->nnm_sa = (w->nmax_sa + 1) * (w->nmax_sa + 1) - 1;
 
-#if !MFIELD_FIT_SECVAR
-  w->nnm_sv = 0;
-#endif
+  if (!params->fit_sv)
+    w->nnm_sv = 0;
 
-#if !MFIELD_FIT_SECACC
-  w->nnm_sa = 0;
-#endif
+  if (!params->fit_sa || !params->fit_sv)
+    w->nnm_sa = 0;
 
   /* total (internal) model coefficients */
   w->p_int = w->nnm_mf + w->nnm_sv + w->nnm_sa;
   w->p = w->p_int;
 
-#if MFIELD_FIT_EULER
-  if (w->data_workspace_p)
+  if (params->fit_euler && w->data_workspace_p)
     {
       size_t i;
       size_t sum = 0;
@@ -168,9 +165,10 @@ mfield_alloc(const mfield_parameters *params)
       w->neuler = 3 * sum;
       /*w->neuler = 3 * w->nsat;*/
     }
-#else
-  w->neuler = 0;
-#endif
+  else
+    {
+      w->neuler = 0;
+    }
 
   w->next = 0;
 
@@ -474,8 +472,8 @@ mfield_free(mfield_workspace *w)
 int
 mfield_init_params(mfield_parameters * params)
 {
-  params->epoch = 0.0;
-  params->R = 0.0;
+  params->epoch = -1.0;
+  params->R = -1.0;
   params->nmax_mf = 0;
   params->nmax_sv = 0;
   params->nmax_sa = 0;
@@ -486,6 +484,7 @@ mfield_init_params(mfield_parameters * params)
   params->fit_sa = 0;
   params->fit_euler = 0;
   params->fit_ext = 0;
+  params->qdlat_fit_cutoff = -1.0;
   params->scale_time = 0;
   params->regularize = 0;
   params->use_weights = 0;
@@ -899,16 +898,13 @@ mfield_eval_dBdt(const double t, const double r, const double theta,
 {
   int s = 0;
   gsl_vector *c = w->c_copy;
-#if MFIELD_FIT_SECVAR
-  gsl_vector_view dg = gsl_vector_subvector(c, w->sv_offset, w->nnm_sv);
-#else
-  gsl_vector_view dg;
-#endif
-#if MFIELD_FIT_SECACC
-  gsl_vector_view ddg = gsl_vector_subvector(c, w->sa_offset, w->nnm_sa);
-#else
-  gsl_vector_view ddg;
-#endif
+  gsl_vector_view dg, ddg;
+
+  if (w->nnm_sv > 0)
+    dg = gsl_vector_subvector(c, w->sv_offset, w->nnm_sv);
+
+  if (w->nnm_sa > 0)
+    ddg = gsl_vector_subvector(c, w->sa_offset, w->nnm_sa);
 
   /* convert coefficients to physical time units */
   mfield_coeffs(1, w->c, c, w);
@@ -1685,14 +1681,14 @@ mfield_coeff_nmidx(const size_t n, const int m)
   return nmidx - 1;
 } /* mfield_coeff_nmidx() */
 
-double
+inline double
 mfield_get_mf(const gsl_vector *c, const size_t idx,
               const mfield_workspace *w)
 {
   return gsl_vector_get(c, idx);
 }
 
-double
+inline double
 mfield_get_sv(const gsl_vector *c, const size_t idx,
               const mfield_workspace *w)
 {
@@ -1702,7 +1698,7 @@ mfield_get_sv(const gsl_vector *c, const size_t idx,
     return 0.0;
 }
 
-double
+inline double
 mfield_get_sa(const gsl_vector *c, const size_t idx,
               const mfield_workspace *w)
 {
@@ -1712,38 +1708,33 @@ mfield_get_sa(const gsl_vector *c, const size_t idx,
     return 0.0;
 }
 
-int
+inline int
 mfield_set_mf(gsl_vector *c, const size_t idx,
-              const double x,
-              const mfield_workspace *w)
+              const double x, const mfield_workspace *w)
 {
   gsl_vector_set(c, idx, x);
   return GSL_SUCCESS;
 }
 
-int
+inline int
 mfield_set_sv(gsl_vector *c, const size_t idx,
-              const double x,
-              const mfield_workspace *w)
+              const double x, const mfield_workspace *w)
 {
-#if MFIELD_FIT_SECVAR
   /* check idx in case nmax_sv is less than nmax_mf */
   if (idx < w->nnm_sv)
     gsl_vector_set(c, idx + w->sv_offset, x);
-#endif
+
   return GSL_SUCCESS;
 }
 
-int
+inline int
 mfield_set_sa(gsl_vector *c, const size_t idx,
-              const double x,
-              const mfield_workspace *w)
+              const double x, const mfield_workspace *w)
 {
-#if MFIELD_FIT_SECACC
   /* check idx in case nmax_sa is less than nmax_mf */
   if (idx < w->nnm_sa)
     gsl_vector_set(c, idx + w->sa_offset, x);
-#endif
+
   return GSL_SUCCESS;
 }
 

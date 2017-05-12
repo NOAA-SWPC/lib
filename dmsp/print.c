@@ -53,6 +53,8 @@ print_data(const int down_sample, const satdata_mag *data)
   printf("# Field %zu: satellite direction\n", i++);
   printf("# Field %zu: scalar field (nT)\n", i++);
   printf("# Field %zu: modeled scalar field (nT)\n", i++);
+  printf("# Field %zu: B_z (nT)\n", i++);
+  printf("# Field %zu: modeled B_z (nT)\n", i++);
 
   for (i = 0; i < data->n; i += down_sample)
     {
@@ -73,7 +75,7 @@ print_data(const int down_sample, const satdata_mag *data)
                    SATDATA_VEC_Z(data->B_ext, i);
       B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
 
-      printf("%ld %f %6.2f %10.4f %10.4f %10.4f %10.4f %2d %10.4f %10.4f\n",
+      printf("%ld %f %6.2f %10.4f %10.4f %10.4f %10.4f %2d %10.4f %10.4f %10.4f %10.4f\n",
              satdata_epoch2timet(data->t[i]),
              year,
              lt,
@@ -83,7 +85,9 @@ print_data(const int down_sample, const satdata_mag *data)
              data->qdlat[i],
              satdata_mag_satdir(i, data),
              data->F[i],
-             B_model[3]);
+             B_model[3],
+             SATDATA_VEC_Z(data->B_VFM, i),
+             B_model[2]);
     }
 
   return s;

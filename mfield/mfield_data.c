@@ -145,7 +145,7 @@ mfield_data_filter_time(const double tmin, const double tmax,
 
 /*
 mfield_data_filter_euler()
-  We are not fitting Euler angles (MFIELD_FIT_EULER is 0),
+  We are not fitting Euler angles (fit_euler is 0),
 so discard any data which is marked Euler only
 
 Inputs: w    - workspace
@@ -201,7 +201,7 @@ mfield_data_filter_comp(mfield_data_workspace *w)
         {
           double qdlat = mptr->qdlat[j];
 
-          if (fabs(qdlat) <= params->qdlat_cutoff)
+          if (fabs(qdlat) <= params->qdlat_fit_cutoff)
             {
               /* select components for mid/low latitudes */
 

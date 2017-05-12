@@ -101,12 +101,10 @@ mfield_synth_replace(mfield_workspace *w)
   mfield_workspace **mfield_array;
   size_t i, j;
 
-#if MFIELD_FIT_EULER
   /* Euler angles */
   const double alpha = -13.1 * M_PI / 180.0 * 1.0;
   const double beta = -5.2 * M_PI / 180.0 * 1.0;
   const double gamma = 3.4 * M_PI / 180.0 * 1.0;
-#endif
 
   /* initialize synthetic gauss coefficients */
   mfield_synth_g(g, w);
@@ -182,19 +180,18 @@ mfield_synth_replace(mfield_workspace *w)
           mptr->By_model[j] = 0.0;
           mptr->Bz_model[j] = 0.0;
 
-#if MFIELD_FIT_EULER
           /* rotate NEC vector to VFM frame */
-          {
-            double *q = &(mptr->q[4*j]);
-            double B_vfm[3];
+          if (w->params.fit_euler)
+            {
+              double *q = &(mptr->q[4*j]);
+              double B_vfm[3];
 
-            euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
+              euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
 
-            mptr->Bx_vfm[j] = B_vfm[0];
-            mptr->By_vfm[j] = B_vfm[1];
-            mptr->Bz_vfm[j] = B_vfm[2];
-          }
-#endif
+              mptr->Bx_vfm[j] = B_vfm[0];
+              mptr->By_vfm[j] = B_vfm[1];
+              mptr->Bz_vfm[j] = B_vfm[2];
+            }
 
           if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DF_NS |
                                 MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW | MAGDATA_FLG_DF_EW))
@@ -211,19 +208,18 @@ mfield_synth_replace(mfield_workspace *w)
               mptr->By_model_ns[j] = 0.0;
               mptr->Bz_model_ns[j] = 0.0;
 
-#if MFIELD_FIT_EULER
               /* rotate NEC vector to VFM frame */
-              {
-                double *q = &(mptr->q_ns[4*j]);
-                double B_vfm[3];
+              if (w->params.fit_euler)
+                {
+                  double *q = &(mptr->q_ns[4*j]);
+                  double B_vfm[3];
 
-                euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
+                  euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
 
-                mptr->Bx_vfm_ns[j] = B_vfm[0];
-                mptr->By_vfm_ns[j] = B_vfm[1];
-                mptr->Bz_vfm_ns[j] = B_vfm[2];
-              }
-#endif
+                  mptr->Bx_vfm_ns[j] = B_vfm[0];
+                  mptr->By_vfm_ns[j] = B_vfm[1];
+                  mptr->Bz_vfm_ns[j] = B_vfm[2];
+                }
             }
 
         }

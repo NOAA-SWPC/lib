@@ -7,7 +7,7 @@
  *
  * Usage:
  *
- * ./stage1 <-i dmsp_cdf_file>
+ * ./stage1 <-i dmsp_cdf_file> [-o output_cdf_file]
  */
 
 #include <stdio.h>
