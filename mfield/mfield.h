@@ -22,7 +22,7 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_HIGH_LAT_ONLY 0
+#define MFIELD_SYNTH_HIGH_LAT_ONLY 1
 
 /* fit external field model to data */
 #define MFIELD_FIT_EXTFIELD    0
@@ -159,6 +159,7 @@ typedef struct
 
   /* nonlinear least squares parameters */
   gsl_vector *wts_spatial; /* spatial weights, nres-by-1 */
+  gsl_vector *wts_robust;  /* robust weights, nres-by-1 */
   gsl_vector *wts_final;   /* final weights (robust x spatial), nres-by-1 */
   gsl_multifit_nlinear_workspace *multifit_nlinear_p;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;

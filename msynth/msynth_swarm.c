@@ -161,3 +161,83 @@ msynth_swarm_read(const char *filename)
 
   return w;
 }
+
+/*
+msynth_swarm_write()
+  Routine to write ASCII coefficient file in format used by Chris/Nils:
+
+g10
+g11
+h11
+g20
+g21
+h21
+g22
+h22
+...
+*/
+
+int
+msynth_swarm_write(const char *filename, const msynth_workspace *w)
+{
+  const size_t nmax = w->nmax;
+  size_t n;
+  FILE *fp;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "msynth_swarm_write: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return 0;
+    }
+
+  fprintf(fp, "%% %3s %5s %20s %20s %20s\n",
+          "n",
+          "m",
+          "MF gnm (nT)",
+          "SV gnm (nT/year)",
+          "SA gnm (nT/year^2)");
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int ni = (int) n;
+      int m;
+
+      for (m = 0; m <= ni; ++m)
+        {
+          size_t cidx = msynth_nmidx(n, m, w);
+          double gnm, dgnm, ddgnm;
+
+          gnm = w->c[cidx];
+          dgnm = w->c[cidx + w->sv_offset];
+          ddgnm = w->c[cidx + w->sa_offset];
+
+          fprintf(fp, "%5zu %5d %20.4f %20.4f %20.4f\n",
+                  n,
+                  m,
+                  gnm,
+                  dgnm,
+                  ddgnm);
+
+          if (m > 0)
+            {
+              cidx = msynth_nmidx(n, -m, w);
+              gnm = w->c[cidx];
+              dgnm = w->c[cidx + w->sv_offset];
+              ddgnm = w->c[cidx + w->sa_offset];
+
+              fprintf(fp, "%5zu %5d %20.4f %20.4f %20.4f\n",
+                      n,
+                      -m,
+                      gnm,
+                      dgnm,
+                      ddgnm);
+            }
+        }
+    }
+
+  fclose(fp);
+
+  return 0;
+}

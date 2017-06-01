@@ -120,7 +120,7 @@ e_mu = dr/dmu / |dr/dmu|
 e_nu = dr/dnu / |dr/dnu|
 e_phi = dr/dphi / |dr/dphi|
 
-Inputs: r     - Cartesian position vector (X,Y,Z) in km
+Inputs: r     - ECEF Cartesian position vector (X,Y,Z) in km
         e_mu  - (output) Cartesian components of e_mu
         e_nu  - (output) Cartesian components of e_nu
         e_phi - (output) Cartesian components of e_phi

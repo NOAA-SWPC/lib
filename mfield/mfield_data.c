@@ -535,7 +535,7 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
           double B[4], B_grad[4];
           double B_model[4], B_grad_model[4];
 
-          if (MAGDATA_Discarded(mptr->flags[j]) || !MAGDATA_FitMF(mptr->flags[j]))
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
           B[0] = mptr->Bx_nec[j];
@@ -569,22 +569,28 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0]);
             }
 
           if (MAGDATA_ExistY(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1]);
             }
 
           if (MAGDATA_ExistZ(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2]);
             }
 
-          if (MAGDATA_ExistScalar(mptr->flags[j]))
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
               fprintf(fp[3], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B[3], B_model[3]);
@@ -593,22 +599,28 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
           if (MAGDATA_ExistDX_NS(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[4], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0], B_grad[0], B_grad_model[0]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[4], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0], B_grad[0], B_grad_model[0]);
             }
 
           if (MAGDATA_ExistDY_NS(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[5], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1], B_grad[1], B_grad_model[1]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[5], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1], B_grad[1], B_grad_model[1]);
             }
 
           if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2], B_grad[2], B_grad_model[2]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2], B_grad[2], B_grad_model[2]);
             }
 
-          if (MAGDATA_ExistDF_NS(mptr->flags[j]))
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
               fprintf(fp[7], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[3], B_model[3], B_grad[3], B_grad_model[3]);
@@ -617,22 +629,28 @@ mfield_data_print(const char *dir_prefix, const gsl_vector *wts_spatial,
           if (MAGDATA_ExistDX_EW(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[8], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0], B_grad[0], B_grad_model[0]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[8], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[0], B_model[0], B_grad[0], B_grad_model[0]);
             }
 
           if (MAGDATA_ExistDY_EW(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[9], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1], B_grad[1], B_grad_model[1]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[9], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[1], B_model[1], B_grad[1], B_grad_model[1]);
             }
 
           if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
-              fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2], B_grad[2], B_grad_model[2]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[2], B_model[2], B_grad[2], B_grad_model[2]);
             }
 
-          if (MAGDATA_ExistDF_EW(mptr->flags[j]))
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             {
               double wj = gsl_vector_get(wts_spatial, idx++);
               fprintf(fp[11], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B[3], B_model[3], B_grad[3], B_grad_model[3]);

@@ -13,35 +13,36 @@ vbuffer = 0.8
 load 'multi_defs.cfg'
 load 'multi_png.cfg'
 
-satnum = '0'
-iternum = '1'
+satnum = '2'
+iternum = '5'
 set out 'res'.satnum.'_iter'.iternum.'.png'
 
 unset key
-nskip = 10
+nskip = 1
 
 load 'xlaton.cfg'
 
 unset xlabel
 set ylabel "nT"
+set yrange [-200:200]
 
 set multiplot layout nrow,ncol
 
 file = '../output/res'.satnum.'_X_iter'.iternum.'.dat'
 set title "X residuals"
-plot file us 5:($8-$9-$10) every nskip w p
+plot file us 5:11 every nskip w p
 
 load 'incrow.cfg'
 
 file = '../output/res'.satnum.'_Y_iter'.iternum.'.dat'
 set title "Y residuals"
-plot file us 5:($8-$9-$10) every nskip w p
+plot file us 5:11 every nskip w p
 
 load 'incrow.cfg'
 
 file = '../output/res'.satnum.'_Z_iter'.iternum.'.dat'
 set title "Z residuals"
-plot file us 5:($8-$9-$10) every nskip w p
+plot file us 5:11 every nskip w p
 
 load 'incrow.cfg'
 

@@ -2,7 +2,7 @@
 #
 # Plot temporal histogram of data coverage for model
 
-prefix="datamap.dat"
+prefix="output/datamap"
 
 # Number of days for each histogram bin
 binsize="10"

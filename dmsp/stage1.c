@@ -103,7 +103,7 @@ main(int argc, char *argv[])
   data_out = satdata_mag_alloc(data_in->n);
   msynth_core = msynth_read(MSYNTH_BOUMME_FILE);
 
-  fprintf(stderr, "Computing magnetic field model (downsampling by %d)...", down_sample);
+  fprintf(stderr, "main: computing magnetic field model (downsampling by %d)...", down_sample);
   gettimeofday(&tv0, NULL);
 
   if (use_chaos)
@@ -120,7 +120,7 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds, %zu records kept)\n", time_diff(tv0, tv1), data_out->n);
 
-  fprintf(stderr, "Writing %s...", outfile);
+  fprintf(stderr, "main: writing %s...", outfile);
   gettimeofday(&tv0, NULL);
   satdata_dmsp_write(1, outfile, data_out);
   gettimeofday(&tv1, NULL);

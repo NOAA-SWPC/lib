@@ -152,7 +152,7 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
           idx = bsearch_double(data->latitude, 0.0, sidx, eidx);
 
           /* sanity check we found equator crossing */
-          assert(data->latitude[idx] * data->latitude[idx + 1] < 0.0);
+          assert(data->latitude[idx] * data->latitude[idx + 1] <= 0.0);
 
           /* interpolate t, but not longitude due to wrapping effects */
           t_eq = interp1d(data->latitude[idx], data->latitude[idx + 1],

@@ -7,6 +7,7 @@ SUBDIRS =         \
   curvefit        \
   dmsp            \
   efi             \
+	emm             \
   ephemeris       \
   green           \
   grid            \

@@ -65,6 +65,8 @@ int euler_vfm2nec(const size_t flags, const double alpha, const double beta,
 int euler_nec2vfm(const size_t flags, const double alpha, const double beta,
                   const double gamma, const double q[],
                   const double B_in[3], double B_out[3]);
+int euler_apply_R3(const size_t flags, const double alpha, const double beta,
+                   const double gamma, const double B_in[3], double B_out[3]);
 int euler_Rq(const double *q, gsl_matrix *Rq);
 
 #endif /* INCLUDED_euler_h */

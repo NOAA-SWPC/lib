@@ -276,14 +276,13 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
   char buf[2048];
   FILE *fp[12];
   const size_t n = 12; /* number of components to write to disk */
-  const char *fmtstr = "%ld %.8f %.4f %.4f %.4f %.4f %.3f %.4f %.4f %.4f\n";
-  const char *fmtstr_F = "%ld %.8f %.4f %.4f %.4f %.4f %.3f %.4f %.4f\n";
-  const char *fmtstr_grad = "%ld %.8f %.4f %.4f %.4f %.4f %.3f %.4f %.4f %.4f %.4f %.4f %.4f\n";
+  const char *fmtstr = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f %.4f\n";
+  const char *fmtstr_F = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
+  const char *fmtstr_grad = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f %.4f %.4f %.4f %.4f\n";
   const double qdlat_cutoff = w->params.qdlat_fit_cutoff; /* cutoff latitude for high/low statistics */
   size_t i;
   mfield_data_workspace *data_p = w->data_workspace_p;
   size_t idx = 0;
-  gsl_vector *wts = w->wts_final;
   gsl_rstat_workspace *rstat_x = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_y = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_z = gsl_rstat_alloc();
@@ -382,6 +381,8 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
           fprintf(fp[j], "# Field %zu: geocentric latitude (degrees)\n", k++);
           fprintf(fp[j], "# Field %zu: QD latitude (degrees)\n", k++);
           fprintf(fp[j], "# Field %zu: geocentric radius (km)\n", k++);
+          fprintf(fp[j], "# Field %zu: spatial weight factor\n", k++);
+          fprintf(fp[j], "# Field %zu: robust weight factor\n", k++);
           fprintf(fp[j], "# Field %zu: total weight factor\n", k++);
         }
 
@@ -416,6 +417,7 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
       fprintf(fp[0], "# Field %zu: X fitted model (nT)\n", k);
       fprintf(fp[1], "# Field %zu: Y fitted model (nT)\n", k);
       fprintf(fp[2], "# Field %zu: Z fitted model (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: scalar residual (nT)\n", k);
       fprintf(fp[4], "# Field %zu: X fitted model (nT)\n", k);
       fprintf(fp[5], "# Field %zu: Y fitted model (nT)\n", k);
       fprintf(fp[6], "# Field %zu: Z fitted model (nT)\n", k);
@@ -426,6 +428,9 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
       fprintf(fp[11], "# Field %zu: F fitted model (nT)\n", k);
       ++k;
 
+      fprintf(fp[0], "# Field %zu: X residual (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y residual (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z residual (nT)\n", k);
       fprintf(fp[4], "# Field %zu: X vector measurement at N/S gradient point (nT)\n", k);
       fprintf(fp[5], "# Field %zu: Y vector measurement at N/S gradient point (nT)\n", k);
       fprintf(fp[6], "# Field %zu: Z vector measurement at N/S gradient point (nT)\n", k);
@@ -456,6 +461,14 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
       fprintf(fp[11], "# Field %zu: F fitted model at E/W gradient point (nT)\n", k);
       ++k;
 
+      fprintf(fp[4], "# Field %zu: DX N/S residual (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: DY N/S residual (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: DZ N/S residual (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: DX E/W residual (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: DY E/W residual (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: DZ E/W residual (nT)\n", k);
+      ++k;
+
       for (j = 0; j < mptr->n; ++j)
         {
           double t = satdata_epoch2year(mptr->t[j]);
@@ -470,161 +483,247 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
           double B_fit[4], B_grad_fit[4];     /* fitted field model */
           double res[4], res_grad[4];         /* residuals */
 
-          if (MAGDATA_Discarded(mptr->flags[j]) || !MAGDATA_FitMF(mptr->flags[j]))
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
-          /* evaluate internal field models */
-          mfield_eval(mptr->t[j], r, theta, phi, B_fit, w);
-
-          if (MAGDATA_ExistDX_NS(mptr->flags[j]) || MAGDATA_ExistDY_NS(mptr->flags[j]) ||
-              MAGDATA_ExistDZ_NS(mptr->flags[j]) || MAGDATA_ExistDF_NS(mptr->flags[j]) ||
-              MAGDATA_ExistDX_EW(mptr->flags[j]) || MAGDATA_ExistDY_EW(mptr->flags[j]) ||
-              MAGDATA_ExistDZ_EW(mptr->flags[j]) || MAGDATA_ExistDF_EW(mptr->flags[j]))
+          if (MAGDATA_FitMF(mptr->flags[j]))
             {
-              mfield_eval(mptr->t_ns[j], mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], B_grad_fit, w);
+              /* evaluate internal field models */
+              mfield_eval(mptr->t[j], r, theta, phi, B_fit, w);
+
+              if (MAGDATA_ExistDX_NS(mptr->flags[j]) || MAGDATA_ExistDY_NS(mptr->flags[j]) ||
+                  MAGDATA_ExistDZ_NS(mptr->flags[j]) || MAGDATA_ExistDF_NS(mptr->flags[j]) ||
+                  MAGDATA_ExistDX_EW(mptr->flags[j]) || MAGDATA_ExistDY_EW(mptr->flags[j]) ||
+                  MAGDATA_ExistDZ_EW(mptr->flags[j]) || MAGDATA_ExistDF_EW(mptr->flags[j]))
+                {
+                  mfield_eval(mptr->t_ns[j], mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], B_grad_fit, w);
+                }
+
+              B_model[0] = mptr->Bx_model[j];
+              B_model[1] = mptr->By_model[j];
+              B_model[2] = mptr->Bz_model[j];
+              B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
+
+              B_nec_grad[0] = mptr->Bx_nec_ns[j];
+              B_nec_grad[1] = mptr->By_nec_ns[j];
+              B_nec_grad[2] = mptr->Bz_nec_ns[j];
+              B_nec_grad[3] = mptr->F_ns[j];
+
+              B_grad_model[0] = mptr->Bx_model_ns[j];
+              B_grad_model[1] = mptr->By_model_ns[j];
+              B_grad_model[2] = mptr->Bz_model_ns[j];
+              B_grad_model[3] = gsl_hypot3(B_grad_model[0], B_grad_model[1], B_grad_model[2]);
+    
+              B_nec[3] = mptr->F[j];
+
+              if (w->params.fit_euler && mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+                {
+                  size_t euler_idx = mfield_euler_idx(i, mptr->t[j], w);
+                  double alpha = gsl_vector_get(w->c, euler_idx);
+                  double beta = gsl_vector_get(w->c, euler_idx + 1);
+                  double gamma = gsl_vector_get(w->c, euler_idx + 2);
+                  double *q = &(mptr->q[4*j]);
+
+                  B_nec[0] = mptr->Bx_vfm[j];
+                  B_nec[1] = mptr->By_vfm[j];
+                  B_nec[2] = mptr->Bz_vfm[j];
+
+                  /* rotate to NEC with computed Euler angles */
+                  euler_vfm2nec(EULER_FLG_ZYX, alpha, beta, gamma, q, B_nec, B_nec);
+                }
+              else
+                {
+                  B_nec[0] = mptr->Bx_nec[j];
+                  B_nec[1] = mptr->By_nec[j];
+                  B_nec[2] = mptr->Bz_nec[j];
+                }
+
+              /* calculate residuals */
+              for (k = 0; k < 3; ++k)
+                {
+                  res[k] = B_nec[k] - B_model[k] - B_fit[k];
+                  res_grad[k] = B_nec_grad[k] - B_grad_model[k] - B_grad_fit[k];
+                }
+
+              res[3] = B_nec[3] - gsl_hypot3(B_model[0] + B_fit[0], B_model[1] + B_fit[1], B_model[2] + B_fit[2]);
             }
 
-          B_model[0] = mptr->Bx_model[j];
-          B_model[1] = mptr->By_model[j];
-          B_model[2] = mptr->Bz_model[j];
-          B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
-
-          B_nec_grad[0] = mptr->Bx_nec_ns[j];
-          B_nec_grad[1] = mptr->By_nec_ns[j];
-          B_nec_grad[2] = mptr->Bz_nec_ns[j];
-          B_nec_grad[3] = mptr->F_ns[j];
-
-          B_grad_model[0] = mptr->Bx_model_ns[j];
-          B_grad_model[1] = mptr->By_model_ns[j];
-          B_grad_model[2] = mptr->Bz_model_ns[j];
-          B_grad_model[3] = gsl_hypot3(B_grad_model[0], B_grad_model[1], B_grad_model[2]);
-
-          B_nec[3] = mptr->F[j];
-
-          if (w->params.fit_euler && mptr->global_flags & MAGDATA_GLOBFLG_EULER)
+          if ((j > 0) && (mptr->flags[j] & MAGDATA_FLG_TRACK_START))
             {
-              size_t euler_idx = mfield_euler_idx(i, mptr->t[j], w);
-              double alpha = gsl_vector_get(w->c, euler_idx);
-              double beta = gsl_vector_get(w->c, euler_idx + 1);
-              double gamma = gsl_vector_get(w->c, euler_idx + 2);
-              double *q = &(mptr->q[4*j]);
-
-              B_nec[0] = mptr->Bx_vfm[j];
-              B_nec[1] = mptr->By_vfm[j];
-              B_nec[2] = mptr->Bz_vfm[j];
-
-              /* rotate to NEC with computed Euler angles */
-              euler_vfm2nec(EULER_FLG_ZYX, alpha, beta, gamma, q, B_nec, B_nec);
+              for (k = 0; k < n; ++k)
+                fprintf(fp[k], "\n\n");
             }
-          else
-            {
-              B_nec[0] = mptr->Bx_nec[j];
-              B_nec[1] = mptr->By_nec[j];
-              B_nec[2] = mptr->Bz_nec[j];
-            }
-
-          /* calculate residuals */
-          for (k = 0; k < 3; ++k)
-            {
-              res[k] = B_nec[k] - B_model[k] - B_fit[k];
-            }
-
-          res[3] = B_nec[3] - gsl_hypot3(B_model[0] + B_fit[0], B_model[1] + B_fit[1], B_model[2] + B_fit[2]);
 
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B_nec[0], B_model[0], B_fit[0]);
-              gsl_rstat_add(B_nec[0] - B_model[0] - B_fit[0], rstat_x);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+
+                  fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[0], B_model[0], B_fit[0], res[0]);
+                  gsl_rstat_add(B_nec[0] - B_model[0] - B_fit[0], rstat_x);
+                }
+
+              ++idx;
             }
 
           if (MAGDATA_ExistY(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B_nec[1], B_model[1], B_fit[1]);
-              gsl_rstat_add(B_nec[1] - B_model[1] - B_fit[1], rstat_y);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[1], B_model[1], B_fit[1], res[1]);
+                  gsl_rstat_add(B_nec[1] - B_model[1] - B_fit[1], rstat_y);
+                }
+
+              ++idx;
             }
 
           if (MAGDATA_ExistZ(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, wj, B_nec[2], B_model[2], B_fit[2]);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[2], B_model[2], B_fit[2], res[2]);
 
-              gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2], rstat_z);
+                  gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2], rstat_z);
 
-              if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
-                gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2], rstat_lowz);
-              else
-                gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2], rstat_highz);
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2], rstat_lowz);
+                  else
+                    gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2], rstat_highz);
+                }
+
+              ++idx;
             }
 
-          if (MAGDATA_ExistScalar(mptr->flags[j]))
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[3], fmtstr_F, unix_time, t, phi, lat, qdlat, r, wj, B_nec[3], B_nec[3] - res[3]);
+              double ws = gsl_vector_get(w->wts_spatial, idx);
+              double wr = gsl_vector_get(w->wts_robust, idx);
+              double wf = gsl_vector_get(w->wts_final, idx);
 
+              fprintf(fp[3], fmtstr_F, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[3], B_nec[3] - res[3], res[3]);
               gsl_rstat_add(res[3], rstat_f);
 
               if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
                 gsl_rstat_add(res[3], rstat_lowf);
               else
                 gsl_rstat_add(res[3], rstat_highf);
+
+              ++idx;
             }
 
           if (MAGDATA_ExistDX_NS(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[4], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[0], B_model[0], B_fit[0], B_nec_grad[0], B_grad_model[0], B_grad_fit[0]);
-              gsl_rstat_add(B_nec[0] - B_model[0] - B_fit[0] - (B_nec_grad[0] - B_grad_model[0] - B_grad_fit[0]), rstat_dx_ns);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[4], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[0], B_model[0], B_fit[0], B_nec_grad[0], B_grad_model[0], B_grad_fit[0], res[0] - res_grad[0]);
+                  gsl_rstat_add(res[0] - res_grad[0], rstat_dx_ns);
+                }
+
+              ++idx;
             }
 
           if (MAGDATA_ExistDY_NS(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[5], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[1], B_model[1], B_fit[1], B_nec_grad[1], B_grad_model[1], B_grad_fit[1]);
-              gsl_rstat_add(B_nec[1] - B_model[1] - B_fit[1] - (B_nec_grad[1] - B_grad_model[1] - B_grad_fit[1]), rstat_dy_ns);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[5], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[1], B_model[1], B_fit[1], B_nec_grad[1], B_grad_model[1], B_grad_fit[1], res[1] - res_grad[1]);
+                  gsl_rstat_add(res[1] - res_grad[1], rstat_dy_ns);
+                }
+
+              ++idx;
             }
 
           if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[2], B_model[2], B_fit[2], B_nec_grad[2], B_grad_model[2], B_grad_fit[2]);
-              gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2] - (B_nec_grad[2] - B_grad_model[2] - B_grad_fit[2]), rstat_dz_ns);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[2], B_model[2], B_fit[2], B_nec_grad[2], B_grad_model[2], B_grad_fit[2], res[2] - res_grad[2]);
+                  gsl_rstat_add(res[2] - res_grad[2], rstat_dz_ns);
+                }
+
+              ++idx;
             }
 
-          if (MAGDATA_ExistDF_NS(mptr->flags[j]))
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[7], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[3], B_model[3], B_fit[3], B_nec_grad[3], B_grad_model[3], B_grad_fit[3]);
+              double ws = gsl_vector_get(w->wts_spatial, idx);
+              double wr = gsl_vector_get(w->wts_robust, idx);
+              double wf = gsl_vector_get(w->wts_final, idx);
+              fprintf(fp[7], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[3], B_model[3], B_fit[3], B_nec_grad[3], B_grad_model[3], B_grad_fit[3]);
               gsl_rstat_add(B_nec[3] - B_model[3] - B_fit[3] - (B_nec_grad[3] - B_grad_model[3] - B_grad_fit[3]), rstat_df_ns);
+
+              ++idx;
             }
 
           if (MAGDATA_ExistDX_EW(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[8], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[0], B_model[0], B_fit[0], B_nec_grad[0], B_grad_model[0], B_grad_fit[0]);
-              gsl_rstat_add(B_nec[0] - B_model[0] - B_fit[0] - (B_nec_grad[0] - B_grad_model[0] - B_grad_fit[0]), rstat_dx_ew);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[8], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[0], B_model[0], B_fit[0], B_nec_grad[0], B_grad_model[0], B_grad_fit[0], res[0] - res_grad[0]);
+                  gsl_rstat_add(res[0] - res_grad[0], rstat_dx_ew);
+                }
+
+              ++idx;
             }
 
           if (MAGDATA_ExistDY_EW(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[9], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[1], B_model[1], B_fit[1], B_nec_grad[1], B_grad_model[1], B_grad_fit[1]);
-              gsl_rstat_add(B_nec[1] - B_model[1] - B_fit[1] - (B_nec_grad[1] - B_grad_model[1] - B_grad_fit[1]), rstat_dy_ew);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[9], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[1], B_model[1], B_fit[1], B_nec_grad[1], B_grad_model[1], B_grad_fit[1], res[1] - res_grad[1]);
+                  gsl_rstat_add(res[1] - res_grad[1], rstat_dy_ew);
+                }
+
+              ++idx;
             }
 
           if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[2], B_model[2], B_fit[2], B_nec_grad[2], B_grad_model[2], B_grad_fit[2]);
-              gsl_rstat_add(B_nec[2] - B_model[2] - B_fit[2] - (B_nec_grad[2] - B_grad_model[2] - B_grad_fit[2]), rstat_dz_ew);
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[2], B_model[2], B_fit[2], B_nec_grad[2], B_grad_model[2], B_grad_fit[2], res[2] - res_grad[2]);
+                  gsl_rstat_add(res[2] - res_grad[2], rstat_dz_ew);
+                }
+
+              ++idx;
             }
 
-          if (MAGDATA_ExistDF_EW(mptr->flags[j]))
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             {
-              double wj = gsl_vector_get(wts, idx++);
-              fprintf(fp[11], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, wj, B_nec[3], B_model[3], B_fit[3], B_nec_grad[3], B_grad_model[3], B_grad_fit[3]);
+              double ws = gsl_vector_get(w->wts_spatial, idx);
+              double wr = gsl_vector_get(w->wts_robust, idx);
+              double wf = gsl_vector_get(w->wts_final, idx);
+              fprintf(fp[11], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[3], B_model[3], B_fit[3], B_nec_grad[3], B_grad_model[3], B_grad_fit[3]);
               gsl_rstat_add(B_nec[3] - B_model[3] - B_fit[3] - (B_nec_grad[3] - B_grad_model[3] - B_grad_fit[3]), rstat_df_ew);
+
+              ++idx;
             }
         }
 

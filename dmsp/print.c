@@ -25,7 +25,37 @@
 #include <indices/indices.h>
 
 #include "common.h"
+#include "ellipsoid.h"
 #include "pomme.h"
+
+/* given B in NEC, find component along geodetic vertical */
+double
+calc_mu3(double r, double theta, double phi, double B[3])
+{
+  double r_ECEF[3];
+  double rhat[3], that[3], phat[3];
+  double e_mu[3], e_nu[3], e_phi[3];
+  double B3;
+
+  sph2ecef(r, theta, phi, r_ECEF);
+
+  /* compute ECEF spherical basis vectors */
+  ecef2sph_basis(r_ECEF, rhat, that, phat);
+
+  /* compute ECEF ellipsoid basis vectors */
+#if 0
+  ellipsoid_basis(r_ECEF, e_mu, e_nu, e_phi);
+#else
+  ellipsoid_basis_mu(r_ECEF, WGS84_MU, e_mu, e_nu, e_phi);
+#endif
+
+  B3 = -B[0] * vec_dot(that, e_mu) +
+        B[1] * vec_dot(phat, e_mu) -
+        B[2] * vec_dot(rhat, e_mu);
+
+  /* reverse sign to point inward */
+  return -B3;
+}
 
 /*
 print_data()
@@ -53,13 +83,16 @@ print_data(const int down_sample, const satdata_mag *data)
   printf("# Field %zu: satellite direction\n", i++);
   printf("# Field %zu: scalar field (nT)\n", i++);
   printf("# Field %zu: modeled scalar field (nT)\n", i++);
-  printf("# Field %zu: B_z (nT)\n", i++);
+  printf("# Field %zu: VFM B_3 (nT)\n", i++);
+  printf("# Field %zu: NEC B_z (nT)\n", i++);
   printf("# Field %zu: modeled B_z (nT)\n", i++);
+  printf("# Field %zu: modeled geodetic B_z (nT)\n", i++);
 
   for (i = 0; i < data->n; i += down_sample)
     {
       double year = satdata_epoch2year(data->t[i]);
       time_t unix_time = satdata_epoch2timet(data->t[i]);
+      double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
       double phi = data->longitude[i] * M_PI / 180.0;
       double lt = get_localtime(unix_time, phi);
       double B_model[4];
@@ -75,19 +108,21 @@ print_data(const int down_sample, const satdata_mag *data)
                    SATDATA_VEC_Z(data->B_ext, i);
       B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
 
-      printf("%ld %f %6.2f %10.4f %10.4f %10.4f %10.4f %2d %10.4f %10.4f %10.4f %10.4f\n",
+      printf("%ld %f %6.2f %10.4f %10.4f %10.4f %10.4f %2d %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
              satdata_epoch2timet(data->t[i]),
              year,
              lt,
              data->longitude[i],
              data->latitude[i],
-             data->altitude[i],
+             data->r[i] - data->R,
              data->qdlat[i],
              satdata_mag_satdir(i, data),
              data->F[i],
              B_model[3],
              SATDATA_VEC_Z(data->B_VFM, i),
-             B_model[2]);
+             SATDATA_VEC_Z(data->B, i),
+             B_model[2],
+             calc_mu3(data->r[i], theta, phi, B_model));
     }
 
   return s;

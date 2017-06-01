@@ -33,10 +33,10 @@
 #include "msynth.h"
 
 int
-print_map(const char *filename, const double epoch,
-          msynth_workspace *w)
+print_map(const char *filename, const double epoch, msynth_workspace *w)
 {
   const double r = 6371.2;
+  const double c = 3485.0; /* CMB radius */
   double lon, lat;
   FILE *fp;
   size_t i;
@@ -51,6 +51,9 @@ print_map(const char *filename, const double epoch,
   fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
   fprintf(fp, "# Field %zu: B_y (nT)\n", i++);
   fprintf(fp, "# Field %zu: B_z (nT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_x (nT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_y (nT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_z (nT)\n", i++);
 
   for (lon = -180.0; lon <= 180.0; lon += 1.0)
     {
@@ -59,16 +62,21 @@ print_map(const char *filename, const double epoch,
       for (lat = -89.9; lat <= 89.9; lat += 1.0)
         {
           double theta = M_PI / 2.0 - lat * M_PI / 180.0;
-          double B[4];
+          double B[4], B_mf[3], B_sv[3], B_sa[3];
 
           msynth_eval(epoch, r, theta, phi, B, w);
 
-          fprintf(fp, "%f %f %f %f %f\n",
+          msynth_eval2(epoch, r, theta, phi, B_mf, B_sv, B_sa, w);
+
+          fprintf(fp, "%f %f %f %f %f %f %f %f\n",
                   lon,
                   lat,
                   B[0],
                   B[1],
-                  B[2]);
+                  B[2],
+                  B_sa[0],
+                  B_sa[1],
+                  B_sa[2]);
         }
 
       fprintf(fp, "\n");

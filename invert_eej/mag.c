@@ -658,10 +658,9 @@ mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
     {
       time_t t = satdata_epoch2timet(data->t[i]);
       double tyr = satdata_epoch2year(data->t[i]);
-      double alt = data->altitude[i];
       double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
       double phi = data->longitude[i] * M_PI / 180.0;
-      double r = w->params->r_earth + alt;
+      double r = data->r[i];
       double B_main[4], B_crust[4], B_ext[4], B_tot[3];
       double alat, alon, qdlat;
 
@@ -673,14 +672,14 @@ mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
       SATDATA_VEC_Z(data->B_main, i) = B_main[2];
 
       /* compute crustal field */
-      msynth_eval(tyr, alt + w->params->r_earth, theta, phi, B_crust, w->lith_workspace_p);
+      msynth_eval(tyr, r, theta, phi, B_crust, w->lith_workspace_p);
 
       SATDATA_VEC_X(data->B_crust, i) = B_crust[0];
       SATDATA_VEC_Y(data->B_crust, i) = B_crust[1];
       SATDATA_VEC_Z(data->B_crust, i) = B_crust[2];
 
       /* compute external field */
-      pomme_calc_ext2(theta, phi, t, alt, Est, Ist, B_ext, w->pomme_workspace_p);
+      pomme_calc_ext2(theta, phi, t, r - data->R, Est, Ist, B_ext, w->pomme_workspace_p);
 
       SATDATA_VEC_X(data->B_ext, i) = B_ext[0];
       SATDATA_VEC_Y(data->B_ext, i) = B_ext[1];
@@ -768,7 +767,7 @@ mag_compute_F1(const double t_eq, const double phi_eq, const size_t sidx,
       track->theta[idx] = theta;
       track->lat_deg[idx] = 90.0 - theta*180.0/M_PI;
       track->phi[idx] = phi;
-      track->r[idx] = data->R + data->altitude[i];
+      track->r[idx] = data->r[i];
       track->thetaq[idx] = M_PI / 2.0 - qdlat * M_PI / 180.0;
       track->qdlat[idx] = qdlat;
       track->F[idx] = data->F[i];

@@ -465,7 +465,16 @@ sphcross(double A[3], double B[3], double C[3])
   return 0;
 } /* sphcross() */
 
-/* compute Cartesian components of spherical basis vectors */
+/*
+sph_basis()
+  compute Cartesian components of spherical basis vectors
+
+Inputs: theta - colatitude (radians)
+        phi   - longitude (radians)
+        rhat  - (output) ECEF rhat vector
+        that  - (output) ECEF that vector
+        phat  - (output) ECEF phat vector
+*/
 int
 sph_basis(const double theta, const double phi,
           double rhat[3], double that[3], double phat[3])
@@ -484,6 +493,46 @@ sph_basis(const double theta, const double phi,
 
   return 0;
 } /* sph_basis() */
+
+/*
+ecef2sph_basis()
+  Compute spherical basis vectors in ECEF basis, given
+an ECEF position
+
+Inputs: X    - ECEF (X, Y, Z) position
+        rhat - (output) ECEF rhat vector
+        that - (output) ECEF that vector
+        phat - (output) ECEF phat vector
+*/
+
+int
+ecef2sph_basis(const double X[3], double rhat[3], double that[3], double phat[3])
+{
+  const double rho = gsl_hypot(X[0], X[1]);
+  const double r = gsl_hypot(rho, X[2]);
+
+  rhat[0] = X[0] / r;
+  rhat[1] = X[1] / r;
+  rhat[2] = X[2] / r;
+
+  that[0] = (X[0] / rho) * (X[2] / r);
+  that[1] = (X[1] / rho) * (X[2] / r);
+  that[2] = -rho / r;
+
+  phat[0] = -X[1] / rho;
+  phat[1] = X[0] / rho;
+  phat[2] = 0.0;
+
+  return 0;
+}
+
+void
+sph2ecef(const double r, const double theta, const double phi, double X[3])
+{
+  X[0] = r * sin(theta) * cos(phi);
+  X[1] = r * sin(theta) * sin(phi);
+  X[2] = r * cos(theta);
+}
 
 /*
 sph2ecef_vec()
@@ -542,6 +591,21 @@ double
 vec_dot(const double a[3], const double b[3])
 {
   return (a[0]*b[0] + a[1]*b[1] + a[2]*b[2]);
+}
+
+/* C = A x B
+idx 0: x component
+idx 1: y component
+idx 2: z component
+*/
+int
+vec_cross(const double A[3], const double B[3], double C[3])
+{
+  C[0] = (A[1]*B[2] - A[2]*B[1]);
+  C[1] = (A[2]*B[0] - A[0]*B[2]);
+  C[2] = (A[0]*B[1] - A[1]*B[0]);
+
+  return 0;
 }
 
 double

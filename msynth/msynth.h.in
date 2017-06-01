@@ -72,6 +72,9 @@ int msynth_set_data_interval(const double data_start, const double data_end,
                              msynth_workspace *w);
 int msynth_eval(const double t, const double r, const double theta,
                 const double phi, double B[4], msynth_workspace *w);
+int msynth_eval2(const double t, const double r, const double theta,
+                 const double phi, double B_mf[3], double B_sv[3], double B_sa[3],
+                 msynth_workspace *w);
 int msynth_eval_dBdt(const double t, const double r, const double theta,
                      const double phi, double dBdt[4],
                      msynth_workspace *w);

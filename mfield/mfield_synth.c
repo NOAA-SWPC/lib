@@ -136,7 +136,8 @@ mfield_synth_replace(mfield_workspace *w)
 
 #if MFIELD_SYNTH_HIGH_LAT_ONLY
           /* only replace field values with synthetic values at high latitudes */
-          if (fabs(mptr->qdlat[j]) <= 50.0)
+          /*if (fabs(mptr->qdlat[j]) <= params->qdlat_fit_cutoff)*/
+          if (fabs(mptr->qdlat[j]) <= 1.0)
             {
               mptr->Bx_nec[j] -= mptr->Bx_model[j];
               mptr->By_nec[j] -= mptr->By_model[j];

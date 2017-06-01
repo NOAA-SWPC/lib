@@ -27,6 +27,7 @@ AC_CONFIG_FILES([            \
   curvefit/Makefile          \
   dmsp/Makefile              \
   efi/Makefile               \
+  emm/Makefile               \
   ephemeris/Makefile         \
   estist/Makefile            \
   euler/Makefile             \

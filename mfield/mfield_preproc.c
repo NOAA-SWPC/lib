@@ -37,8 +37,9 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_test.h>
 #include <gsl/gsl_statistics.h>
+#include <gsl/gsl_rng.h>
 
-#include "bin3d.h"
+#include "apex.h"
 #include "common.h"
 #include "euler.h"
 #include "magdata.h"
@@ -906,6 +907,92 @@ subtract_RC(const char *filename, satdata_mag *data, track_workspace *w)
   return s;
 }
 
+/*XXX*/
+static magdata *
+mfield_fill_polar_gap(preprocess_parameters * params)
+{
+  const size_t N = 20000;
+  const double inclination = 87.0 * M_PI / 180.0;
+  magdata *mdata = magdata_alloc(2 * N, R_EARTH_KM);
+  size_t i, j;
+  magdata_datum datum;
+  gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
+  msynth_workspace *crust_p = msynth_mf7_read(MSYNTH_MF7_FILE);
+  apex_workspace *apex_p = apex_alloc(2015);
+
+  magdata_datum_init(&datum);
+  msynth_set(16, 133, crust_p);
+
+  datum.r = R_EARTH_KM + 450.0;
+  datum.r_ns = R_EARTH_KM + 450.0;
+  datum.satdir = 1;
+  datum.flags = MAGDATA_FLG_F | MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z;
+  datum.flags |= MAGDATA_FLG_DF_EW | MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW;
+  datum.flags |= MAGDATA_FLG_FIT_MF;
+
+  for (i = 0; i < N; ++i)
+    {
+      double B_nec[4], B_nec_grad[4];
+      double alon, alat;
+
+      /* compute random point at north pole */
+      datum.theta = gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
+      datum.phi = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
+      msynth_eval(2015.0, datum.r, datum.theta, datum.phi, B_nec, crust_p);
+
+      datum.theta_ns = gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
+      datum.phi_ns = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
+      msynth_eval(2015.0, datum.r_ns, datum.theta_ns, datum.phi_ns, B_nec_grad, crust_p);
+
+      apex_transform(datum.theta, datum.phi, datum.r * 1.0e3, &alon, &alat,
+                     &(datum.qdlat), NULL, NULL, NULL, apex_p);
+      apex_transform(datum.theta_ns, datum.phi_ns, datum.r_ns * 1.0e3, &alon, &alat,
+                     &(datum.qdlat_ns), NULL, NULL, NULL, apex_p);
+
+      datum.F = B_nec[3];
+      datum.F_ns = B_nec_grad[3];
+
+      for (j = 0; j < 3; ++j)
+        {
+          datum.B_nec[j] = B_nec[j];
+          datum.B_nec_ns[j] = B_nec_grad[j];
+        }
+
+      magdata_add(&datum, mdata);
+
+      /* compute random point at south pole */
+      datum.theta = M_PI - gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
+      datum.phi = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
+      msynth_eval(2015.0, datum.r, datum.theta, datum.phi, B_nec, crust_p);
+
+      datum.theta_ns = M_PI - gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
+      datum.phi_ns = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
+      msynth_eval(2015.0, datum.r_ns, datum.theta_ns, datum.phi_ns, B_nec_grad, crust_p);
+
+      apex_transform(datum.theta, datum.phi, datum.r * 1.0e3, &alon, &alat,
+                     &(datum.qdlat), NULL, NULL, NULL, apex_p);
+      apex_transform(datum.theta_ns, datum.phi_ns, datum.r_ns * 1.0e3, &alon, &alat,
+                     &(datum.qdlat_ns), NULL, NULL, NULL, apex_p);
+
+      datum.F = B_nec[3];
+      datum.F_ns = B_nec_grad[3];
+
+      for (j = 0; j < 3; ++j)
+        {
+          datum.B_nec[j] = B_nec[j];
+          datum.B_nec_ns[j] = B_nec_grad[j];
+        }
+
+      magdata_add(&datum, mdata);
+    }
+
+  apex_free(apex_p);
+  msynth_free(crust_p);
+  gsl_rng_free(rng_p);
+
+  return mdata;
+}
+
 static int
 parse_config_file(const char *filename, preprocess_parameters *params)
 {
@@ -1007,6 +1094,7 @@ print_help(char *argv[])
   fprintf(stderr, "\t --euler_file2     | -f euler_file2            - Euler angles file 2 (for E/W gradients)\n");
   fprintf(stderr, "\t --output_file     | -o output_file            - binary output data file (magdata format)\n");
   fprintf(stderr, "\t --config_file     | -C config_file            - configuration file\n");
+  fprintf(stderr, "\t --polar_gap       | -p                        - fill random points in polar gap with MF7\n");
 }
 
 int
@@ -1030,6 +1118,7 @@ main(int argc, char *argv[])
   size_t gradient_ns = 0;    /* number of seconds between N/S gradient points */
   size_t magdata_flags = 0;
   size_t magdata_flags2 = 0;
+  int fill_polar_gap = 0;
 
   /* initialize parameters */
   params.flag_rms = 1;
@@ -1076,10 +1165,11 @@ main(int argc, char *argv[])
           { "euler_file2", required_argument, NULL, 'f' },
           { "config_file", required_argument, NULL, 'C' },
           { "gradient_ns", required_argument, NULL, 'g' },
+          { "polar_gap", required_argument, NULL, 'p' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:c:C:d:e:f:g:o:s:t:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:c:C:d:e:f:g:o:ps:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -1140,15 +1230,13 @@ main(int argc, char *argv[])
             output_file = optarg;
             break;
 
+          case 'p':
+            fill_polar_gap = 1;
+            break;
+
           default:
             break;
         }
-    }
-
-  if (!data)
-    {
-      print_help(argv);
-      exit(1);
     }
 
   /* parse configuration file */
@@ -1164,6 +1252,30 @@ main(int argc, char *argv[])
   status = check_parameters(&params);
   if (status)
     exit(1);
+
+  if (fill_polar_gap)
+    {
+      fprintf(stderr, "main: computing polar gap points...");
+      mdata = mfield_fill_polar_gap(&params);
+      fprintf(stderr, "done\n");
+
+      if (output_file)
+        {
+          fprintf(stderr, "main: writing data to %s...", output_file);
+          magdata_write(output_file, mdata);
+          fprintf(stderr, "done\n");
+        }
+
+      magdata_free(mdata);
+
+      exit(1);
+    }
+
+  if (!data)
+    {
+      print_help(argv);
+      exit(1);
+    }
 
   solarpos_workspace_p = solarpos_alloc();
 

@@ -390,6 +390,9 @@ mfield_free(mfield_workspace *w)
   if (w->wts_spatial)
     gsl_vector_free(w->wts_spatial);
 
+  if (w->wts_robust)
+    gsl_vector_free(w->wts_robust);
+
   if (w->wts_final)
     gsl_vector_free(w->wts_final);
 

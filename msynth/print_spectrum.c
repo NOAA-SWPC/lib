@@ -188,6 +188,14 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
+#if 0
+  /*XXX*/
+  {
+    const char *sfile = "new.txt";
+    msynth_swarm_write(sfile, msynth1);
+  }
+#endif
+
   msynth_free(w);
   msynth_free(msynth1);
 

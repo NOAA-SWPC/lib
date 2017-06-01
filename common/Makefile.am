@@ -51,6 +51,7 @@ libcommon_la_SOURCES = \
   solpos.c             \
   tcalc.c              \
   tcalc2.c             \
+  quat.c               \
   ut1.c
 
 AM_CFLAGS = -std=c99 -g -O2 -Wall -W -D_XOPEN_SOURCE

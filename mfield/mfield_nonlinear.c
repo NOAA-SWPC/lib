@@ -52,6 +52,8 @@ static void mfield_nonlinear_callback(const size_t iter, void *params,
 static void mfield_nonlinear_callback2(const size_t iter, void *params,
                                        const gsl_multilarge_nlinear_workspace *multifit_p);
 static int mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace * w);
+static double huber(const double x);
+static double bisquare(const double x);
 
 #include "mfield_multifit.c"
 
@@ -124,12 +126,12 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
       mfield_calc_f(c, w, w->fvec);
 
       /* compute robust weights */
-      /*gsl_multifit_robust_weights(w->fvec, w->wts_final, w->robust_workspace_p);*/
       fprintf(stderr, "mfield_calc_nonlinear: computing robust weights...");
-      mfield_robust_weights(w->fvec, w->wts_final, w);
+      mfield_robust_weights(w->fvec, w->wts_robust, w);
       fprintf(stderr, "done\n");
 
       /* compute final weights = wts_robust .* wts_spatial */
+      gsl_vector_memcpy(w->wts_final, w->wts_robust);
       gsl_vector_mul(w->wts_final, w->wts_spatial);
     }
   else
@@ -561,10 +563,18 @@ mfield_init_nonlinear(mfield_workspace *w)
 #endif
 
   w->wts_spatial = gsl_vector_alloc(nres);
+  w->wts_robust = gsl_vector_alloc(nres);
   w->wts_final = gsl_vector_alloc(nres);
 
+  gsl_vector_set_all(w->wts_robust, 1.0);
+
   /* to save memory, allocate p-by-p workspace since a full n-by-p isn't needed */
-  w->robust_workspace_p = gsl_multifit_robust_alloc(gsl_multifit_robust_huber, p, p);
+  w->robust_workspace_p = gsl_multifit_robust_alloc(gsl_multifit_robust_bisquare, p, p);
+
+#if 0
+  /* suggested by Nils to use 1.5 tuning constant */
+  gsl_multifit_robust_tune(1.5, w->robust_workspace_p);
+#endif
 
   w->fvec = gsl_vector_alloc(nres);
   w->wfvec = gsl_vector_alloc(nres);
@@ -1963,6 +1973,10 @@ mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
 /*
 mfield_robust_weights()
   Compute robust weights given a vector of residuals
+
+Inputs: f   - vector of unweighted residuals, length nres
+        wts - (output) robust weights, length nres
+        w   - workspace
 */
 
 static int
@@ -1974,18 +1988,23 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
   const double tune = w->robust_workspace_p->tune;
   size_t i, j;
   size_t idx = 0;
-  gsl_vector *work[MFIELD_IDX_END];
-  size_t count[MFIELD_IDX_END]; /* number of residuals for each data type */
-  double sigma[MFIELD_IDX_END]; /* MAD for each data type */
+  gsl_rstat_workspace **rstat_x = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_y = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_z = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_f = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
 
-  for (i = 0; i < MFIELD_IDX_END; ++i)
+  for (i = 0; i < w->nsat; ++i)
     {
-      work[i] = gsl_vector_alloc(n);
-      count[i] = 0;
+      rstat_x[i] = gsl_rstat_alloc();
+      rstat_y[i] = gsl_rstat_alloc();
+      rstat_z[i] = gsl_rstat_alloc();
+      rstat_f[i] = gsl_rstat_alloc();
     }
 
+  fprintf(stderr, "\n");
+
   /*
-   * first loop through the residuals and compute the MAD for each residual type
+   * first loop through the residuals and compute statistics for each residual type
    * (X,Y,Z,F,DX,DY,DZ)
    */
   for (i = 0; i < w->nsat; ++i)
@@ -2001,196 +2020,169 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_X], count[MFIELD_IDX_X]++, fabs(fi));
+              gsl_rstat_add(fi, rstat_x[i]);
             }
 
           if (MAGDATA_ExistY(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_Y], count[MFIELD_IDX_Y]++, fabs(fi));
+              gsl_rstat_add(fi, rstat_y[i]);
             }
 
           if (MAGDATA_ExistZ(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_Z], count[MFIELD_IDX_Z]++, fabs(fi));
+              gsl_rstat_add(fi, rstat_z[i]);
             }
 
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
               MAGDATA_FitMF(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_F], count[MFIELD_IDX_F]++, fabs(fi));
+              gsl_rstat_add(fi, rstat_f[i]);
             }
 
           if (MAGDATA_ExistDX_NS(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_DX_NS], count[MFIELD_IDX_DX_NS]++, fabs(fi));
             }
 
           if (MAGDATA_ExistDY_NS(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_DY_NS], count[MFIELD_IDX_DY_NS]++, fabs(fi));
             }
 
           if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_DZ_NS], count[MFIELD_IDX_DZ_NS]++, fabs(fi));
             }
 
           if (MAGDATA_ExistDX_EW(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_DX_EW], count[MFIELD_IDX_DX_EW]++, fabs(fi));
             }
 
           if (MAGDATA_ExistDY_EW(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_DY_EW], count[MFIELD_IDX_DY_EW]++, fabs(fi));
             }
 
           if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_vector_set(work[MFIELD_IDX_DZ_EW], count[MFIELD_IDX_DZ_EW]++, fabs(fi));
             }
         }
     }
 
   assert(idx == w->nres);
 
-  fprintf(stderr, "\n");
+  /* loop through again and compute robust weights and the mean of the weights */
 
-  /* sort each residual vector */
-  for (i = 0; i < MFIELD_IDX_END; ++i)
-    {
-      if (count[i] > 0)
-        {
-          gsl_vector_view v1 = gsl_vector_subvector(work[i], 0, count[i]);     /* all residuals for sorting */
-          gsl_vector_view v2 = gsl_vector_subvector(work[i], p, count[i] - p); /* n - p largest residuals */
-
-          /* sort residuals of this type */
-          gsl_sort_vector(&v1.vector);
-
-          /* compute median of largest n - p residuals */
-          sigma[i] = gsl_stats_median_from_sorted_data(v2.vector.data, v2.vector.stride, v2.vector.size);
-          sigma[i] /= 0.6745;
-
-          if (i == MFIELD_IDX_X)
-            fprintf(stderr, "\t MAD sigma X     = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_Y)
-            fprintf(stderr, "\t MAD sigma Y     = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_Z)
-            fprintf(stderr, "\t MAD sigma Z     = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_F)
-            fprintf(stderr, "\t MAD sigma F     = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_DX_NS)
-            fprintf(stderr, "\t MAD sigma DX_NS = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_DY_NS)
-            fprintf(stderr, "\t MAD sigma DY_NS = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_DZ_NS)
-            fprintf(stderr, "\t MAD sigma DZ_NS = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_DX_EW)
-            fprintf(stderr, "\t MAD sigma DX_EW = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_DY_EW)
-            fprintf(stderr, "\t MAD sigma DY_EW = %.2f [nT]\n", sigma[i]);
-          else if (i == MFIELD_IDX_DZ_EW)
-            fprintf(stderr, "\t MAD sigma DZ_EW = %.2f [nT]\n", sigma[i]);
-        }
-      else
-        {
-          sigma[i] = 0.0;
-        }
-    }
-
-  /* apply weighting function to residuals to compute unscaled weights */
-  (w->robust_workspace_p->type->wfun)(f, wts);
-
-  /* now loop through residuals again and scale them by their MAD and tuning factor */
   idx = 0;
   for (i = 0; i < w->nsat; ++i)
     {
       magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      const double alpha = 1.0; /* constant to multiply sigma so that mean(weights) = 0.95 */
+      double sigma_X = alpha * gsl_rstat_sd(rstat_x[i]);
+      double sigma_Y = alpha * gsl_rstat_sd(rstat_y[i]);
+      double sigma_Z = alpha * gsl_rstat_sd(rstat_z[i]);
+      double sigma_F = alpha * gsl_rstat_sd(rstat_f[i]);
+
+      gsl_rstat_reset(rstat_x[i]);
+      gsl_rstat_reset(rstat_y[i]);
+      gsl_rstat_reset(rstat_z[i]);
+      gsl_rstat_reset(rstat_f[i]);
 
       for (j = 0; j < mptr->n; ++j)
         {
-          /* check if data point is discarded due to time interval */
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_X] * tune);
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_X));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_x[i]);
             }
 
           if (MAGDATA_ExistY(mptr->flags[j]))
             {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_Y] * tune);
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_Y));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_y[i]);
             }
 
           if (MAGDATA_ExistZ(mptr->flags[j]))
             {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_Z] * tune);
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_Z));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_z[i]);
             }
 
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
               MAGDATA_FitMF(mptr->flags[j]))
             {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_F] * tune);
-            }
-
-          if (MAGDATA_ExistDX_NS(mptr->flags[j]))
-            {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_DX_NS] * tune);
-            }
-
-          if (MAGDATA_ExistDY_NS(mptr->flags[j]))
-            {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_DY_NS] * tune);
-            }
-
-          if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
-            {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_DZ_NS] * tune);
-            }
-
-          if (MAGDATA_ExistDX_EW(mptr->flags[j]))
-            {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_DX_EW] * tune);
-            }
-
-          if (MAGDATA_ExistDY_EW(mptr->flags[j]))
-            {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_DY_EW] * tune);
-            }
-
-          if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
-            {
-              double *wj = gsl_vector_ptr(wts, idx++);
-              *wj /= (sigma[MFIELD_IDX_DZ_EW] * tune);
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_F));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_f[i]);
             }
         }
+
+      fprintf(stderr, "\t === SATELLITE %zu (robust sigma) ===\n", i);
+
+      if (gsl_rstat_n(rstat_x[i]) > 0)
+        fprintf(stderr, "\t sigma X     = %.2f [nT], Robust weight mean = %.4f\n", sigma_X, gsl_rstat_mean(rstat_x[i]));
+      if (gsl_rstat_n(rstat_y[i]) > 0)
+        fprintf(stderr, "\t sigma Y     = %.2f [nT], Robust weight mean = %.4f\n", sigma_Y, gsl_rstat_mean(rstat_y[i]));
+      if (gsl_rstat_n(rstat_z[i]) > 0)
+        fprintf(stderr, "\t sigma Z     = %.2f [nT], Robust weight mean = %.4f\n", sigma_Z, gsl_rstat_mean(rstat_z[i]));
+      if (gsl_rstat_n(rstat_f[i]) > 0)
+        fprintf(stderr, "\t sigma F     = %.2f [nT], Robust weight mean = %.4f\n", sigma_F, gsl_rstat_mean(rstat_f[i]));
     }
 
   assert(idx == w->nres);
 
-  for (i = 0; i < MFIELD_IDX_END; ++i)
-    gsl_vector_free(work[i]);
+  for (i = 0; i < w->nsat; ++i)
+    {
+      gsl_rstat_free(rstat_x[i]);
+      gsl_rstat_free(rstat_y[i]);
+      gsl_rstat_free(rstat_z[i]);
+      gsl_rstat_free(rstat_f[i]);
+    }
+
+  free(rstat_x);
+  free(rstat_y);
+  free(rstat_z);
+  free(rstat_f);
 
   return s;
+}
+
+static double
+huber(const double x)
+{
+  const double ax = fabs(x);
+
+  if (ax <= 1.0)
+    return 1.0;
+  else
+    return (1.0 / ax);
+}
+
+static double
+bisquare(const double x)
+{
+  if (fabs(x) <= 1.0)
+    {
+      double f = 1.0 - x*x;
+      return (f * f);
+    }
+  else
+    return 0.0;
 }
 
 static void

@@ -583,6 +583,79 @@ euler_nec2vfm(const size_t flags, const double alpha, const double beta,
 } /* euler_nec2vfm() */
 
 /*
+euler_apply_R3()
+  Apply 3D Euler rotation to a vector
+
+B_out = R3(alpha,beta,gamma) * B_in
+
+For ZYX convention,
+
+B_out = Rz(gamma) Ry(beta) Rx(alpha) B_in
+
+Inputs: flags - EULER_FLG_xxx
+                These flags can indicate derivatives to be taken,
+                and also Euler convention
+        alpha - Euler angle alpha (radians)
+        beta  - Euler angle beta (radians)
+        gamma - Euler angle gamma (radians)
+        B_in  - input vector
+        B_out - output vector
+
+Return: success or error
+
+Notes:
+1) In place transform is allowed (ie: B_in == B_out)
+*/
+int
+euler_apply_R3(const size_t flags, const double alpha, const double beta,
+               const double gamma, const double B_in[3], double B_out[3])
+{
+  double tmp_data[3];
+  gsl_vector_view out = gsl_vector_view_array(B_out, 3);
+  gsl_vector_view tmp = gsl_vector_view_array(tmp_data, 3);
+  int deriv_alpha = flags & EULER_FLG_DERIV_ALPHA;
+  int deriv_beta = flags & EULER_FLG_DERIV_BETA;
+  int deriv_gamma = flags & EULER_FLG_DERIV_GAMMA;
+
+  if (flags & EULER_FLG_RINV)
+    {
+      /* apply R_inv = [ 0 0 -1; 0 -1 0; -1 0 0 ] matrix to input vector */
+      tmp_data[0] = -B_in[2];
+      tmp_data[1] = -B_in[1];
+      tmp_data[2] = -B_in[0];
+    }
+  else
+    {
+      tmp_data[0] = B_in[0];
+      tmp_data[1] = B_in[1];
+      tmp_data[2] = B_in[2];
+    }
+
+  /* apply Euler rotations B_out = R_3 B_in */
+  if (flags & EULER_FLG_ZYZ)
+    {
+      /* ZYZ convention */
+      euler_apply_Rz(deriv_alpha, alpha, tmp_data, B_out);
+      euler_apply_Ry(deriv_beta, beta, B_out, B_out);
+      euler_apply_Rz(deriv_gamma, gamma, B_out, B_out);
+    }
+  else if (flags & EULER_FLG_ZYX)
+    {
+      /* ZYX convention */
+      euler_apply_Rx(deriv_alpha, alpha, tmp_data, B_out);
+      euler_apply_Ry(deriv_beta, beta, B_out, B_out);
+      euler_apply_Rz(deriv_gamma, gamma, B_out, B_out);
+    }
+  else
+    {
+      fprintf(stderr, "euler_vfm2nec: error: no Euler convention specified\n");
+      return -1;
+    }
+
+  return GSL_SUCCESS;
+}
+
+/*
 euler_Rq()
   Construct quaternion rotation matrix R_q; see
 Olsen et al, 2013, eq 3

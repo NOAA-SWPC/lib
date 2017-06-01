@@ -21,10 +21,12 @@
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
-#include <gsl/gsl_multifit_nlin.h>
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_deriv.h>
 #include <gsl/gsl_spline.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_multifit.h>
+#include <gsl/gsl_rstat.h>
 
 #include <satdata/satdata.h>
 #include <indices/indices.h>
@@ -34,145 +36,12 @@
 #include "magcal.h"
 #include "msynth.h"
 #include "track.h"
+#include "quat.h"
 
 #include "stage2_filter.c"
-
-/*
-correct_track()
-  Correct a track for possible (multiple) data jumps
-
-Inputs: fp_log - log file to record detected jumps
-        tol    - tolerance to detect a jump (nT)
-        offset - (input/output)
-                 on output,
-                   offset(:,0) = offsets to add to X VFM data
-                   offset(:,1) = offsets to add to Y VFM data
-                   offset(:,2) = offsets to add to Z VFM data
-                   offset(:,3) = offsets to add to F data
-        data   - satellite data
-        tptr   - track data
-*/
-
-int
-correct_track(FILE *fp_log, const double tol, gsl_matrix * offset, satdata_mag * data, track_data * tptr)
-{
-  int s = 0;
-  double alpha[4] = { 0.0, 0.0, 0.0, 0.0 };
-  size_t j;
-
-  for (j = 0; j < tptr->n - 1; ++j)
-    {
-      size_t didx = tptr->start_idx + j;
-      double dt = (data->t[didx + 1] - data->t[didx]) * 1.0e-3;
-      double *offset_F = gsl_matrix_ptr(offset, j, 3);
-      double *next_offset_F = gsl_matrix_ptr(offset, j + 1, 3);
-      double delta[4];
-      double B_VFM[4], B_VFM_next[4], B_model[4], B_model_next[4];
-
-      *offset_F += alpha[3];
-
-#if 0
-      if (fabs(dt) > 1.0)
-        continue; /* data gap */
-#endif
-
-      satdata_mag_model(didx, B_model, data);
-      satdata_mag_model(didx + 1, B_model_next, data);
-
-      B_VFM[3] = data->F[didx] + *offset_F - alpha[3];
-
-      B_VFM_next[3] = data->F[didx + 1] + *next_offset_F;
-
-      /* compute difference between adjacent samples and check for jump */
-      delta[3] = (B_VFM_next[3] - B_model_next[3]) - (B_VFM[3] - B_model[3]);
-
-      if (fabs(delta[3]) > tol)
-        {
-          /* jump detected */
-          alpha[3] -= delta[3];
-
-          fprintf(fp_log, "%ld %10.4f %10.4f %10.4f %10.4f %10.4f\n",
-                  satdata_epoch2timet(data->t[didx]),
-                  data->r[didx],
-                  data->latitude[didx],
-                  data->longitude[didx],
-                  data->qdlat[didx],
-                  delta[3]);
-        }
-    }
-
-  return s;
-}
-
-int
-fix_track_jumps(const char *filename, satdata_mag *data, track_workspace *w)
-{
-  int s = 0;
-  const double tol = 4.0; /* maximum allowed jump in nT for any vector component between adjacent samples */
-  const char *jump_file = "jumps.txt";
-  FILE *fp, *fp_jumps;
-  size_t i;
-
-  fp = fopen(filename, "w");
-  if (!fp)
-    {
-      fprintf(stderr, "fix_track_jumps: unable to open %s: %s\n",
-              filename, strerror(errno));
-      return -1;
-    }
-
-  fp_jumps = fopen(jump_file, "w");
-  if (!fp_jumps)
-    {
-      fprintf(stderr, "fix_track_jumps: unable to open %s: %s\n",
-              jump_file, strerror(errno));
-      return -1;
-    }
-
-  i = 1;
-  fprintf(fp, "# Field %zu: timestamp\n", i++);
-  fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: field model F (nT)\n", i++);
-  fprintf(fp, "# Field %zu: original F (nT)\n", i++);
-  fprintf(fp, "# Field %zu: corrected F (nT)\n", i++);
-
-  for (i = 0; i < w->n; ++i)
-    {
-      track_data *tptr = &(w->tracks[i]);
-      gsl_matrix *offset = gsl_matrix_calloc(tptr->n, 4);
-      size_t j;
-
-      s = correct_track(fp_jumps, tol, offset, data, tptr);
-      if (s)
-        return s;
-
-      for (j = 0; j < tptr->n; ++j)
-        {
-          size_t didx = tptr->start_idx + j;
-          time_t unix_time = satdata_epoch2timet(data->t[didx]);
-          double offset_F = gsl_matrix_get(offset, j, 3);
-          double B_model[4];
-
-          satdata_mag_model(didx, B_model, data);
-
-          fprintf(fp, "%ld %.4f %.4f %.4f %.4f\n",
-                  unix_time,
-                  data->qdlat[didx],
-                  B_model[3],
-                  data->F[didx],
-                  data->F[didx] + offset_F);
-        }
-
-      fprintf(fp, "\n\n");
-
-      gsl_matrix_free(offset);
-    }
-
-  fclose(fp);
-  fclose(fp_jumps);
-
-  return s;
-}
+#include "stage2_jumps.c"
+#include "stage2_quaternions.c"
+#include "test_vfm.c"
 
 /*
 stage2_scalar_calibrate()
@@ -336,10 +205,28 @@ print_residuals(const char *filename, satdata_mag *data, track_workspace *w)
   return s;
 }
 
+static int
+stage2_vfm2nec(satdata_mag *data)
+{
+  size_t i;
+
+  for (i = 0; i < data->n; ++i)
+    {
+      double *B_VFM = &(data->B_VFM[3*i]);
+      double *B_NEC = &(data->B[3*i]);
+      double *q = &(data->q[4*i]);
+
+      quat_apply(q, B_VFM, B_NEC);
+    }
+
+  return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
   const char *track_file = "track_data.dat";
+  const char *quat_file = "stage2_quat.dat";
   char *outfile = NULL;
   char *param_file = NULL;
   char *res_file = NULL;
@@ -428,12 +315,6 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-#if 1
-  fprintf(stderr, "main: fixing track jumps...");
-  fix_track_jumps(track_file, data, track_p);
-  fprintf(stderr, "done (data written to %s)\n", track_file);
-#endif
-
   fprintf(stderr, "main: filtering tracks for quiet periods...");
   gettimeofday(&tv0, NULL);
   stage2_filter(track_p, data);
@@ -471,6 +352,34 @@ main(int argc, char *argv[])
   magcal_apply(coef, data);
   fprintf(stderr, "done\n");
 
+  fprintf(stderr, "main: correcting quaternions for satellite drift...");
+  stage2_correct_quaternions(quat_file, data, track_p);
+  fprintf(stderr, "done (data written to %s)\n", quat_file);
+
+#if 1 /*XXX*/
+  fprintf(stderr, "main: fixing track jumps...");
+  stage2_correct_jumps(data);
+  fprintf(stderr, "done\n");
+
+  stage2_scalar_calibrate(-1, -1, data, track_p, coef, &rms);
+
+  fprintf(stderr, "main: applying final calibration parameters to data...");
+  magcal_apply(coef, data);
+  fprintf(stderr, "done\n");
+
+  fprintf(stderr, "main: computing B_NEC...");
+  stage2_vfm2nec(data);
+  fprintf(stderr, "done\n");
+#endif
+
+#if 0
+  /*XXX*/
+  {
+    test_vfm(data, track_p);
+    exit(1);
+  }
+#endif
+
   if (param_file)
     {
       FILE *fp = fopen(param_file, "w");
@@ -489,6 +398,13 @@ main(int argc, char *argv[])
     }
 
 #endif
+
+  if (outfile)
+    {
+      fprintf(stderr, "main: writing data to %s...", outfile);
+      satdata_dmsp_write(1, outfile, data);
+      fprintf(stderr, "done\n");
+    }
 
   gsl_vector_free(coef);
   track_free(track_p);
