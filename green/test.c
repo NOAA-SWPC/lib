@@ -1,3 +1,9 @@
+/*
+ * test.c
+ *
+ * This program tests for orthogonality of the Green's functions
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -6,6 +12,8 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_matrix.h>
+#include <gsl/gsl_vector.h>
+#include <gsl/gsl_blas.h>
 
 #include "common.h"
 #include "green.h"
@@ -13,10 +21,11 @@
 int
 main()
 {
-  const char *outfile = "mat/green.dat";
   const size_t nmax = 60;
   const size_t mmax = 60;
-  const size_t npoints = 500000;
+  const size_t npoints = 100000;
+  const double rmin = R_EARTH_KM;
+  const double rmax = rmin + 500.0;
   green_workspace *green_p = green_alloc(nmax, mmax, R_EARTH_KM);
   size_t nnm = green_nnm(green_p);
   double *r = malloc(npoints * sizeof(double));
@@ -28,7 +37,6 @@ main()
   gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
   size_t i;
   struct timeval tv0, tv1;
-  FILE *fp;
 
   fprintf(stderr, "main: nmax = %zu\n", nmax);
   fprintf(stderr, "main: mmax = %zu\n", mmax);
@@ -38,7 +46,7 @@ main()
 
   for (i = 0; i < npoints; ++i)
     {
-      double r_i = gsl_rng_uniform(rng_p) * 6500.0;
+      double r_i = gsl_rng_uniform(rng_p) * (rmax - rmin) + rmin;
       double theta_i = gsl_rng_uniform(rng_p) * M_PI;
       double phi_i = gsl_rng_uniform(rng_p) * 2.0 * M_PI;
 
@@ -66,29 +74,39 @@ main()
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-  fp = fopen(outfile, "w");
-  fprintf(stderr, "writing Green's functions to %s...", outfile);
+  fprintf(stderr, "main: testing orthogonality of Green's functions...");
   gettimeofday(&tv0, NULL);
 
-  gsl_matrix_fwrite(fp, dX);
-  gsl_matrix_fwrite(fp, dY);
-  gsl_matrix_fwrite(fp, dZ);
+  for (i = 0; i < npoints; ++i)
+    {
+      const double eps = 1.0e-10;
+      const double eps2 = 1.0e-8;
+      gsl_vector_view X = gsl_matrix_row(dX, i);
+      gsl_vector_view Y = gsl_matrix_row(dY, i);
+      gsl_vector_view Z = gsl_matrix_row(dZ, i);
+      double XY, XZ, YZ;
+
+      if (theta[i] < 1.0e-2 || theta[i] > M_PI - 1.0e-2)
+        continue; /* precision is lost near the poles */
+
+      gsl_blas_ddot(&X.vector, &Y.vector, &XY);
+      gsl_blas_ddot(&X.vector, &Z.vector, &XZ);
+      gsl_blas_ddot(&Y.vector, &Z.vector, &YZ);
+
+      if (fabs(XY) > eps || fabs(XZ) > eps2 || fabs(YZ) > eps)
+        {
+          printf("%f %f %f %e %e %e\n",
+                 r[i],
+                 90.0 - theta[i] * 180.0 / M_PI,
+                 phi[i] * 180.0 / M_PI,
+                 XY,
+                 XZ,
+                 YZ);
+        }
+    }
 
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-  fclose(fp);
-
-  fp = fopen(outfile, "r");
-  fprintf(stderr, "reading Green's functions from %s...", outfile);
-  gettimeofday(&tv0, NULL);
-
-  gsl_matrix_fread(fp, dX);
-  gsl_matrix_fread(fp, dY);
-  gsl_matrix_fread(fp, dZ);
-
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-  fclose(fp);
 
   green_free(green_p);
   free(r);

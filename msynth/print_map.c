@@ -66,7 +66,7 @@ print_map(const char *filename, const double epoch, msynth_workspace *w)
 
           msynth_eval(epoch, r, theta, phi, B, w);
 
-          msynth_eval2(epoch, r, theta, phi, B_mf, B_sv, B_sa, w);
+          msynth_eval2(epoch, c, theta, phi, B_mf, B_sv, B_sa, w);
 
           fprintf(fp, "%f %f %f %f %f %f %f %f\n",
                   lon,
