@@ -11,13 +11,11 @@
  * 4. mfield_alloc          - allocate mfield_workspace
  * 5. mfield_init           - initialize various internal parameters
  *                            (time scaling, etc)
- * 6. mfield_set_damping    - set coefficent damping parameters (requires
- *                            time scaling parameters)
- * 7. mfield_calc_linear    - build linear LS matrix and solve system
- * 8. mfield_calc_nonlinear - solve nonlinear LS system; the initial
+ * 6. mfield_calc_linear    - build linear LS matrix and solve system
+ * 7. mfield_calc_nonlinear - solve nonlinear LS system; the initial
  *                            guess for the nonlinear procedure is the
  *                            linearized solution
- * 9. mfield_free
+ * 8. mfield_free
  */
 
 #include <stdio.h>
@@ -491,6 +489,7 @@ mfield_init_params(mfield_parameters * params)
   params->scale_time = 0;
   params->regularize = 0;
   params->use_weights = 0;
+  params->lambda_sa = 0.0;
   params->weight_X = 0.0;
   params->weight_Y = 0.0;
   params->weight_Z = 0.0;
@@ -575,12 +574,13 @@ int
 mfield_init(mfield_workspace *w)
 {
   int s = 0;
+  const mfield_parameters *params = &(w->params);
   size_t i, j;
 
   /* initialize t_mu and t_sigma */
   mfield_data_init(w->data_workspace_p);
 
-  if (w->params.scale_time)
+  if (params->scale_time)
     {
       w->t_mu = w->data_workspace_p->t_mu;
       w->t_sigma = w->data_workspace_p->t_sigma;
@@ -594,6 +594,11 @@ mfield_init(mfield_workspace *w)
 
   /* find time of first available data in CDF_EPOCH */
   w->t0_data = w->data_workspace_p->t0_data;
+
+  /* convert to dimensionless units with time scale */
+  w->lambda_mf = 0.0;
+  w->lambda_sv = params->lambda_sv / w->t_sigma;
+  w->lambda_sa = params->lambda_sa / (w->t_sigma * w->t_sigma);
 
   /* initialize spatial weighting histogram and time scaling */
   for (i = 0; i < w->nsat; ++i)
@@ -652,30 +657,6 @@ mfield_init(mfield_workspace *w)
 
   return s;
 } /* mfield_init() */
-
-/*
-mfield_set_damping()
-  Set damping parameters for SV, SA coefficients
-
-Inputs: lambda_sv - damping parameter for SV coefficients (years)
-        lambda_sa - damping parameter for SA coefficients (years^2)
-
-Notes:
-1) The above units ensure the Tikhonov term ||Lg||^2 has units of nT^2,
-similar to the residual vector term ||f||^2
-*/
-
-int
-mfield_set_damping(const double lambda_sv, const double lambda_sa,
-                   mfield_workspace *w)
-{
-  /* convert to dimensionless units with time scale */
-  w->lambda_mf = 0.0;
-  w->lambda_sv = lambda_sv / w->t_sigma;
-  w->lambda_sa = lambda_sa / (w->t_sigma * w->t_sigma);
-
-  return GSL_SUCCESS;
-} /* mfield_set_damping() */
 
 /*
 mfield_calc_uncertainties()

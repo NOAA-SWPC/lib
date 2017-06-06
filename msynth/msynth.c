@@ -242,31 +242,42 @@ msynth_eval2(const double t, const double r, const double theta,
 {
   int s = 0;
   const size_t epoch_idx = msynth_epoch_idx(t, w);
-  const double epoch = w->epochs[epoch_idx];
   const double *g = w->c + epoch_idx * w->p;
   const double *dg = g + w->sv_offset;
   const double *ddg = g + w->sa_offset;
-  gsl_vector_view dX = gsl_vector_view_array(w->dX, w->nnm);
-  gsl_vector_view dY = gsl_vector_view_array(w->dY, w->nnm);
-  gsl_vector_view dZ = gsl_vector_view_array(w->dZ, w->nnm);
-  gsl_vector_const_view gv = gsl_vector_const_view_array(g, w->nnm);
-  gsl_vector_const_view dgv = gsl_vector_const_view_array(dg, w->nnm);
-  gsl_vector_const_view ddgv = gsl_vector_const_view_array(ddg, w->nnm);
+  size_t n;
 
-  /* compute Green's functions for this point */
+  for (n = 0; n < 3; ++n)
+    {
+      B_mf[n] = 0.0;
+      B_sv[n] = 0.0;
+      B_sa[n] = 0.0;
+    }
+
   s += msynth_green(r, theta, phi, w);
 
-  gsl_blas_ddot(&gv.vector, &dX.vector, &(B_mf[0]));
-  gsl_blas_ddot(&gv.vector, &dY.vector, &(B_mf[1]));
-  gsl_blas_ddot(&gv.vector, &dZ.vector, &(B_mf[2]));
+  for (n = w->eval_nmin; n <= w->eval_nmax; ++n)
+    {
+      int ni = (int) n;
+      int m;
 
-  gsl_blas_ddot(&dgv.vector, &dX.vector, &(B_sv[0]));
-  gsl_blas_ddot(&dgv.vector, &dY.vector, &(B_sv[1]));
-  gsl_blas_ddot(&dgv.vector, &dZ.vector, &(B_sv[2]));
+      for (m = -ni; m <= ni; ++m)
+        {
+          size_t cidx = msynth_nmidx(n, m, w);
 
-  gsl_blas_ddot(&ddgv.vector, &dX.vector, &(B_sa[0]));
-  gsl_blas_ddot(&ddgv.vector, &dY.vector, &(B_sa[1]));
-  gsl_blas_ddot(&ddgv.vector, &dZ.vector, &(B_sa[2]));
+          B_mf[0] += g[cidx] * w->dX[cidx];
+          B_mf[1] += g[cidx] * w->dY[cidx];
+          B_mf[2] += g[cidx] * w->dZ[cidx];
+
+          B_sv[0] += dg[cidx] * w->dX[cidx];
+          B_sv[1] += dg[cidx] * w->dY[cidx];
+          B_sv[2] += dg[cidx] * w->dZ[cidx];
+
+          B_sa[0] += ddg[cidx] * w->dX[cidx];
+          B_sa[1] += ddg[cidx] * w->dY[cidx];
+          B_sa[2] += ddg[cidx] * w->dZ[cidx];
+        }
+    }
 
   return s;
 }

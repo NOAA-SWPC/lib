@@ -35,6 +35,7 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
 {
   int s = GSL_SUCCESS;
   mfield_workspace *w = (mfield_workspace *) params;
+  const mfield_parameters *mparams = &(w->params);
   size_t i, j;
   struct timeval tv0, tv1;
 
@@ -50,7 +51,7 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
   for (i = 0; i < w->nsat; ++i)
     {
       magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
-      int fit_euler = w->params.fit_euler && (mptr->global_flags & MAGDATA_GLOBFLG_EULER);
+      int fit_euler = mparams->fit_euler && (mptr->global_flags & MAGDATA_GLOBFLG_EULER);
 
 #pragma omp parallel for private(j)
       for (j = 0; j < mptr->n; ++j)
@@ -204,6 +205,15 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
         } /* for (j = 0; j < mptr->n; ++j) */
     }
 
+  if (mparams->regularize && !mparams->synth_data)
+    {
+      /* store L*x in bottom of f for regularization */
+      gsl_vector_view v = gsl_vector_subvector(f, w->nres, w->p);
+
+      gsl_vector_memcpy(&v.vector, x);
+      gsl_vector_mul(&v.vector, w->lambda_diag);
+    }
+
   gettimeofday(&tv1, NULL);
 
 #if DEBUG
@@ -268,6 +278,199 @@ mfield_calc_Wf(const gsl_vector *x, void *params, gsl_vector *f)
   printv_octave(x, "x");
   printv_octave(w->wts_final, "wts");
   exit(1);
+#endif
+
+  return GSL_SUCCESS;
+}
+
+/*
+mfield_calc_fvv()
+  Construct residual vector f(x) using OpenMP parallel
+processing to compute all the Green's functions quickly.
+
+Inputs: x      - model coefficients
+        params - parameters
+        f      - (output) residual vector
+                 if set to NULL, the residual histograms
+                 w->hf and w->hz are updated with residuals
+
+Notes:
+1) For the histograms, w->wts_final must be initialized prior
+to calling this function
+*/
+
+static int
+mfield_calc_fvv(const gsl_vector *x, const gsl_vector * v, void *params, gsl_vector *fvv)
+{
+  int s = GSL_SUCCESS;
+  mfield_workspace *w = (mfield_workspace *) params;
+  const mfield_parameters *mparams = &(w->params);
+  size_t i, j;
+  struct timeval tv0, tv1;
+
+#if DEBUG
+  fprintf(stderr, "mfield_calc_fvv: entering function...\n");
+#endif
+
+  gettimeofday(&tv0, NULL);
+
+  gsl_vector_set_zero(fvv);
+
+  for (i = 0; i < w->nsat; ++i)
+    {
+      magdata *mptr = mfield_data_ptr(i, w->data_workspace_p);
+      int fit_euler = mparams->fit_euler && (mptr->global_flags & MAGDATA_GLOBFLG_EULER);
+
+#pragma omp parallel for private(j)
+      for (j = 0; j < mptr->n; ++j)
+        {
+          int thread_id = omp_get_thread_num();
+          size_t ridx = mptr->index[j]; /* residual index for this data point */
+          double Dvv[3] = { 0.0, 0.0, 0.0 }; /* second directional derivative of vector residuals */
+
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          if (fit_euler)
+            {
+              /*
+               * get the Euler angles for this satellite and time period,
+               * and apply rotation
+               */
+              size_t euler_idx = mfield_euler_idx(i, mptr->t[j], w);
+              double alpha = gsl_vector_get(x, euler_idx);
+              double beta = gsl_vector_get(x, euler_idx + 1);
+              double gamma = gsl_vector_get(x, euler_idx + 2);
+              double v_alpha = gsl_vector_get(v, euler_idx);
+              double v_beta = gsl_vector_get(v, euler_idx + 1);
+              double v_gamma = gsl_vector_get(v, euler_idx + 2);
+              double *q = &(mptr->q[4*j]);
+              double B_vfm[3], B_nec[3];
+              size_t k;
+
+              B_vfm[0] = mptr->Bx_vfm[j];
+              B_vfm[1] = mptr->By_vfm[j];
+              B_vfm[2] = mptr->Bz_vfm[j];
+
+              /* compute diagonal terms first */
+
+              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV2_ALPHA, alpha, beta, gamma, q, B_vfm, B_nec);
+              for (k = 0; k < 3; ++k)
+                Dvv[k] += v_alpha * v_alpha * B_nec[k];
+
+              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV2_BETA, alpha, beta, gamma, q, B_vfm, B_nec);
+              for (k = 0; k < 3; ++k)
+                Dvv[k] += v_beta * v_beta * B_nec[k];
+
+              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV2_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
+              for (k = 0; k < 3; ++k)
+                Dvv[k] += v_gamma * v_gamma * B_nec[k];
+
+              /* now the cross terms */
+
+              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV_ALPHA | EULER_FLG_DERIV_BETA, alpha, beta, gamma, q, B_vfm, B_nec);
+              for (k = 0; k < 3; ++k)
+                Dvv[k] += 2.0 * v_alpha * v_beta * B_nec[k];
+
+              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV_ALPHA | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
+              for (k = 0; k < 3; ++k)
+                Dvv[k] += 2.0 * v_alpha * v_gamma * B_nec[k];
+
+              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV_BETA | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
+              for (k = 0; k < 3; ++k)
+                Dvv[k] += 2.0 * v_beta * v_gamma * B_nec[k];
+            }
+
+          if (mptr->flags[j] & MAGDATA_FLG_X)
+            {
+              gsl_vector_set(fvv, ridx, Dvv[0]);
+              ++ridx;
+            }
+
+          if (mptr->flags[j] & MAGDATA_FLG_Y)
+            {
+              gsl_vector_set(fvv, ridx, Dvv[1]);
+              ++ridx;
+            }
+
+          if (mptr->flags[j] & MAGDATA_FLG_Z)
+            {
+              gsl_vector_set(fvv, ridx, Dvv[2]);
+              ++ridx;
+            }
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) &&
+              MAGDATA_FitMF(mptr->flags[j]))
+            {
+              ++ridx;
+            }
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DX_EW))
+            {
+              ++ridx;
+            }
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DY_NS | MAGDATA_FLG_DY_EW))
+            {
+              ++ridx;
+            }
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DZ_EW))
+            {
+              ++ridx;
+            }
+        } /* for (j = 0; j < mptr->n; ++j) */
+    }
+
+  gettimeofday(&tv1, NULL);
+
+#if DEBUG
+  fprintf(stderr, "mfield_calc_fvv: leaving function (%g seconds)\n", time_diff(tv0, tv1));
+#endif
+
+  return s;
+}
+
+/*
+mfield_calc_Wfvv()
+  Compute weighted residuals:
+
+fvv~(x) = sqrt(W) fvv(x)
+
+Inputs: x      - model parameters
+        v      - velocity vector
+        params - parameters
+        fvv    - (output) fvv~(x)
+*/
+
+static int
+mfield_calc_Wfvv(const gsl_vector *x, const gsl_vector *v, void *params, gsl_vector *fvv)
+{
+  int s;
+  mfield_workspace *w = (mfield_workspace *) params;
+  size_t i;
+  struct timeval tv0, tv1;
+
+#if DEBUG
+  fprintf(stderr, "mfield_calc_Wfvv: entering function...\n");
+#endif
+  gettimeofday(&tv0, NULL);
+
+  s = mfield_calc_fvv(x, v, params, fvv);
+  if (s)
+    return s;
+
+  for (i = 0; i < w->nres; ++i)
+    {
+      double wi = gsl_vector_get(w->wts_final, i);
+      double *fi = gsl_vector_ptr(fvv, i);
+
+      *fi *= sqrt(wi);
+    }
+
+  gettimeofday(&tv1, NULL);
+#if DEBUG
+  fprintf(stderr, "mfield_calc_Wfvv: leaving function (%g seconds)\n", time_diff(tv0, tv1));
 #endif
 
   return GSL_SUCCESS;

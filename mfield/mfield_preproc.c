@@ -907,22 +907,35 @@ subtract_RC(const char *filename, satdata_mag *data, track_workspace *w)
   return s;
 }
 
-/*XXX*/
+/*
+mfield_fill_polar_gap()
+  Fill polar gap with random points
+
+Inputs: polar_gap - size of polar gap in degrees
+        params    - parameters
+*/
+
 static magdata *
-mfield_fill_polar_gap(preprocess_parameters * params)
+mfield_fill_polar_gap(const double polar_gap, preprocess_parameters * params)
 {
   const size_t N = 20000;
-  const double inclination = 87.0 * M_PI / 180.0;
+  const double inclination = (90.0 - polar_gap) * M_PI / 180.0;
+  const double epoch = 2012.5;
+  const time_t unix_time = 1338508800; /* Jun 1 2012 00:00:00 UTC */
   magdata *mdata = magdata_alloc(2 * N, R_EARTH_KM);
   size_t i, j;
   magdata_datum datum;
   gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
+  msynth_workspace *core_p = msynth_swarm_read(MSYNTH_CHAOS_FILE);
   msynth_workspace *crust_p = msynth_mf7_read(MSYNTH_MF7_FILE);
   apex_workspace *apex_p = apex_alloc(2015);
 
   magdata_datum_init(&datum);
+  msynth_set(1, 15, core_p);
   msynth_set(16, 133, crust_p);
 
+  datum.t = satdata_timet2epoch(unix_time);
+  datum.t_ns = satdata_timet2epoch(unix_time);
   datum.r = R_EARTH_KM + 450.0;
   datum.r_ns = R_EARTH_KM + 450.0;
   datum.satdir = 1;
@@ -932,61 +945,94 @@ mfield_fill_polar_gap(preprocess_parameters * params)
 
   for (i = 0; i < N; ++i)
     {
-      double B_nec[4], B_nec_grad[4];
+      double B_main[4], B_crust[4];
+      double B_main_grad[4], B_crust_grad[4];
       double alon, alat;
 
+      for (j = 0; j < 4; ++j)
+        {
+          B_main[j] = B_crust[j] = 0.0;
+          B_main_grad[j] = B_crust_grad[j] = 0.0;
+        }
+
       /* compute random point at north pole */
+
       datum.theta = gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
       datum.phi = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
-      msynth_eval(2015.0, datum.r, datum.theta, datum.phi, B_nec, crust_p);
-
       datum.theta_ns = gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
       datum.phi_ns = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
-      msynth_eval(2015.0, datum.r_ns, datum.theta_ns, datum.phi_ns, B_nec_grad, crust_p);
+
+      if (params->subtract_B_main == 0)
+        {
+          msynth_eval(epoch, datum.r, datum.theta, datum.phi, B_main, core_p);
+          msynth_eval(epoch, datum.r_ns, datum.theta_ns, datum.phi_ns, B_main_grad, core_p);
+        }
+
+      if (params->subtract_B_crust == 0)
+        {
+          msynth_eval(epoch, datum.r, datum.theta, datum.phi, B_crust, crust_p);
+          msynth_eval(epoch, datum.r_ns, datum.theta_ns, datum.phi_ns, B_crust_grad, crust_p);
+        }
+
+      for (j = 0; j < 3; ++j)
+        {
+          datum.B_nec[j] = B_main[j] + B_crust[j];
+          datum.B_nec_ns[j] = B_main_grad[j] + B_crust_grad[j];
+        }
+
+      datum.F = gsl_hypot3(datum.B_nec[0], datum.B_nec[1], datum.B_nec[2]);
+      datum.F_ns = gsl_hypot3(datum.B_nec_ns[0], datum.B_nec_ns[1], datum.B_nec_ns[2]);
 
       apex_transform(datum.theta, datum.phi, datum.r * 1.0e3, &alon, &alat,
                      &(datum.qdlat), NULL, NULL, NULL, apex_p);
       apex_transform(datum.theta_ns, datum.phi_ns, datum.r_ns * 1.0e3, &alon, &alat,
                      &(datum.qdlat_ns), NULL, NULL, NULL, apex_p);
 
-      datum.F = B_nec[3];
-      datum.F_ns = B_nec_grad[3];
-
-      for (j = 0; j < 3; ++j)
-        {
-          datum.B_nec[j] = B_nec[j];
-          datum.B_nec_ns[j] = B_nec_grad[j];
-        }
-
       magdata_add(&datum, mdata);
+
+      for (j = 0; j < 4; ++j)
+        {
+          B_main[j] = B_crust[j] = 0.0;
+          B_main_grad[j] = B_crust_grad[j] = 0.0;
+        }
 
       /* compute random point at south pole */
       datum.theta = M_PI - gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
       datum.phi = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
-      msynth_eval(2015.0, datum.r, datum.theta, datum.phi, B_nec, crust_p);
-
       datum.theta_ns = M_PI - gsl_rng_uniform(rng_p) * (M_PI / 2.0 - inclination);
       datum.phi_ns = M_PI * (2.0*gsl_rng_uniform(rng_p) - 1.0);
-      msynth_eval(2015.0, datum.r_ns, datum.theta_ns, datum.phi_ns, B_nec_grad, crust_p);
+
+      if (params->subtract_B_main == 0)
+        {
+          msynth_eval(epoch, datum.r, datum.theta, datum.phi, B_main, core_p);
+          msynth_eval(epoch, datum.r_ns, datum.theta_ns, datum.phi_ns, B_main_grad, core_p);
+        }
+
+      if (params->subtract_B_crust == 0)
+        {
+          msynth_eval(epoch, datum.r, datum.theta, datum.phi, B_crust, crust_p);
+          msynth_eval(epoch, datum.r_ns, datum.theta_ns, datum.phi_ns, B_crust_grad, crust_p);
+        }
+
+      for (j = 0; j < 3; ++j)
+        {
+          datum.B_nec[j] = B_main[j] + B_crust[j];
+          datum.B_nec_ns[j] = B_main_grad[j] + B_crust_grad[j];
+        }
+
+      datum.F = gsl_hypot3(datum.B_nec[0], datum.B_nec[1], datum.B_nec[2]);
+      datum.F_ns = gsl_hypot3(datum.B_nec_ns[0], datum.B_nec_ns[1], datum.B_nec_ns[2]);
 
       apex_transform(datum.theta, datum.phi, datum.r * 1.0e3, &alon, &alat,
                      &(datum.qdlat), NULL, NULL, NULL, apex_p);
       apex_transform(datum.theta_ns, datum.phi_ns, datum.r_ns * 1.0e3, &alon, &alat,
                      &(datum.qdlat_ns), NULL, NULL, NULL, apex_p);
-
-      datum.F = B_nec[3];
-      datum.F_ns = B_nec_grad[3];
-
-      for (j = 0; j < 3; ++j)
-        {
-          datum.B_nec[j] = B_nec[j];
-          datum.B_nec_ns[j] = B_nec_grad[j];
-        }
 
       magdata_add(&datum, mdata);
     }
 
   apex_free(apex_p);
+  msynth_free(core_p);
   msynth_free(crust_p);
   gsl_rng_free(rng_p);
 
@@ -1094,7 +1140,7 @@ print_help(char *argv[])
   fprintf(stderr, "\t --euler_file2     | -f euler_file2            - Euler angles file 2 (for E/W gradients)\n");
   fprintf(stderr, "\t --output_file     | -o output_file            - binary output data file (magdata format)\n");
   fprintf(stderr, "\t --config_file     | -C config_file            - configuration file\n");
-  fprintf(stderr, "\t --polar_gap       | -p                        - fill random points in polar gap with MF7\n");
+  fprintf(stderr, "\t --polar_gap       | -p polar_gap              - fill random points in polar gap given by argument in degrees\n");
 }
 
 int
@@ -1118,7 +1164,7 @@ main(int argc, char *argv[])
   size_t gradient_ns = 0;    /* number of seconds between N/S gradient points */
   size_t magdata_flags = 0;
   size_t magdata_flags2 = 0;
-  int fill_polar_gap = 0;
+  double polar_gap = -1.0;
 
   /* initialize parameters */
   params.flag_rms = 1;
@@ -1169,7 +1215,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:c:C:d:e:f:g:o:ps:t:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:c:C:d:e:f:g:o:p:s:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -1231,7 +1277,7 @@ main(int argc, char *argv[])
             break;
 
           case 'p':
-            fill_polar_gap = 1;
+            polar_gap = atof(optarg);
             break;
 
           default:
@@ -1253,10 +1299,10 @@ main(int argc, char *argv[])
   if (status)
     exit(1);
 
-  if (fill_polar_gap)
+  if (polar_gap > 0.0)
     {
       fprintf(stderr, "main: computing polar gap points...");
-      mdata = mfield_fill_polar_gap(&params);
+      mdata = mfield_fill_polar_gap(polar_gap, &params);
       fprintf(stderr, "done\n");
 
       if (output_file)

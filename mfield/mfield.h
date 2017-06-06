@@ -22,7 +22,7 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_HIGH_LAT_ONLY 1
+#define MFIELD_SYNTH_HIGH_LAT_ONLY 0
 
 /* fit external field model to data */
 #define MFIELD_FIT_EXTFIELD    0
@@ -69,8 +69,11 @@ typedef struct
   int fit_ext;                          /* fit external field correction */
 
   int scale_time;                       /* scale time into dimensionless units */
-  int regularize;                       /* regularize the solution vector */
   int use_weights;                      /* use weights in the fitting */
+
+  int regularize;                       /* regularize the solution vector */
+  double lambda_sv;                     /* secular variation damping factor */
+  double lambda_sa;                     /* secular acceleration damping factor */
 
   double weight_X;                      /* relative weighting for X component */
   double weight_Y;                      /* relative weighting for Y component */
@@ -164,7 +167,8 @@ typedef struct
   gsl_multifit_nlinear_workspace *multifit_nlinear_p;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
   size_t ndata;            /* number of unique data points in LS system */
-  size_t nres;             /* number of residuals to minimize */
+  size_t nres_tot;         /* total number of residuals to minimize, including regularization terms */
+  size_t nres;             /* number of residuals to minimize (data only) */
   size_t nres_vec;         /* number of vector residuals to minimize */
   size_t nres_vec_grad;    /* number of vector gradient residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
@@ -236,8 +240,6 @@ typedef struct
 mfield_workspace *mfield_alloc(const mfield_parameters *params);
 void mfield_free(mfield_workspace *w);
 int mfield_init_params(mfield_parameters * params);
-int mfield_set_damping(const double lambda_sv, const double lambda_sa,
-                       mfield_workspace *w);
 mfield_workspace *mfield_copy(const mfield_workspace *w);
 int mfield_init(mfield_workspace *w);
 int mfield_calc_linear(gsl_vector *c, mfield_workspace *w);

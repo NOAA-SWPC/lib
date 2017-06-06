@@ -142,25 +142,6 @@ mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w)
   if (!params->use_weights)
     gsl_vector_set_all(w->wts_final, 1.0);
 
-  if (params->regularize && !params->synth_data)
-    {
-      fprintf(stderr, "mfield_calc_nonlinear: regularizing least squares system...");
-
-      /* compute diag(L) */
-      mfield_nonlinear_regularize(w->lambda_diag, w);
-
-      /* compute L^T L */
-      gsl_vector_memcpy(w->LTL, w->lambda_diag);
-      gsl_vector_mul(w->LTL, w->lambda_diag);
-
-      fprintf(stderr, "done\n");
-    }
-  else
-    {
-      gsl_vector_set_all(w->lambda_diag, 0.0);
-      gsl_vector_set_all(w->LTL, 0.0);
-    }
-
 #if !OLD_FDF
 
   s = mfield_calc_nonlinear_multilarge(c, w);
@@ -238,21 +219,26 @@ static int
 mfield_calc_nonlinear_multilarge(const gsl_vector *c, mfield_workspace *w)
 {
   int s = 0;
+  const mfield_parameters *params = &(w->params);
   const size_t max_iter = 50;     /* maximum iterations */
   const double xtol = 1.0e-6;
   const double gtol = 1.0e-6;
   const double ftol = 1.0e-6;
   int info;
   const size_t p = w->p;          /* number of coefficients */
-  const size_t n = w->nres;       /* number of residuals */
+  size_t n;                       /* number of residuals */
   gsl_multilarge_nlinear_fdf fdf;
   struct timeval tv0, tv1;
   double res0;                    /* initial residual */
   gsl_vector *f;
 
+  n = w->nres;
+  if (params->regularize == 1 && !params->synth_data)
+    n += p;
+
   fdf.f = mfield_calc_Wf;
   fdf.df = mfield_calc_df2;
-  fdf.fvv = NULL;
+  fdf.fvv = mfield_calc_Wfvv;
   fdf.n = n;
   fdf.p = p;
   fdf.params = w;
@@ -273,6 +259,7 @@ mfield_calc_nonlinear_multilarge(const gsl_vector *c, mfield_workspace *w)
       gsl_matrix *JTJ = w->JTJ_vec;
       gsl_vector *JTf = w->nlinear_workspace_p->g;
       size_t N = JTJ->size1;
+      gsl_vector_view diag = gsl_matrix_diagonal(JTJ);
       gsl_permutation *perm = gsl_permutation_alloc(N);
       gsl_matrix *L = gsl_matrix_alloc(N, N); /* Cholesky factor */
       gsl_vector *work = gsl_vector_alloc(3 * N);
@@ -284,6 +271,9 @@ mfield_calc_nonlinear_multilarge(const gsl_vector *c, mfield_workspace *w)
       mfield_calc_Wf(w->c, w, w->wfvec);
       mfield_calc_df2(CblasTrans, w->c, w->wfvec, w, JTf, NULL);
       fprintf(stderr, "done\n");
+
+      /* regularize JTJ matrix */
+      gsl_vector_add(&diag.vector, w->LTL);
 
       fprintf(stderr, "mfield_calc_nonlinear: solving linear normal equations system...");
       gettimeofday(&tv0, NULL);
@@ -426,7 +416,7 @@ mfield_init_nonlinear(mfield_workspace *w)
   const mfield_parameters *params = &(w->params);
   const size_t p = w->p;                 /* number of coefficients */
   size_t ndata = 0;                      /* number of distinct data points */
-  size_t nres = 0;                       /* total number of residuals */
+  size_t nres = 0;                       /* total number of residuals (data only) */
   size_t nres_B[4] = { 0, 0, 0, 0 };     /* number of (X,Y,Z,F) residuals */
   size_t nres_dB_ns[4] = { 0, 0, 0, 0 }; /* number of north-south gradient (X,Y,Z,F) residuals */
   size_t nres_dB_ew[4] = { 0, 0, 0, 0 }; /* number of east-west gradient (X,Y,Z,F) residuals */
@@ -514,6 +504,11 @@ mfield_init_nonlinear(mfield_workspace *w)
       w->lls_solution = 0;
     }
 
+  /* compute total number of residuals, including regularization terms */
+  w->nres_tot = nres;
+  if (params->regularize && !params->synth_data)
+    w->nres_tot += w->p;
+
   fprintf(stderr, "mfield_init_nonlinear: %zu distinct data points\n", ndata);
   fprintf(stderr, "mfield_init_nonlinear: %zu scalar residuals\n", nres_B[3]);
   fprintf(stderr, "mfield_init_nonlinear: %zu X residuals\n", nres_B[0]);
@@ -527,7 +522,8 @@ mfield_init_nonlinear(mfield_workspace *w)
   fprintf(stderr, "mfield_init_nonlinear: %zu dY_ew residuals\n", nres_dB_ew[1]);
   fprintf(stderr, "mfield_init_nonlinear: %zu dZ_ew residuals\n", nres_dB_ew[2]);
   fprintf(stderr, "mfield_init_nonlinear: %zu dF_ew residuals\n", nres_dB_ew[3]);
-  fprintf(stderr, "mfield_init_nonlinear: %zu total residuals\n", w->nres);
+  fprintf(stderr, "mfield_init_nonlinear: %zu data residuals\n", w->nres);
+  fprintf(stderr, "mfield_init_nonlinear: %zu total residuals (including regularization terms)\n", w->nres_tot);
   fprintf(stderr, "mfield_init_nonlinear: %zu total parameters\n", p);
 
 #if OLD_FDF
@@ -542,8 +538,7 @@ mfield_init_nonlinear(mfield_workspace *w)
     fdf_params.scale = gsl_multifit_nlinear_scale_levenberg;
     fdf_params.trs = gsl_multifit_nlinear_trs_ddogleg;
     fdf_params.fdtype = GSL_MULTIFIT_NLINEAR_CTRDIFF;
-    fdf_params.h_fvv = 0.5;
-    w->multifit_nlinear_p = gsl_multifit_nlinear_alloc(T, &fdf_params, nres, p);
+    w->multifit_nlinear_p = gsl_multifit_nlinear_alloc(T, &fdf_params, w->nres_tot, p);
   }
 
 #else
@@ -555,9 +550,8 @@ mfield_init_nonlinear(mfield_workspace *w)
       gsl_multilarge_nlinear_default_parameters();
 
     fdf_params.trs = gsl_multilarge_nlinear_trs_ddogleg;
-    fdf_params.scale = gsl_multilarge_nlinear_scale_levenberg;
-    fdf_params.h_fvv = 0.5;
-    w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, nres, p);
+    fdf_params.scale = gsl_multilarge_nlinear_scale_more;
+    w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, w->nres_tot, p);
   }
 
 #endif
@@ -576,8 +570,8 @@ mfield_init_nonlinear(mfield_workspace *w)
   gsl_multifit_robust_tune(1.5, w->robust_workspace_p);
 #endif
 
-  w->fvec = gsl_vector_alloc(nres);
-  w->wfvec = gsl_vector_alloc(nres);
+  w->fvec = gsl_vector_alloc(w->nres_tot);
+  w->wfvec = gsl_vector_alloc(w->nres_tot);
 
   gsl_vector_set_all(w->wts_final, 1.0);
 
@@ -634,6 +628,26 @@ mfield_init_nonlinear(mfield_workspace *w)
 
     assert(idx == w->nres);
   }
+
+  /* precompute regularization matrix */
+  if (params->regularize && !params->synth_data)
+    {
+      fprintf(stderr, "mfield_init_nonlinear: calculating regularization matrix...");
+
+      /* compute diag(L) */
+      mfield_nonlinear_regularize(w->lambda_diag, w);
+
+      /* compute L^T L */
+      gsl_vector_memcpy(w->LTL, w->lambda_diag);
+      gsl_vector_mul(w->LTL, w->lambda_diag);
+
+      fprintf(stderr, "done\n");
+    }
+  else
+    {
+      gsl_vector_set_all(w->lambda_diag, 0.0);
+      gsl_vector_set_all(w->LTL, 0.0);
+    }
 
   return s;
 } /* mfield_init_nonlinear() */
@@ -992,14 +1006,12 @@ mfield_calc_df2(CBLAS_TRANSPOSE_t TransJ, const gsl_vector *x, const gsl_vector 
         }
     }
 
-#if 0
   /* regularize by adding L^T L to diag(J^T J) */
   if (JTJ)
     {
       gsl_vector_view v = gsl_matrix_diagonal(JTJ);
       gsl_vector_add(&v.vector, w->LTL);
     }
-#endif
 
 #if 0
   printv_octave(u, "u");
@@ -1317,6 +1329,10 @@ mfield_jacobian_JTJ(const double t, const size_t flags, const double weight,
   (void) B_nec_alpha;
   (void) B_nec_beta;
   (void) B_nec_gamma;
+
+  /* check for quick return */
+  if (JTJ == NULL)
+    return GSL_SUCCESS;
 
   if (w->nnm_sv > 0)
     g_sv = gsl_vector_subvector(dB_int, 0, w->nnm_sv);
@@ -1919,51 +1935,39 @@ mfield_nonlinear_histogram(const gsl_vector *c, mfield_workspace *w)
 
 /*
 mfield_nonlinear_regularize()
-  Construct diag = diag(L) for regularized fit using frozen
-flux assumption of Gubbins, 1983
+  Construct diag = diag(L) for regularized fit by minimizing
+[d/dt B_r]^2 and/or [d^2/dt^2 B_r]^2 at the CMB
+
+< | d^2/dt^2 B_r |^2 > = \int | d^2/dt^2 B_r |^2 dOmega = || L g ||^2
+
+with
+
+L_{nm} = (n+1)/sqrt(2n + 1) (a/c)^{n+2}
 */
 
 static int
 mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
 {
   int s = 0;
-  const size_t nmin_sv = 13;
-  const size_t nmin_sa = 8;
-  const size_t nmax = w->nmax_mf;
+  const size_t nmax = GSL_MAX(w->nmax_sv, w->nmax_sa);
   const double c = 3485.0;       /* Earth core radius */
   const double a = w->params.R;  /* Earth surface radius */
   const double ratio = a / c;
   size_t n;
-  int m;
-  double lambda_mf = w->lambda_mf;
-  double lambda_sv = w->lambda_sv;
-  double lambda_sa = w->lambda_sa;
 
   gsl_vector_set_zero(diag);
 
   for (n = 1; n <= nmax; ++n)
     {
       int ni = (int) n;
+      int m;
       double term = (n + 1.0) / sqrt(2.0*n + 1.0) * pow(ratio, n + 2.0);
 
       for (m = -ni; m <= ni; ++m)
         {
           size_t cidx = mfield_coeff_nmidx(n, m);
-
-          mfield_set_mf(diag, cidx, lambda_mf, w);
-
-#if 0
-          if (n >= nmin_sv)
-            mfield_set_sv(diag, cidx, lambda_sv, w);
-#else
-          if (n >= nmin_sv)
-            mfield_set_sv(diag, cidx, lambda_sv * n * n * n, w);
-#endif
-
-          if (n >= nmin_sa)
-            mfield_set_sa(diag, cidx, lambda_sa * term, w);
-          else
-            mfield_set_sa(diag, cidx, lambda_mf, w);
+          mfield_set_sv(diag, cidx, w->lambda_sv * term, w);
+          mfield_set_sa(diag, cidx, w->lambda_sa * term, w);
         }
     }
 
@@ -1983,8 +1987,6 @@ static int
 mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace * w)
 {
   int s = 0;
-  const size_t n = w->nres;
-  const size_t p = w->p;          /* number of coefficients */
   const double tune = w->robust_workspace_p->tune;
   size_t i, j;
   size_t idx = 0;
@@ -2276,7 +2278,8 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
               double t0 = w->data_workspace_p->t0[i];
               size_t euler_idx = mfield_euler_idx(i, t0, w);
 
-              fprintf(stderr, "\t euler : %12.4f %12.4f %12.4f [deg]\n",
+              fprintf(stderr, "\t euler%zu: %12.4f %12.4f %12.4f [deg]\n",
+                      i,
                       gsl_vector_get(x, euler_idx) * 180.0 / M_PI,
                       gsl_vector_get(x, euler_idx + 1) * 180.0 / M_PI,
                       gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI);

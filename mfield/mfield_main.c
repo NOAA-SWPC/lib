@@ -8,8 +8,6 @@
  *   -c coef_output_file
  *   -n max_iterations
  *   -e epoch_decimal_year
- *   -v lambda_sv
- *   -a lambda_sa
  *   -p euler_period_days
  *   -r residual_file
  *   -l Lcurve_data_file
@@ -299,6 +297,8 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
   gsl_rstat_workspace *rstat_dy_ew = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_dz_ew = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_df_ew = gsl_rstat_alloc();
+
+  fprintf(stderr, "\n");
 
   for (i = 0; i < data_p->nsources; ++i)
     {
@@ -1199,6 +1199,11 @@ parse_config_file(const char *filename, mfield_parameters *mfield_params,
   if (config_lookup_int(&cfg, "regularize", &ival))
     mfield_params->regularize = ival;
 
+  if (config_lookup_float(&cfg, "lambda_sv", &fval))
+    mfield_params->lambda_sv = fval;
+  if (config_lookup_float(&cfg, "lambda_sa", &fval))
+    mfield_params->lambda_sa = fval;
+
   if (config_lookup_float(&cfg, "weight_X", &fval))
     mfield_params->weight_X = fval;
   if (config_lookup_float(&cfg, "weight_Y", &fval))
@@ -1272,8 +1277,6 @@ print_help(char *argv[])
   fprintf(stderr, "\t --maxit | -n num_iterations     - number of robust iterations\n");
   fprintf(stderr, "\t --output_file | -o file         - coefficient output file (ASCII)\n");
   fprintf(stderr, "\t --epoch | -e epoch              - model epoch in decimal years\n");
-  fprintf(stderr, "\t --lambda_sv | -v lambda_sv      - SV damping parameter\n");
-  fprintf(stderr, "\t --lambda_sa | -a lambda_sa      - SA damping parameter\n");
   fprintf(stderr, "\t --euler | -p period             - Euler bin size in days\n");
   fprintf(stderr, "\t --print_residuals | -r          - write residuals at each iteration\n");
   fprintf(stderr, "\t --lcurve_file | -l file         - L-curve data file\n");
@@ -1282,6 +1285,8 @@ print_help(char *argv[])
   fprintf(stderr, "\t --print_data | -d               - print data used for MF modeling to output directory\n");
   fprintf(stderr, "\t --print_map | -m                - print spatial data map files to output directory\n");
   fprintf(stderr, "\t --config_file | -C file         - configuration file\n");
+  fprintf(stderr, "\t --lambda_sv | -v lambda_sv      - secular variation damping parameter\n");
+  fprintf(stderr, "\t --lambda_sa | -a lambda_sa      - secular acceleration damping parameter\n");
 } /* print_help() */
 
 int
@@ -1301,8 +1306,6 @@ main(int argc, char *argv[])
   gsl_vector *coeffs; /* model coefficients */
   size_t iter = 0;
   size_t maxit = 0;
-  double lambda_sv = 0.0;     /* coefficient damping */
-  double lambda_sa = 0.0;
   double epoch = -1.0;        /* model epoch */
   double euler_period = -1.0; /* set to 0 for single set of angles */
   double tmin = -1.0;         /* minimum time for data in years */
@@ -1311,6 +1314,8 @@ main(int argc, char *argv[])
   int print_data = 0;         /* print data for MF modeling */
   int print_map = 0;          /* print data maps */
   int print_residuals = 0;    /* print residuals at each iteration */
+  double lambda_sv = -1.0;    /* SV damping parameter */
+  double lambda_sa = -1.0;    /* SA damping parameter */
   struct timeval tv0, tv1;
   char buf[MAX_BUFFER];
 
@@ -1327,8 +1332,6 @@ main(int argc, char *argv[])
           { "print_residuals", no_argument, NULL, 'r' },
           { "output_file", required_argument, NULL, 'o' },
           { "epoch", required_argument, NULL, 'e' },
-          { "lambda_sv", required_argument, NULL, 'v' },
-          { "lambda_sa", required_argument, NULL, 'a' },
           { "lcurve_file", required_argument, NULL, 'l' },
           { "maxit", required_argument, NULL, 'n' },
           { "tmin", required_argument, NULL, 'b' },
@@ -1337,6 +1340,8 @@ main(int argc, char *argv[])
           { "print_data", required_argument, NULL, 'd' },
           { "print_map", required_argument, NULL, 'm' },
           { "config_file", required_argument, NULL, 'C' },
+          { "lambda_sa", required_argument, NULL, 'a' },
+          { "lambda_sv", required_argument, NULL, 'v' },
           { 0, 0, 0, 0 }
         };
 
@@ -1346,6 +1351,14 @@ main(int argc, char *argv[])
 
       switch (c)
         {
+          case 'a':
+            lambda_sa = atof(optarg);
+            break;
+
+          case 'v':
+            lambda_sv = atof(optarg);
+            break;
+
           case 'b':
             tmin = atof(optarg);
             break;
@@ -1376,14 +1389,6 @@ main(int argc, char *argv[])
 
           case 'e':
             epoch = atof(optarg);
-            break;
-
-          case 'v':
-            lambda_sv = atof(optarg);
-            break;
-
-          case 'a':
-            lambda_sa = atof(optarg);
             break;
 
           case 'p':
@@ -1424,6 +1429,10 @@ main(int argc, char *argv[])
     mfield_params.euler_period = euler_period;
   if (maxit > 0)
     mfield_params.max_iter = maxit;
+  if (lambda_sv >= 0.0)
+    mfield_params.lambda_sv = lambda_sv;
+  if (lambda_sa >= 0.0)
+    mfield_params.lambda_sa = lambda_sa;
 
   status = check_parameters(&mfield_params, &data_params);
   if (status)
@@ -1436,13 +1445,13 @@ main(int argc, char *argv[])
   if (mfield_params.fit_sv)
     {
       fprintf(stderr, "main: SV nmax = %zu\n", mfield_params.nmax_sv);
-      fprintf(stderr, "main: SV damping = %g\n", lambda_sv);
+      fprintf(stderr, "main: SV damping = %g\n", mfield_params.lambda_sv);
     }
 
   if (mfield_params.fit_sv && mfield_params.fit_sa)
     {
       fprintf(stderr, "main: SA nmax = %zu\n", mfield_params.nmax_sa);
-      fprintf(stderr, "main: SA damping = %g\n", lambda_sa);
+      fprintf(stderr, "main: SA damping = %g\n", mfield_params.lambda_sa);
     }
 
   fprintf(stderr, "main: euler period = %g [days]\n", mfield_params.euler_period);
@@ -1550,9 +1559,6 @@ main(int argc, char *argv[])
   /* initialize model parameters */
   mfield_init(mfield_workspace_p);
 
-  /* coefficient damping parameters */
-  mfield_set_damping(lambda_sv, lambda_sa, mfield_workspace_p);
-
   /* print out dataset if requested - do this after mfield_init() so
    * spatial weights are computed */
   if (print_data)
@@ -1652,8 +1658,8 @@ main(int argc, char *argv[])
           fprintf(fp, "%.12e %.12e %f %f\n",
                   log(fnorm),
                   log(xnorm),
-                  lambda_sv,
-                  lambda_sa);
+                  mfield_params.lambda_sv,
+                  mfield_params.lambda_sa);
 
           fclose(fp);
         }

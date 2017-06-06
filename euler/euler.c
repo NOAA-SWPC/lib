@@ -21,14 +21,15 @@
 
 #include "common.h"
 #include "magdata.h"
+#include "quat.h"
 
 #include "euler.h"
 
-static int euler_apply_Rx(const int deriv, double x,
+static int euler_apply_Rx(const int deriv, const double x,
                           const double A_in[3], double A_out[3]);
-static int euler_apply_Ry(const int deriv, double x,
+static int euler_apply_Ry(const int deriv, const double x,
                           const double A_in[3], double A_out[3]);
-static int euler_apply_Rz(const int deriv, double x,
+static int euler_apply_Rz(const int deriv, const double x,
                           const double A_in[3], double A_out[3]);
 static int euler_find(const double t, size_t *idx, const euler_workspace *w);
 
@@ -464,57 +465,16 @@ euler_vfm2nec(const size_t flags, const double alpha, const double beta,
               const double gamma, const double q[],
               const double B_in[3], double B_out[3])
 {
-  double Rq_data[9], tmp_data[3];
-  gsl_matrix_view Rq = gsl_matrix_view_array(Rq_data, 3, 3);
-  gsl_vector_view out = gsl_vector_view_array(B_out, 3);
-  gsl_vector_view tmp = gsl_vector_view_array(tmp_data, 3);
-  int deriv_alpha = flags & EULER_FLG_DERIV_ALPHA;
-  int deriv_beta = flags & EULER_FLG_DERIV_BETA;
-  int deriv_gamma = flags & EULER_FLG_DERIV_GAMMA;
+  double tmp[3];
 
-  /* construct quaternion rotation matrix R_q (Olsen et al, 2013, eq 3) */
-  euler_Rq(q, &Rq.matrix);
+  /* compute tmp = R_3(alpha,beta,gamma) B_in */
+  euler_apply_R3(flags, alpha, beta, gamma, B_in, tmp);
 
-  if (flags & EULER_FLG_RINV)
-    {
-      /* apply R_inv = [ 0 0 -1; 0 -1 0; -1 0 0 ] matrix to input vector */
-      tmp_data[0] = -B_in[2];
-      tmp_data[1] = -B_in[1];
-      tmp_data[2] = -B_in[0];
-    }
-  else
-    {
-      tmp_data[0] = B_in[0];
-      tmp_data[1] = B_in[1];
-      tmp_data[2] = B_in[2];
-    }
-
-  /* apply Euler rotations for VFM to CRF: B_tmp = R_3 B_in */
-  if (flags & EULER_FLG_ZYZ)
-    {
-      /* ZYZ convention */
-      euler_apply_Rz(deriv_alpha, alpha, tmp_data, tmp_data);
-      euler_apply_Ry(deriv_beta, beta, tmp_data, tmp_data);
-      euler_apply_Rz(deriv_gamma, gamma, tmp_data, tmp_data);
-    }
-  else if (flags & EULER_FLG_ZYX)
-    {
-      /* ZYX convention */
-      euler_apply_Rx(deriv_alpha, alpha, tmp_data, tmp_data);
-      euler_apply_Ry(deriv_beta, beta, tmp_data, tmp_data);
-      euler_apply_Rz(deriv_gamma, gamma, tmp_data, tmp_data);
-    }
-  else
-    {
-      fprintf(stderr, "euler_vfm2nec: error: no Euler convention specified\n");
-      return -1;
-    }
-
-  /* apply quaternion rotation for CRF to NEC: B_out = R_q B_tmp */
-  gsl_blas_dgemv(CblasNoTrans, 1.0, &Rq.matrix, &tmp.vector, 0.0, &out.vector);
+  /* compute B_out = R_q R_3(alpha,beta,gamma) B_in */
+  quat_apply(q, tmp, B_out);
 
   return 0;
-} /* euler_vfm2nec() */
+}
 
 /*
 euler_nec2vfm()
@@ -610,45 +570,62 @@ int
 euler_apply_R3(const size_t flags, const double alpha, const double beta,
                const double gamma, const double B_in[3], double B_out[3])
 {
-  double tmp_data[3];
-  gsl_vector_view out = gsl_vector_view_array(B_out, 3);
-  gsl_vector_view tmp = gsl_vector_view_array(tmp_data, 3);
-  int deriv_alpha = flags & EULER_FLG_DERIV_ALPHA;
-  int deriv_beta = flags & EULER_FLG_DERIV_BETA;
-  int deriv_gamma = flags & EULER_FLG_DERIV_GAMMA;
+  double tmp[3];
+  int deriv_alpha, deriv_beta, deriv_gamma;
+
+  if (flags & EULER_FLG_DERIV_ALPHA)
+    deriv_alpha = 1;
+  else if (flags & EULER_FLG_DERIV2_ALPHA)
+    deriv_alpha = 2;
+  else
+    deriv_alpha = 0;
+
+  if (flags & EULER_FLG_DERIV_BETA)
+    deriv_beta = 1;
+  else if (flags & EULER_FLG_DERIV2_BETA)
+    deriv_beta = 2;
+  else
+    deriv_beta = 0;
+
+  if (flags & EULER_FLG_DERIV_GAMMA)
+    deriv_gamma = 1;
+  else if (flags & EULER_FLG_DERIV2_GAMMA)
+    deriv_gamma = 2;
+  else
+    deriv_gamma = 0;
 
   if (flags & EULER_FLG_RINV)
     {
       /* apply R_inv = [ 0 0 -1; 0 -1 0; -1 0 0 ] matrix to input vector */
-      tmp_data[0] = -B_in[2];
-      tmp_data[1] = -B_in[1];
-      tmp_data[2] = -B_in[0];
+      tmp[0] = -B_in[2];
+      tmp[1] = -B_in[1];
+      tmp[2] = -B_in[0];
     }
   else
     {
-      tmp_data[0] = B_in[0];
-      tmp_data[1] = B_in[1];
-      tmp_data[2] = B_in[2];
+      tmp[0] = B_in[0];
+      tmp[1] = B_in[1];
+      tmp[2] = B_in[2];
     }
 
   /* apply Euler rotations B_out = R_3 B_in */
   if (flags & EULER_FLG_ZYZ)
     {
       /* ZYZ convention */
-      euler_apply_Rz(deriv_alpha, alpha, tmp_data, B_out);
+      euler_apply_Rz(deriv_alpha, alpha, tmp, B_out);
       euler_apply_Ry(deriv_beta, beta, B_out, B_out);
       euler_apply_Rz(deriv_gamma, gamma, B_out, B_out);
     }
   else if (flags & EULER_FLG_ZYX)
     {
       /* ZYX convention */
-      euler_apply_Rx(deriv_alpha, alpha, tmp_data, B_out);
+      euler_apply_Rx(deriv_alpha, alpha, tmp, B_out);
       euler_apply_Ry(deriv_beta, beta, B_out, B_out);
       euler_apply_Rz(deriv_gamma, gamma, B_out, B_out);
     }
   else
     {
-      fprintf(stderr, "euler_vfm2nec: error: no Euler convention specified\n");
+      fprintf(stderr, "euler_apply_R3: error: no Euler convention specified\n");
       return -1;
     }
 
@@ -696,7 +673,15 @@ euler_Rq(const double *q, gsl_matrix *Rq)
 euler_apply_Rx()
   Apply a rotation matrix around the x axis
 
-Inputs: x     - rotation angle in radians
+R = [ 1   0       0    ]
+    [ 0 cos(x) -sin(x) ]
+    [ 0 sin(x)  cos(x) ]
+
+Inputs: deriv - derivative flag
+                0: no derivative taken
+                1: first derivative taken
+                2: second derivative taken
+        x     - rotation angle in radians
         A_in  - input vector
         A_out - (output) rotated vector
 
@@ -705,72 +690,51 @@ Notes:
 */
 
 static int
-euler_apply_Rx(const int deriv, double x, const double A_in[3], double A_out[3])
+euler_apply_Rx(const int deriv, const double x, const double A_in[3], double A_out[3])
 {
   int s = 0;
   const double A1 = A_in[1]; /* for in-place transform */
+  double theta = x;
   double cn, sn;
 
-  if (deriv)
+  if (deriv == 1)
     {
-      /* d/dalpha R(alpha) = R(alpha + pi/2) */
-      x += M_PI / 2.0;
+      /* d/dtheta R(theta) = R(theta + pi/2) */
+      theta += M_PI / 2.0;
+      A_out[0] = 0.0;
+    }
+  else if (deriv == 2)
+    {
+      /* d^2/dtheta^2 R(theta) = R(theta + pi) */
+      theta += M_PI;
       A_out[0] = 0.0;
     }
   else
-    A_out[0] = A_in[0];
+    {
+      A_out[0] = A_in[0];
+    }
 
-  cn = cos(x);
-  sn = sin(x);
+  cn = cos(theta);
+  sn = sin(theta);
 
   A_out[1] = A1 * cn - A_in[2] * sn;
   A_out[2] = A1 * sn + A_in[2] * cn;
 
   return s;
-} /* euler_apply_Rx() */
+}
 
 /*
 euler_apply_Ry()
   Apply a rotation matrix around the y axis
 
-Inputs: x     - rotation angle in radians
-        A_in  - input vector
-        A_out - (output) rotated vector
+R = [  cos(x)   0  sin(x) ]
+    [    0      1    0    ]
+    [ -sin(x)   0  cos(x) ]
 
-Notes:
-1) In place transform allowed (A_in == A_out)
-*/
-
-static int
-euler_apply_Ry(const int deriv, double x, const double A_in[3], double A_out[3])
-{
-  int s = 0;
-  const double A0 = A_in[0]; /* for in-place transform */
-  double cn, sn;
-
-  if (deriv)
-    {
-      /* d/dalpha R(alpha) = R(alpha + pi/2) */
-      x += M_PI / 2.0;
-      A_out[1] = 0.0;
-    }
-  else
-    A_out[1] = A_in[1];
-
-  cn = cos(x);
-  sn = sin(x);
-
-  A_out[0] = A0 * cn + A_in[2] * sn;
-  A_out[2] = -A0 * sn + A_in[2] * cn;
-
-  return s;
-} /* euler_apply_Ry() */
-
-/*
-euler_apply_Rz()
-  Apply a rotation matrix around the z axis
-
-Inputs: deriv - 1 if computing derivative wrt x, 0 if not
+Inputs: deriv - derivative flag
+                0: no derivative taken
+                1: first derivative taken
+                2: second derivative taken
         x     - rotation angle in radians
         A_in  - input vector
         A_out - (output) rotated vector
@@ -780,29 +744,92 @@ Notes:
 */
 
 static int
-euler_apply_Rz(const int deriv, double x, const double A_in[3], double A_out[3])
+euler_apply_Ry(const int deriv, const double x, const double A_in[3], double A_out[3])
 {
   int s = 0;
   const double A0 = A_in[0]; /* for in-place transform */
+  double theta = x;
   double cn, sn;
 
-  if (deriv)
+  if (deriv == 1)
     {
-      /* d/dalpha R(alpha) = R(alpha + pi/2) */
-      x += M_PI / 2.0;
+      /* d/dtheta R(theta) = R(theta + pi/2) */
+      theta += M_PI / 2.0;
+      A_out[1] = 0.0;
+    }
+  else if (deriv == 2)
+    {
+      /* d^2/dtheta^2 R(theta) = R(theta + pi) */
+      theta += M_PI;
+      A_out[1] = 0.0;
+    }
+  else
+    {
+      A_out[1] = A_in[1];
+    }
+
+  cn = cos(theta);
+  sn = sin(theta);
+
+  A_out[0] = A0 * cn + A_in[2] * sn;
+  A_out[2] = -A0 * sn + A_in[2] * cn;
+
+  return s;
+}
+
+/*
+euler_apply_Rz()
+  Apply a rotation matrix around the z axis
+
+R = [ cos(x) -sin(x) 0 ]
+    [ sin(x)  cos(x) 0 ]
+    [   0       0    1 ]
+
+Inputs: deriv - derivative flag
+                0: no derivative taken
+                1: first derivative taken
+                2: second derivative taken
+        x     - rotation angle in radians
+        A_in  - input vector
+        A_out - (output) rotated vector
+
+Notes:
+1) In place transform allowed (A_in == A_out)
+*/
+
+static int
+euler_apply_Rz(const int deriv, const double x, const double A_in[3], double A_out[3])
+{
+  int s = 0;
+  const double A0 = A_in[0]; /* for in-place transform */
+  double theta = x;
+  double cn, sn;
+
+  if (deriv == 1)
+    {
+      /* d/dtheta R(theta) = R(theta + pi/2) */
+      theta += M_PI / 2.0;
+      A_out[2] = 0.0;
+    }
+  else if (deriv == 2)
+    {
+      /* d^2/dtheta^2 R(theta) = R(theta + pi) */
+      theta += M_PI;
       A_out[2] = 0.0;
     }
   else
-    A_out[2] = A_in[2];
+    {
+      A_out[2] = A_in[2];
+    }
 
-  cn = cos(x);
-  sn = sin(x);
+  cn = cos(theta);
+  sn = sin(theta);
 
   A_out[0] = A0 * cn - A_in[1] * sn;
   A_out[1] = A0 * sn + A_in[1] * cn;
 
   return s;
-} /* euler_apply_Rz() */
+}
 
 /*
 euler_find()
