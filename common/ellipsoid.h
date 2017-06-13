@@ -23,5 +23,6 @@ int ellipsoid_basis(const double r[3], double e_mu[3], double e_nu[3],
                     double e_phi[3]);
 int ellipsoid_basis_mu(const double r[3], const double mu, double e_mu[3],
                        double e_nu[3], double e_phi[3]);
+int ellipsoid_nec2ell(const double r_ECEF[3], const double B_nec[3], double B_ell[3]);
 
 #endif /* INCLUDED_ellipsoid_h */

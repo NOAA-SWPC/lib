@@ -66,5 +66,6 @@ double magcal_rms(const magcal_workspace * w);
 time_t magcal_mean_time(const magcal_workspace * w);
 int magcal_apply(const gsl_vector *m, satdata_mag *data);
 int magcal_apply_cal(const gsl_vector *m, const double E[3], double B[4]);
+int magcal_print_residuals(const char *filename, const gsl_vector * m, const magcal_workspace *w);
 
 #endif /* INCLUDED_magcal_h */

@@ -27,6 +27,7 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_rstat.h>
+#include <gsl/gsl_statistics.h>
 
 #include <satdata/satdata.h>
 #include <indices/indices.h>
@@ -41,7 +42,9 @@
 #include "stage2_filter.c"
 #include "stage2_jumps.c"
 #include "stage2_quaternions.c"
-#include "test_vfm.c"
+#include "stage2_spikes.c"
+
+#define WRITE_JUMP_DATA                   0
 
 /*
 stage2_scalar_calibrate()
@@ -58,7 +61,7 @@ Return: success/error
 */
 
 int
-stage2_scalar_calibrate(const time_t tmin, const time_t tmax, satdata_mag * data,
+stage2_scalar_calibrate(const char *res_file, const time_t tmin, const time_t tmax, satdata_mag * data,
                         track_workspace * track_p, gsl_vector * c, double *rms)
 {
   int s = 0;
@@ -128,6 +131,13 @@ stage2_scalar_calibrate(const time_t tmin, const time_t tmax, satdata_mag * data
 
   *rms = magcal_rms(magcal_p);
 
+  if (res_file)
+    {
+      fprintf(stderr, "main: writing scalar calibration residuals to %s...", res_file);
+      magcal_print_residuals(res_file, c, magcal_p);
+      fprintf(stderr, "done\n");
+    }
+
   magcal_free(magcal_p);
 
   return s;
@@ -152,6 +162,149 @@ print_parameters(FILE *fp, const gsl_vector *c, const time_t t, const double rms
           gsl_vector_get(c, MAGCAL_IDX_AYZ) * 180.0 / M_PI);
 
   fflush(fp);
+
+  return s;
+}
+
+static int
+print_data(const char *filename, const satdata_mag *data, const track_workspace *w)
+{
+  int s = 0;
+  const size_t downsample = 120;
+  FILE *fp;
+  size_t i, j;
+  gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
+
+  fp = fopen(filename, "w");
+
+  i = 1;
+  fprintf(fp, "# Field %zu: timestamp\n", i++);
+  fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: scalar measurement (nT)\n", i++);
+  fprintf(fp, "# Field %zu: VFM B_1 (nT)\n", i++);
+  fprintf(fp, "# Field %zu: VFM B_2 (nT)\n", i++);
+  fprintf(fp, "# Field %zu: VFM B_3 (nT)\n", i++);
+  fprintf(fp, "# Field %zu: scalar model (nT)\n", i++);
+  fprintf(fp, "# Field %zu: modeled VFM B_1 (nT)\n", i++);
+  fprintf(fp, "# Field %zu: modeled VFM B_2 (nT)\n", i++);
+  fprintf(fp, "# Field %zu: modeled VFM B_3 (nT)\n", i++);
+  fprintf(fp, "# Field %zu: modeled NEC B_z (nT)\n", i++);
+  fprintf(fp, "# Field %zu: satellite direction (+1 north, -1 south)\n", i++);
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+      size_t offset = (size_t) (gsl_rng_uniform(rng_p) * downsample);
+
+      for (j = start_idx + offset; j <= end_idx; j += downsample)
+        {
+          double theta = M_PI / 2.0 - data->latitude[j] * M_PI / 180.0;
+          double phi = data->longitude[j] * M_PI / 180.0;
+          double *q = &(data->q[4*j]);
+          double B_model[4], B_model_VFM[3], B_model_ell[3], r_ECEF[3];
+
+          sph2ecef(data->r[j], theta, phi, r_ECEF);
+
+          /* compute model vector */
+          satdata_mag_model(j, B_model, data);
+
+          /* rotate model vector to VFM frame */
+          quat_apply_inverse(q, B_model, B_model_VFM);
+
+          /* convert B_model into ellipsoid NEC */
+          ellipsoid_nec2ell(r_ECEF, B_model, B_model_ell);
+
+          fprintf(fp, "%ld %10.4f %10.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %d\n",
+                  satdata_epoch2timet(data->t[j]),
+                  data->qdlat[j],
+                  data->F[j],
+                  SATDATA_VEC_X(data->B_VFM, j),
+                  SATDATA_VEC_Y(data->B_VFM, j),
+                  SATDATA_VEC_Z(data->B_VFM, j),
+                  B_model[3],
+                  B_model_VFM[0],
+                  B_model_VFM[1],
+                  B_model_VFM[2],
+                  B_model[2],
+                  satdata_satdir(j, data->n, data->latitude));
+        }
+
+      fprintf(fp, "\n\n");
+    }
+
+  fclose(fp);
+
+  gsl_rng_free(rng_p);
+
+  return s;
+}
+
+/*XXX*/
+static int
+print_data2(const char *filename, const satdata_mag *data, const track_workspace *w)
+{
+  int s = 0;
+  const size_t downsample = 120;
+  FILE *fp;
+  size_t i, j;
+  gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
+
+  fp = fopen(filename, "w");
+
+  i = 1;
+  fprintf(fp, "# Field %zu: timestamp\n", i++);
+  fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: scalar measurement (nT)\n", i++);
+  fprintf(fp, "# Field %zu: NEC B_X (nT)\n", i++);
+  fprintf(fp, "# Field %zu: NEC B_Y (nT)\n", i++);
+  fprintf(fp, "# Field %zu: NEC B_Z (nT)\n", i++);
+  fprintf(fp, "# Field %zu: scalar model (nT)\n", i++);
+  fprintf(fp, "# Field %zu: model NEC B_X (nT)\n", i++);
+  fprintf(fp, "# Field %zu: model NEC B_Y (nT)\n", i++);
+  fprintf(fp, "# Field %zu: model NEC B_Z (nT)\n", i++);
+  fprintf(fp, "# Field %zu: satellite direction (+1 north, -1 south)\n", i++);
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+      size_t offset = (size_t) (gsl_rng_uniform(rng_p) * downsample);
+
+      for (j = start_idx + offset; j <= end_idx; j += downsample)
+        {
+          double *q = &(data->q[4*j]);
+          double *B_VFM = &(data->B_VFM[3*j]);
+          double B_model[4], B_nec[3];
+
+          /* compute model vector */
+          satdata_mag_model(j, B_model, data);
+
+          /* rotate model vector to VFM frame */
+          quat_apply(q, B_VFM, B_nec);
+
+          fprintf(fp, "%ld %10.4f %10.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %d\n",
+                  satdata_epoch2timet(data->t[j]),
+                  data->qdlat[j],
+                  data->F[j],
+                  B_nec[0],
+                  B_nec[1],
+                  B_nec[2],
+                  B_model[3],
+                  B_model[0],
+                  B_model[1],
+                  B_model[2],
+                  satdata_satdir(j, data->n, data->latitude));
+        }
+
+      fprintf(fp, "\n\n");
+    }
+
+  fclose(fp);
+
+  gsl_rng_free(rng_p);
 
   return s;
 }
@@ -227,6 +380,13 @@ main(int argc, char *argv[])
 {
   const char *track_file = "track_data.dat";
   const char *quat_file = "stage2_quat.dat";
+#if WRITE_JUMP_DATA
+  const char *scal_file = "stage2_scal.dat";
+  const char *spike_file = "stage2_spikes.dat";
+#else
+  const char *scal_file = NULL;
+  const char *spike_file = NULL;
+#endif
   char *outfile = NULL;
   char *param_file = NULL;
   char *res_file = NULL;
@@ -315,38 +475,30 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-  fprintf(stderr, "main: filtering tracks for quiet periods...");
+  /* detect and fix single-event spikes in each B_VFM component */
+  {
+    size_t nspikes[3];
+
+    fprintf(stderr, "main: fixing track spikes...");
+    stage2_correct_spikes(spike_file, 3, nspikes, data);
+    fprintf(stderr, "done (data written to %s, %zu X spikes, %zu Y spikes, %zu Z spikes)\n",
+            spike_file,
+            nspikes[0],
+            nspikes[1],
+            nspikes[2]);
+  }
+
+  fprintf(stderr, "main: fixing track jumps...");
+  stage2_correct_jumps(data);
+  fprintf(stderr, "done\n");
+
+  fprintf(stderr, "main: filtering tracks with rms test...");
   gettimeofday(&tv0, NULL);
   stage2_filter(track_p, data);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-#if 0
-  {
-    const time_t t0 = satdata_epoch2timet(data->t[0]);
-    const time_t t1 = satdata_epoch2timet(data->t[data->n - 1]);
-    const time_t window_size = 60 * 86400;  /* number of days of data to process at once */
-    const time_t window_slide = 10 * 86400; /* number of days to slide forward */
-    time_t t;
-    FILE *fp_param = NULL;
-
-    if (param_file)
-      fp_param = fopen(param_file, "w");
-
-    for (t = t0 + window_size / 2; t <= t1 - window_size / 2; t += window_slide)
-      {
-        stage2_scalar_calibrate(t - window_size / 2, t + window_size / 2, data, track_p, coef, &rms);
-
-        if (fp_param)
-          print_parameters(fp_param, coef);
-      }
-
-    fclose(fp_param);
-  }
-
-#else
-
-  stage2_scalar_calibrate(-1, -1, data, track_p, coef, &rms);
+  stage2_scalar_calibrate(scal_file, -1, -1, data, track_p, coef, &rms);
 
   fprintf(stderr, "main: applying calibration parameters to data...");
   magcal_apply(coef, data);
@@ -356,29 +508,16 @@ main(int argc, char *argv[])
   stage2_correct_quaternions(quat_file, data, track_p);
   fprintf(stderr, "done (data written to %s)\n", quat_file);
 
-#if 1 /*XXX*/
-  fprintf(stderr, "main: fixing track jumps...");
-  stage2_correct_jumps(data);
-  fprintf(stderr, "done\n");
-
-  stage2_scalar_calibrate(-1, -1, data, track_p, coef, &rms);
-
-  fprintf(stderr, "main: applying final calibration parameters to data...");
-  magcal_apply(coef, data);
-  fprintf(stderr, "done\n");
+#if 0
+  {
+    print_data2("data2.txt", data, track_p);
+    exit(1);
+  }
+#endif
 
   fprintf(stderr, "main: computing B_NEC...");
   stage2_vfm2nec(data);
   fprintf(stderr, "done\n");
-#endif
-
-#if 0
-  /*XXX*/
-  {
-    test_vfm(data, track_p);
-    exit(1);
-  }
-#endif
 
   if (param_file)
     {
@@ -396,8 +535,6 @@ main(int argc, char *argv[])
       print_residuals(res_file, data, track_p);
       fprintf(stderr, "done\n");
     }
-
-#endif
 
   if (outfile)
     {

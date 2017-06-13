@@ -92,7 +92,7 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
               B_vfm[2] = mptr->Bz_vfm[j];
 
               /* rotate VFM vector to NEC */
-              euler_vfm2nec(EULER_FLG_ZYX, alpha, beta, gamma, q, B_vfm, B_obs);
+              euler_vfm2nec(mptr->euler_flags, alpha, beta, gamma, q, B_vfm, B_obs);
 
               if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS |
                                     MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
@@ -104,7 +104,7 @@ mfield_calc_f(const gsl_vector *x, void *params, gsl_vector *f)
                   B_vfm_ns[1] = mptr->By_vfm_ns[j];
                   B_vfm_ns[2] = mptr->Bz_vfm_ns[j];
 
-                  euler_vfm2nec(EULER_FLG_ZYX, alpha, beta, gamma, q_ns, B_vfm_ns, B_obs_ns);
+                  euler_vfm2nec(mptr->euler_flags, alpha, beta, gamma, q_ns, B_vfm_ns, B_obs_ns);
                 }
             }
           else
@@ -354,29 +354,29 @@ mfield_calc_fvv(const gsl_vector *x, const gsl_vector * v, void *params, gsl_vec
 
               /* compute diagonal terms first */
 
-              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV2_ALPHA, alpha, beta, gamma, q, B_vfm, B_nec);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV2_ALPHA, alpha, beta, gamma, q, B_vfm, B_nec);
               for (k = 0; k < 3; ++k)
                 Dvv[k] += v_alpha * v_alpha * B_nec[k];
 
-              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV2_BETA, alpha, beta, gamma, q, B_vfm, B_nec);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV2_BETA, alpha, beta, gamma, q, B_vfm, B_nec);
               for (k = 0; k < 3; ++k)
                 Dvv[k] += v_beta * v_beta * B_nec[k];
 
-              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV2_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV2_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
               for (k = 0; k < 3; ++k)
                 Dvv[k] += v_gamma * v_gamma * B_nec[k];
 
               /* now the cross terms */
 
-              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV_ALPHA | EULER_FLG_DERIV_BETA, alpha, beta, gamma, q, B_vfm, B_nec);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_ALPHA | EULER_FLG_DERIV_BETA, alpha, beta, gamma, q, B_vfm, B_nec);
               for (k = 0; k < 3; ++k)
                 Dvv[k] += 2.0 * v_alpha * v_beta * B_nec[k];
 
-              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV_ALPHA | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_ALPHA | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
               for (k = 0; k < 3; ++k)
                 Dvv[k] += 2.0 * v_alpha * v_gamma * B_nec[k];
 
-              euler_vfm2nec(EULER_FLG_ZYX | EULER_FLG_DERIV_BETA | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_BETA | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec);
               for (k = 0; k < 3; ++k)
                 Dvv[k] += 2.0 * v_beta * v_gamma * B_nec[k];
             }
@@ -583,13 +583,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
               B_vfm[2] = mptr->Bz_vfm[j];
 
               /* compute alpha derivative of: R_q R_3 B_vfm */
-              euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_ALPHA, alpha, beta, gamma, q, B_vfm, B_nec_alpha);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_ALPHA, alpha, beta, gamma, q, B_vfm, B_nec_alpha);
 
               /* compute beta derivative of: R_q R_3 B_vfm */
-              euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_BETA, alpha, beta, gamma, q, B_vfm, B_nec_beta);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_BETA, alpha, beta, gamma, q, B_vfm, B_nec_beta);
 
               /* compute gamma derivative of: R_q R_3 B_vfm */
-              euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec_gamma);
+              euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec_gamma);
 
               if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS |
                                     MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW))
@@ -602,13 +602,13 @@ mfield_calc_df(const gsl_vector *x, void *params, gsl_matrix *J)
                   B_vfm[2] = mptr->Bz_vfm_ns[j];
 
                   /* compute alpha derivative of: R_q R_3 B_vfm_ns */
-                  euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_ALPHA, alpha, beta, gamma, q, B_vfm, B_nec_alpha_ns);
+                  euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_ALPHA, alpha, beta, gamma, q, B_vfm, B_nec_alpha_ns);
 
                   /* compute beta derivative of: R_q R_3 B_vfm_ns */
-                  euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_BETA, alpha, beta, gamma, q, B_vfm, B_nec_beta_ns);
+                  euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_BETA, alpha, beta, gamma, q, B_vfm, B_nec_beta_ns);
 
                   /* compute gamma derivative of: R_q R_3 B_vfm_ns */
-                  euler_vfm2nec(EULER_FLG_ZYX|EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec_gamma_ns);
+                  euler_vfm2nec(mptr->euler_flags | EULER_FLG_DERIV_GAMMA, alpha, beta, gamma, q, B_vfm, B_nec_gamma_ns);
                 }
             }
 

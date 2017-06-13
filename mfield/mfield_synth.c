@@ -187,7 +187,7 @@ mfield_synth_replace(mfield_workspace *w)
               double *q = &(mptr->q[4*j]);
               double B_vfm[3];
 
-              euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
+              euler_nec2vfm(mptr->euler_flags, alpha, beta, gamma, q, B, B_vfm);
 
               mptr->Bx_vfm[j] = B_vfm[0];
               mptr->By_vfm[j] = B_vfm[1];
@@ -215,7 +215,7 @@ mfield_synth_replace(mfield_workspace *w)
                   double *q = &(mptr->q_ns[4*j]);
                   double B_vfm[3];
 
-                  euler_nec2vfm(EULER_FLG_ZYX, alpha, beta, gamma, q, B, B_vfm);
+                  euler_nec2vfm(mptr->euler_flags, alpha, beta, gamma, q, B, B_vfm);
 
                   mptr->Bx_vfm_ns[j] = B_vfm[0];
                   mptr->By_vfm_ns[j] = B_vfm[1];

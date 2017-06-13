@@ -23,7 +23,7 @@ main()
 {
   const size_t nmax = 60;
   const size_t mmax = 60;
-  const size_t npoints = 100000;
+  const size_t npoints = 10000;
   const double rmin = R_EARTH_KM;
   const double rmax = rmin + 500.0;
   green_workspace *green_p = green_alloc(nmax, mmax, R_EARTH_KM);
@@ -34,6 +34,9 @@ main()
   gsl_matrix *dX = gsl_matrix_alloc(npoints, nnm);
   gsl_matrix *dY = gsl_matrix_alloc(npoints, nnm);
   gsl_matrix *dZ = gsl_matrix_alloc(npoints, nnm);
+  gsl_matrix *dX2 = gsl_matrix_alloc(npoints, nnm);
+  gsl_matrix *dY2 = gsl_matrix_alloc(npoints, nnm);
+  gsl_matrix *dZ2 = gsl_matrix_alloc(npoints, nnm);
   gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
   size_t i;
   struct timeval tv0, tv1;
@@ -69,6 +72,19 @@ main()
       green_calc_int(r[i], theta[i], phi[i],
                      X.vector.data, Y.vector.data, Z.vector.data,
                      green_p);
+
+      {
+        double r_i = gsl_rng_uniform(rng_p) * (rmax - rmin) + rmin;
+        double theta_i = gsl_rng_uniform(rng_p) * M_PI;
+        double phi_i = gsl_rng_uniform(rng_p) * 2.0 * M_PI;
+        X = gsl_matrix_row(dX2, i);
+        Y = gsl_matrix_row(dY2, i);
+        Z = gsl_matrix_row(dZ2, i);
+
+        green_calc_int(r_i, theta_i, phi[i],
+                       X.vector.data, Y.vector.data, Z.vector.data,
+                       green_p);
+      }
     }
 
   gettimeofday(&tv1, NULL);
@@ -84,14 +100,17 @@ main()
       gsl_vector_view X = gsl_matrix_row(dX, i);
       gsl_vector_view Y = gsl_matrix_row(dY, i);
       gsl_vector_view Z = gsl_matrix_row(dZ, i);
+      gsl_vector_view X2 = gsl_matrix_row(dX2, i);
+      gsl_vector_view Y2 = gsl_matrix_row(dY2, i);
+      gsl_vector_view Z2 = gsl_matrix_row(dZ2, i);
       double XY, XZ, YZ;
 
       if (theta[i] < 1.0e-2 || theta[i] > M_PI - 1.0e-2)
         continue; /* precision is lost near the poles */
 
-      gsl_blas_ddot(&X.vector, &Y.vector, &XY);
-      gsl_blas_ddot(&X.vector, &Z.vector, &XZ);
-      gsl_blas_ddot(&Y.vector, &Z.vector, &YZ);
+      gsl_blas_ddot(&X.vector, &Y2.vector, &XY);
+      gsl_blas_ddot(&X.vector, &Z2.vector, &XZ);
+      gsl_blas_ddot(&Y.vector, &Z2.vector, &YZ);
 
       if (fabs(XY) > eps || fabs(XZ) > eps2 || fabs(YZ) > eps)
         {

@@ -226,13 +226,26 @@ stage2_filter(track_workspace *track_p, satdata_mag *data)
          nflagged_dRC,
          nflagged_LT,
          nflagged_tot;
+  size_t i;
 
   fprintf(stderr, "\n");
+
+  /*
+   * recompute along-track residuals in case previous processing steps have modified data;
+   * otherwise rms test could fail
+   */
+  fprintf(stderr, "\t stage2_filter: recomputing track residuals...");
+
+  for (i = 0; i < track_p->n; ++i)
+    track_calc_residuals(&(track_p->tracks[i]), data);
+
+  fprintf(stderr, "done\n");
 
   nflagged_rms = track_flag_rms(rms_file, thresh, NULL, data, track_p);
   fprintf(stderr, "\t stage2_filter: flagged %zu/%zu (%.1f%%) tracks due to scalar rms [%.1f nT]\n",
           nflagged_rms, track_p->n, (double) nflagged_rms / (double) track_p->n * 100.0, thresh[3]);
 
+#if 0
   nflagged_kp = filter_kp(0.0, max_kp, data, track_p);
   fprintf(stderr, "\t stage2_filter: flagged %zu/%zu (%.1f%%) tracks due to kp [%.1f]\n",
           nflagged_kp, track_p->n, (double) nflagged_kp / (double) track_p->n * 100.0, max_kp);
@@ -244,6 +257,7 @@ stage2_filter(track_workspace *track_p, satdata_mag *data)
   nflagged_LT = filter_LT(min_LT, max_LT, track_p, data);
   fprintf(stderr, "\t stage2_filter: flagged %zu/%zu (%.1f%%) tracks due to LT [%g,%g]\n",
           nflagged_LT, track_p->n, (double) nflagged_LT / (double) track_p->n * 100.0, min_LT, max_LT);
+#endif
 
   nflagged_tot = track_nflagged(track_p);
   fprintf(stderr, "\t stage2_filter: flagged %zu/%zu (%.1f%%) total tracks\n",

@@ -26,9 +26,9 @@
 static int magcal_f(const gsl_vector *m, void *params, gsl_vector *f);
 static int magcal_df(const gsl_vector *m, void *params, gsl_matrix *J);
 static int magcal_B_eval(const gsl_vector *m, const size_t i,
-                         double B[4], magcal_workspace *w);
+                         double B[4], const magcal_workspace *w);
 static double magcal_f_eval(const gsl_vector *m, const size_t i,
-                            magcal_workspace *w);
+                            const magcal_workspace *w);
 static void magcal_callback (const size_t iter, void * params, const gsl_multifit_nlinear_workspace * w);
 
 /*
@@ -262,6 +262,37 @@ magcal_apply(const gsl_vector *m, satdata_mag *data)
   return GSL_SUCCESS;
 }
 
+int
+magcal_print_residuals(const char *filename, const gsl_vector * m, const magcal_workspace *w)
+{
+  size_t i;
+  FILE *fp = fopen(filename, "w");
+
+  i = 1;
+  fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01)\n", i++);
+  fprintf(fp, "# Field %zu: original scalar measurement (nT)\n", i++);
+  fprintf(fp, "# Field %zu: calibrated scalar measurement (nT)\n", i++);
+  fprintf(fp, "# Field %zu: model scalar measurement (nT)\n", i++);
+
+  for (i = 0; i < w->n; ++i)
+    {
+      double norm_E = gsl_hypot3(w->Ex[i], w->Ey[i], w->Ez[i]); /* uncorrected scalar field */
+      double Fi = magcal_f_eval(m, i, w);
+
+      /* compute magnetometer field magnitude with calibration parameters applied */
+
+      fprintf(fp, "%ld %f %f %f\n",
+              satdata_epoch2timet(w->t[i]),
+              norm_E,
+              Fi,
+              w->F[i]);
+    }
+
+  fclose(fp);
+
+  return GSL_SUCCESS;
+}
+
 /*
 magcal_f()
   Compute residuals for least-squares fit of magnetometer calibration
@@ -353,7 +384,7 @@ Return: success or error
 
 static int
 magcal_B_eval(const gsl_vector *m, const size_t i,
-              double B[4], magcal_workspace *w)
+              double B[4], const magcal_workspace *w)
 {
   int s = 0;
   double E[3]; /* uncorrected magnetic measurements */
@@ -382,7 +413,7 @@ Return: |B| where B is the magnetometer measured field with calibration
 
 static double
 magcal_f_eval(const gsl_vector *m, const size_t i,
-                    magcal_workspace *w)
+              const magcal_workspace *w)
 {
   double B[4]; /* corrected vector field */
 

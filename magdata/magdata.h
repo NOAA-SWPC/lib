@@ -176,6 +176,7 @@ typedef struct
   size_t ngrad;        /* number of along-track difference measurements */
   size_t nres;         /* number of total residuals */
 
+  size_t euler_flags;  /* EULER_FLG_xxx flags for Euler angle convention */
   size_t global_flags; /* MAGDATA_GLOBFLG_xxx flags applying to all data */
 
   track_weight_workspace *weight_workspace_p;
@@ -200,6 +201,7 @@ typedef struct
 magdata *magdata_alloc(const size_t n, const double R);
 magdata *magdata_realloc(const size_t n, const double R, magdata *data);
 void magdata_free(magdata *data);
+int magdata_set_euler(const size_t flags, magdata *data);
 int magdata_datum_init(magdata_datum *datum);
 int magdata_add(const magdata_datum *datum, magdata *data);
 int magdata_init(magdata *data);

@@ -529,7 +529,7 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
                   B_nec[2] = mptr->Bz_vfm[j];
 
                   /* rotate to NEC with computed Euler angles */
-                  euler_vfm2nec(EULER_FLG_ZYX, alpha, beta, gamma, q, B_nec, B_nec);
+                  euler_vfm2nec(mptr->euler_flags, alpha, beta, gamma, q, B_nec, B_nec);
                 }
               else
                 {
@@ -916,7 +916,7 @@ print_residuals(const char *filename, mfield_workspace *w)
               B_nec[2] = mptr->Bz_vfm[j];
 
               /* rotate to NEC with computed Euler angles */
-              euler_vfm2nec(EULER_FLG_ZYX, alpha, beta, gamma, q, B_nec, B_nec);
+              euler_vfm2nec(mptr->euler_flags, alpha, beta, gamma, q, B_nec, B_nec);
             }
           else
             {

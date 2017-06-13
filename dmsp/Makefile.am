@@ -1,4 +1,4 @@
-bin_PROGRAMS = print stage0 stage1 stage2a stage2b
+bin_PROGRAMS = print print_LTAN stage0 stage1 stage2a stage2b
 
 commonlibs = -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas ~/usr/lib/libgsldsp.a -lm -lcdf
 
@@ -20,3 +20,6 @@ stage2b_LDADD = $(top_builddir)/common/libcommon.la -lm ${commonlibs}
 
 print_SOURCES = print.c
 print_LDADD = $(top_builddir)/common/libcommon.la -lm -lcdf ${commonlibs}
+
+print_LTAN_SOURCES = print_LTAN.c
+print_LTAN_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/libcommon.la $(top_builddir)/euler/libeuler.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lz
