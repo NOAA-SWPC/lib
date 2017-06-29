@@ -245,7 +245,7 @@ mfield_print_residual_stat(const char *component_str, const gsl_rstat_workspace 
   if (component_str == NULL)
     {
       /* print header */
-      fprintf(stderr, "%8s %10s %12s %12s %12s\n",
+      fprintf(stderr, "%12s %10s %12s %12s %12s\n",
               "", "N", "mean (nT)", "sigma (nT)", "rms (nT)");
 
     }
@@ -255,7 +255,7 @@ mfield_print_residual_stat(const char *component_str, const gsl_rstat_workspace 
 
       if (n > 0)
         {
-          fprintf(stderr, "%8s %10zu %12.2f %12.2f %12.2f\n",
+          fprintf(stderr, "%12s %10zu %12.2f %12.2f %12.2f\n",
                   component_str,
                   n,
                   gsl_rstat_mean(rstat_p),
@@ -291,11 +291,13 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
   gsl_rstat_workspace *rstat_highf = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_dx_ns = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_dy_ns = gsl_rstat_alloc();
-  gsl_rstat_workspace *rstat_dz_ns = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_low_dz_ns = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_high_dz_ns = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_df_ns = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_dx_ew = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_dy_ew = gsl_rstat_alloc();
-  gsl_rstat_workspace *rstat_dz_ew = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_low_dz_ew = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_high_dz_ew = gsl_rstat_alloc();
   gsl_rstat_workspace *rstat_df_ew = gsl_rstat_alloc();
 
   fprintf(stderr, "\n");
@@ -315,11 +317,13 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
       gsl_rstat_reset(rstat_highf);
       gsl_rstat_reset(rstat_dx_ns);
       gsl_rstat_reset(rstat_dy_ns);
-      gsl_rstat_reset(rstat_dz_ns);
+      gsl_rstat_reset(rstat_low_dz_ns);
+      gsl_rstat_reset(rstat_high_dz_ns);
       gsl_rstat_reset(rstat_df_ns);
       gsl_rstat_reset(rstat_dx_ew);
       gsl_rstat_reset(rstat_dy_ew);
-      gsl_rstat_reset(rstat_dz_ew);
+      gsl_rstat_reset(rstat_low_dz_ew);
+      gsl_rstat_reset(rstat_high_dz_ew);
       gsl_rstat_reset(rstat_df_ew);
 
       sprintf(buf, "%s/res%zu_X_iter%zu.dat", prefix, i, iter);
@@ -656,7 +660,11 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
                   fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[2], B_model[2], B_fit[2], B_nec_grad[2], B_grad_model[2], B_grad_fit[2], res[2] - res_grad[2]);
-                  gsl_rstat_add(res[2] - res_grad[2], rstat_dz_ns);
+
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(res[2] - res_grad[2], rstat_low_dz_ns);
+                  else
+                    gsl_rstat_add(res[2] - res_grad[2], rstat_high_dz_ns);
                 }
 
               ++idx;
@@ -709,7 +717,11 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
                   fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_nec[2], B_model[2], B_fit[2], B_nec_grad[2], B_grad_model[2], B_grad_fit[2], res[2] - res_grad[2]);
-                  gsl_rstat_add(res[2] - res_grad[2], rstat_dz_ew);
+
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(res[2] - res_grad[2], rstat_low_dz_ew);
+                  else
+                    gsl_rstat_add(res[2] - res_grad[2], rstat_high_dz_ew);
                 }
 
               ++idx;
@@ -743,12 +755,14 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
 
       mfield_print_residual_stat("N/S DX", rstat_dx_ns);
       mfield_print_residual_stat("N/S DY", rstat_dy_ns);
-      mfield_print_residual_stat("N/S DZ", rstat_dz_ns);
+      mfield_print_residual_stat("low N/S DZ", rstat_low_dz_ns);
+      mfield_print_residual_stat("high N/S DZ", rstat_high_dz_ns);
       mfield_print_residual_stat("N/S DF", rstat_df_ns);
 
       mfield_print_residual_stat("E/W DX", rstat_dx_ew);
       mfield_print_residual_stat("E/W DY", rstat_dy_ew);
-      mfield_print_residual_stat("E/W DZ", rstat_dz_ew);
+      mfield_print_residual_stat("low E/W DZ", rstat_low_dz_ew);
+      mfield_print_residual_stat("high E/W DZ", rstat_high_dz_ew);
       mfield_print_residual_stat("E/W DF", rstat_df_ew);
     }
 
@@ -767,11 +781,13 @@ mfield_print_residual(const char *prefix, const size_t iter, mfield_workspace *w
   gsl_rstat_free(rstat_highz);
   gsl_rstat_free(rstat_dx_ns);
   gsl_rstat_free(rstat_dy_ns);
-  gsl_rstat_free(rstat_dz_ns);
+  gsl_rstat_free(rstat_low_dz_ns);
+  gsl_rstat_free(rstat_high_dz_ns);
   gsl_rstat_free(rstat_df_ns);
   gsl_rstat_free(rstat_dx_ew);
   gsl_rstat_free(rstat_dy_ew);
-  gsl_rstat_free(rstat_dz_ew);
+  gsl_rstat_free(rstat_low_dz_ew);
+  gsl_rstat_free(rstat_high_dz_ew);
   gsl_rstat_free(rstat_df_ew);
 
   return s;

@@ -6,10 +6,10 @@ prog="./emm_test"
 outdir="./emm_test_data"
 
 # EMM coefficients in msynth format
-coefdir="./coef2015"
+coefdir="./coef2017"
 
 start_year="2000"
-end_year="2015"
+end_year="2017"
 
 rm -rf ${outdir}
 mkdir -p ${outdir}

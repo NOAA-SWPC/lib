@@ -285,10 +285,11 @@ mfield_calc_Wf(const gsl_vector *x, void *params, gsl_vector *f)
 
 /*
 mfield_calc_fvv()
-  Construct residual vector f(x) using OpenMP parallel
+  Construct D_v^2 f(x) using OpenMP parallel
 processing to compute all the Green's functions quickly.
 
-Inputs: x      - model coefficients
+Inputs: x      - model coefficients, length p
+        v      - velocity vector, length p
         params - parameters
         f      - (output) residual vector
                  if set to NULL, the residual histograms
@@ -402,6 +403,65 @@ mfield_calc_fvv(const gsl_vector *x, const gsl_vector * v, void *params, gsl_vec
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
               MAGDATA_FitMF(mptr->flags[j]))
             {
+              const double t = mptr->ts[j];       /* use scaled time */
+              const double t2 = t * t;
+              const double t3 = t * t2;
+              const double t4 = t2 * t2;
+              double B_model[4], b_model[3];
+              double Dvvf = 0.0;
+              gsl_vector_view vx = gsl_matrix_row(w->omp_dX, thread_id);
+              gsl_vector_view vy = gsl_matrix_row(w->omp_dY, thread_id);
+              gsl_vector_view vz = gsl_matrix_row(w->omp_dZ, thread_id);
+              size_t k, kp;
+
+              /* compute vector model for this residual (this call will fill in vx, vy, vz) */
+              mfield_nonlinear_model(0, x, mptr, j, thread_id, B_model, w);
+              B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
+
+              /* b_model = B_model / || B_model || */
+              for (k = 0; k < 3; ++k)
+                b_model[k] = B_model[k] / B_model[3];
+
+#if 1
+              for (k = 0; k < w->nnm_mf; ++k)
+                {
+                  double v_mf = mfield_get_mf(v, k, w);
+                  double v_sv = mfield_get_sv(v, k, w);
+                  double v_sa = mfield_get_sa(v, k, w);
+                  double dXk = gsl_vector_get(&vx.vector, k);
+                  double dYk = gsl_vector_get(&vy.vector, k);
+                  double dZk = gsl_vector_get(&vz.vector, k);
+                  double term0 = b_model[0] * dXk + b_model[1] * dYk + b_model[2] * dZk; /* b_model . dB^{int}_{nm} */
+                  double tmp[3];
+
+                  /* tmp = (b_model . dB^{int}_{nm}) * b_model + dB^{int}_{nm} */
+                  tmp[0] = term0 * b_model[0] + dXk;
+                  tmp[1] = term0 * b_model[1] + dYk;
+                  tmp[2] = term0 * b_model[2] + dZk;
+
+                  for (kp = 0; kp < w->nnm_mf; ++kp)
+                    {
+                      double vp_mf = mfield_get_mf(v, kp, w);
+                      double vp_sv = mfield_get_sv(v, kp, w);
+                      double vp_sa = mfield_get_sa(v, kp, w);
+                      double dXkp = gsl_vector_get(&vx.vector, kp);
+                      double dYkp = gsl_vector_get(&vy.vector, kp);
+                      double dZkp = gsl_vector_get(&vz.vector, kp);
+                      double xi = tmp[0] * dXkp + tmp[1] * dYkp + tmp[2] * dZkp; /* ||B_model|| * (d/dg_{nm}) (d/dg_{n'm'}) f_i */
+
+                      Dvvf += xi * (v_mf * vp_mf +
+                                    t2 * v_sv * vp_sv +
+                                    0.25 * t4 * v_sa * vp_sa +
+                                    t * (v_mf * vp_sv + v_sv * vp_mf) +
+                                    0.5 * t2 * (v_mf * vp_sa + v_sa * vp_mf) +
+                                    0.5 * t3 * (v_sv * vp_sa + v_sa * vp_sv));
+                    }
+                }
+#endif
+
+              Dvvf /= B_model[3];
+
+              gsl_vector_set(fvv, ridx, Dvvf);
               ++ridx;
             }
 
@@ -821,6 +881,10 @@ Inputs: res_flag  - 0 = normal residual
         thread_id - OpenMP thread id
         B_model   - (output) B_model (X,Y,Z) in NEC
         w         - workspace
+
+Notes:
+1) On output, w->omp_d{X,Y,Z}(thread_id,:) is filled with internal Green's functions
+for dX/dg, dY/dg, dZ/dg
 */
 
 static int
@@ -871,7 +935,6 @@ mfield_nonlinear_model(const int res_flag, const gsl_vector * x, const magdata *
   B_int[0] = mfield_nonlinear_model_int(ts, &vx.vector, x, w);
   B_int[1] = mfield_nonlinear_model_int(ts, &vy.vector, x, w);
   B_int[2] = mfield_nonlinear_model_int(ts, &vz.vector, x, w);
-
 
 #if MFIELD_FIT_EXTFIELD
 

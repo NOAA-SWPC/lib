@@ -751,6 +751,23 @@ msynth_calc_sv(msynth_workspace *w)
         }
     }
 
+  /* zero SA for last snapshot model */
+  {
+    double *cptr = w->c + i * w->p;
+    size_t n;
+
+    for (n = 1; n <= w->nmax; ++n)
+      {
+        int m, ni = (int) n;
+
+        for (m = -ni; m <= ni; ++m)
+          {
+            size_t cidx = msynth_nmidx(n, m, w);
+            cptr[cidx + w->sa_offset] = 0.0;
+          }
+      }
+  }
+
   return s;
 } /* msynth_calc_sv() */
 

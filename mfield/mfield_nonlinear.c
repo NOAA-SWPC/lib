@@ -549,8 +549,8 @@ mfield_init_nonlinear(mfield_workspace *w)
     gsl_multilarge_nlinear_parameters fdf_params =
       gsl_multilarge_nlinear_default_parameters();
 
-    fdf_params.trs = gsl_multilarge_nlinear_trs_ddogleg;
-    fdf_params.scale = gsl_multilarge_nlinear_scale_more;
+    fdf_params.trs = gsl_multilarge_nlinear_trs_lm;
+    fdf_params.scale = gsl_multilarge_nlinear_scale_levenberg;
     w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, w->nres_tot, p);
   }
 
@@ -1974,6 +1974,20 @@ mfield_nonlinear_regularize(gsl_vector *diag, mfield_workspace *w)
   return s;
 } /* mfield_nonlinear_regularize() */
 
+static int
+mfield_robust_print_stat(const char *str, const double sigma, const gsl_rstat_workspace *rstat_p)
+{
+  const size_t n = gsl_rstat_n(rstat_p);
+
+  if (n > 0)
+    {
+      const double mean = gsl_rstat_mean(rstat_p);
+      fprintf(stderr, "\t %18s = %.2f [nT], Robust weight mean = %.4f\n", str, sigma, mean);
+    }
+
+  return 0;
+}
+
 /*
 mfield_robust_weights()
   Compute robust weights given a vector of residuals
@@ -1988,12 +2002,21 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
 {
   int s = 0;
   const double tune = w->robust_workspace_p->tune;
+  const double qdlat_cutoff = w->params.qdlat_fit_cutoff; /* cutoff latitude for high/low statistics */
   size_t i, j;
   size_t idx = 0;
   gsl_rstat_workspace **rstat_x = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
   gsl_rstat_workspace **rstat_y = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
   gsl_rstat_workspace **rstat_z = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
   gsl_rstat_workspace **rstat_f = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_dx_ns = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_dy_ns = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_low_dz_ns = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_high_dz_ns = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_dx_ew = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_dy_ew = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_low_dz_ew = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
+  gsl_rstat_workspace **rstat_high_dz_ew = malloc(w->nsat * sizeof(gsl_rstat_workspace *));
 
   for (i = 0; i < w->nsat; ++i)
     {
@@ -2001,6 +2024,14 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
       rstat_y[i] = gsl_rstat_alloc();
       rstat_z[i] = gsl_rstat_alloc();
       rstat_f[i] = gsl_rstat_alloc();
+      rstat_dx_ns[i] = gsl_rstat_alloc();
+      rstat_dy_ns[i] = gsl_rstat_alloc();
+      rstat_low_dz_ns[i] = gsl_rstat_alloc();
+      rstat_high_dz_ns[i] = gsl_rstat_alloc();
+      rstat_dx_ew[i] = gsl_rstat_alloc();
+      rstat_dy_ew[i] = gsl_rstat_alloc();
+      rstat_low_dz_ew[i] = gsl_rstat_alloc();
+      rstat_high_dz_ew[i] = gsl_rstat_alloc();
     }
 
   fprintf(stderr, "\n");
@@ -2022,19 +2053,25 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
           if (MAGDATA_ExistX(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_rstat_add(fi, rstat_x[i]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                gsl_rstat_add(fi, rstat_x[i]);
             }
 
           if (MAGDATA_ExistY(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_rstat_add(fi, rstat_y[i]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                gsl_rstat_add(fi, rstat_y[i]);
             }
 
           if (MAGDATA_ExistZ(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
-              gsl_rstat_add(fi, rstat_z[i]);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                gsl_rstat_add(fi, rstat_z[i]);
             }
 
           if (MAGDATA_ExistScalar(mptr->flags[j]) &&
@@ -2047,31 +2084,59 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
           if (MAGDATA_ExistDX_NS(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                gsl_rstat_add(fi, rstat_dx_ns[i]);
             }
 
           if (MAGDATA_ExistDY_NS(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                gsl_rstat_add(fi, rstat_dy_ns[i]);
             }
 
           if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(fi, rstat_low_dz_ns[i]);
+                  else
+                    gsl_rstat_add(fi, rstat_high_dz_ns[i]);
+                }
             }
 
           if (MAGDATA_ExistDX_EW(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                gsl_rstat_add(fi, rstat_dx_ew[i]);
             }
 
           if (MAGDATA_ExistDY_EW(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                gsl_rstat_add(fi, rstat_dy_ew[i]);
             }
 
           if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
             {
               double fi = gsl_vector_get(f, idx++);
+
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(fi, rstat_low_dz_ew[i]);
+                  else
+                    gsl_rstat_add(fi, rstat_high_dz_ew[i]);
+                }
             }
         }
     }
@@ -2089,11 +2154,27 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
       double sigma_Y = alpha * gsl_rstat_sd(rstat_y[i]);
       double sigma_Z = alpha * gsl_rstat_sd(rstat_z[i]);
       double sigma_F = alpha * gsl_rstat_sd(rstat_f[i]);
+      double sigma_DX_NS = alpha * gsl_rstat_sd(rstat_dx_ns[i]);
+      double sigma_DY_NS = alpha * gsl_rstat_sd(rstat_dy_ns[i]);
+      double sigma_low_DZ_NS = alpha * gsl_rstat_sd(rstat_low_dz_ns[i]);
+      double sigma_high_DZ_NS = alpha * gsl_rstat_sd(rstat_high_dz_ns[i]);
+      double sigma_DX_EW = alpha * gsl_rstat_sd(rstat_dx_ew[i]);
+      double sigma_DY_EW = alpha * gsl_rstat_sd(rstat_dy_ew[i]);
+      double sigma_low_DZ_EW = alpha * gsl_rstat_sd(rstat_low_dz_ew[i]);
+      double sigma_high_DZ_EW = alpha * gsl_rstat_sd(rstat_high_dz_ew[i]);
 
       gsl_rstat_reset(rstat_x[i]);
       gsl_rstat_reset(rstat_y[i]);
       gsl_rstat_reset(rstat_z[i]);
       gsl_rstat_reset(rstat_f[i]);
+      gsl_rstat_reset(rstat_dx_ns[i]);
+      gsl_rstat_reset(rstat_dy_ns[i]);
+      gsl_rstat_reset(rstat_low_dz_ns[i]);
+      gsl_rstat_reset(rstat_high_dz_ns[i]);
+      gsl_rstat_reset(rstat_dx_ew[i]);
+      gsl_rstat_reset(rstat_dy_ew[i]);
+      gsl_rstat_reset(rstat_low_dz_ew[i]);
+      gsl_rstat_reset(rstat_high_dz_ew[i]);
 
       for (j = 0; j < mptr->n; ++j)
         {
@@ -2132,18 +2213,94 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
               gsl_vector_set(wts, idx++, wi);
               gsl_rstat_add(wi, rstat_f[i]);
             }
+
+          if (MAGDATA_ExistDX_NS(mptr->flags[j]))
+            {
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_DX_NS));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_dx_ns[i]);
+            }
+
+          if (MAGDATA_ExistDY_NS(mptr->flags[j]))
+            {
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_DY_NS));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_dy_ns[i]);
+            }
+
+          if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
+            {
+              double fi = gsl_vector_get(f, idx);
+              double wi;
+              
+              if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                {
+                  wi = bisquare(fi / (tune * sigma_low_DZ_NS));
+                  gsl_rstat_add(wi, rstat_low_dz_ns[i]);
+                }
+              else
+                {
+                  wi = bisquare(fi / (tune * sigma_high_DZ_NS));
+                  gsl_rstat_add(wi, rstat_high_dz_ns[i]);
+                }
+
+              gsl_vector_set(wts, idx++, wi);
+            }
+
+          if (MAGDATA_ExistDX_EW(mptr->flags[j]))
+            {
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_DX_EW));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_dx_ew[i]);
+            }
+
+          if (MAGDATA_ExistDY_EW(mptr->flags[j]))
+            {
+              double fi = gsl_vector_get(f, idx);
+              double wi = bisquare(fi / (tune * sigma_DY_EW));
+              gsl_vector_set(wts, idx++, wi);
+              gsl_rstat_add(wi, rstat_dy_ew[i]);
+            }
+
+          if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
+            {
+              double fi = gsl_vector_get(f, idx);
+              double wi;
+
+              if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                {
+                  wi = bisquare(fi / (tune * sigma_low_DZ_EW));
+                  gsl_rstat_add(wi, rstat_low_dz_ew[i]);
+                }
+              else
+                {
+                  wi = bisquare(fi / (tune * sigma_high_DZ_EW));
+                  gsl_rstat_add(wi, rstat_high_dz_ew[i]);
+                }
+
+              gsl_vector_set(wts, idx++, wi);
+            }
         }
 
       fprintf(stderr, "\t === SATELLITE %zu (robust sigma) ===\n", i);
 
-      if (gsl_rstat_n(rstat_x[i]) > 0)
-        fprintf(stderr, "\t sigma X     = %.2f [nT], Robust weight mean = %.4f\n", sigma_X, gsl_rstat_mean(rstat_x[i]));
-      if (gsl_rstat_n(rstat_y[i]) > 0)
-        fprintf(stderr, "\t sigma Y     = %.2f [nT], Robust weight mean = %.4f\n", sigma_Y, gsl_rstat_mean(rstat_y[i]));
-      if (gsl_rstat_n(rstat_z[i]) > 0)
-        fprintf(stderr, "\t sigma Z     = %.2f [nT], Robust weight mean = %.4f\n", sigma_Z, gsl_rstat_mean(rstat_z[i]));
-      if (gsl_rstat_n(rstat_f[i]) > 0)
-        fprintf(stderr, "\t sigma F     = %.2f [nT], Robust weight mean = %.4f\n", sigma_F, gsl_rstat_mean(rstat_f[i]));
+      mfield_robust_print_stat("sigma X", sigma_X, rstat_x[i]);
+      mfield_robust_print_stat("sigma Y", sigma_Y, rstat_y[i]);
+      mfield_robust_print_stat("sigma Z", sigma_Z, rstat_z[i]);
+      mfield_robust_print_stat("sigma F", sigma_F, rstat_f[i]);
+
+      mfield_robust_print_stat("sigma DX_NS", sigma_DX_NS, rstat_dx_ns[i]);
+      mfield_robust_print_stat("sigma DY_NS", sigma_DY_NS, rstat_dy_ns[i]);
+      mfield_robust_print_stat("sigma low DZ_NS", sigma_low_DZ_NS, rstat_low_dz_ns[i]);
+      mfield_robust_print_stat("sigma high DZ_NS", sigma_high_DZ_NS, rstat_high_dz_ns[i]);
+
+      mfield_robust_print_stat("sigma DX_EW", sigma_DX_EW, rstat_dx_ew[i]);
+      mfield_robust_print_stat("sigma DY_EW", sigma_DY_EW, rstat_dy_ew[i]);
+      mfield_robust_print_stat("sigma low DZ_EW", sigma_low_DZ_EW, rstat_low_dz_ew[i]);
+      mfield_robust_print_stat("sigma high DZ_EW", sigma_high_DZ_EW, rstat_high_dz_ew[i]);
     }
 
   assert(idx == w->nres);
@@ -2154,12 +2311,28 @@ mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace *
       gsl_rstat_free(rstat_y[i]);
       gsl_rstat_free(rstat_z[i]);
       gsl_rstat_free(rstat_f[i]);
+      gsl_rstat_free(rstat_dx_ns[i]);
+      gsl_rstat_free(rstat_dy_ns[i]);
+      gsl_rstat_free(rstat_low_dz_ns[i]);
+      gsl_rstat_free(rstat_high_dz_ns[i]);
+      gsl_rstat_free(rstat_dx_ew[i]);
+      gsl_rstat_free(rstat_dy_ew[i]);
+      gsl_rstat_free(rstat_low_dz_ew[i]);
+      gsl_rstat_free(rstat_high_dz_ew[i]);
     }
 
   free(rstat_x);
   free(rstat_y);
   free(rstat_z);
   free(rstat_f);
+  free(rstat_dx_ns);
+  free(rstat_dy_ns);
+  free(rstat_low_dz_ns);
+  free(rstat_high_dz_ns);
+  free(rstat_dx_ew);
+  free(rstat_dy_ew);
+  free(rstat_low_dz_ew);
+  free(rstat_high_dz_ew);
 
   return s;
 }
@@ -2277,12 +2450,21 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
             {
               double t0 = w->data_workspace_p->t0[i];
               size_t euler_idx = mfield_euler_idx(i, t0, w);
+              char buf[32];
 
-              fprintf(stderr, "\t euler%zu: %12.4f %12.4f %12.4f [deg]\n",
+              if (mptr->euler_flags & EULER_FLG_ZYX)
+                sprintf(buf, "ZYX");
+              else if (mptr->euler_flags & EULER_FLG_ZYZ)
+                sprintf(buf, "ZYZ");
+              else
+                *buf = '\0';
+
+              fprintf(stderr, "\t euler%zu: %12.4f %12.4f %12.4f [deg] [%s]\n",
                       i,
                       gsl_vector_get(x, euler_idx) * 180.0 / M_PI,
                       gsl_vector_get(x, euler_idx + 1) * 180.0 / M_PI,
-                      gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI);
+                      gsl_vector_get(x, euler_idx + 2) * 180.0 / M_PI,
+                      buf);
             }
         }
     }

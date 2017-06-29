@@ -53,7 +53,6 @@
 
 typedef struct
 {
-  int flag_rms;           /* use track rms test */
   size_t downsample;      /* downsampling factor */
   double min_LT;          /* minimum local time for field modeling */
   double max_LT;          /* maximum local time for field modeling */
@@ -645,15 +644,14 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   /* detect bad tracks with rms test */
-  if (params->flag_rms)
-    {
-      const char *rmsfile = "satrms.dat";
-      size_t nrms;
+  {
+    const char *rmsfile = "satrms.dat";
+    size_t nrms;
 
-      nrms = track_flag_rms(rmsfile, params->rms_thresh, NULL, data, track_p);
-      fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
-              nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
-    }
+    nrms = track_flag_rms(rmsfile, params->rms_thresh, NULL, data, track_p);
+    fprintf(stderr, "preprocess_data: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
+            nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
+  }
 
 #if 1
 
@@ -1166,9 +1164,9 @@ main(int argc, char *argv[])
   size_t magdata_flags2 = 0;
   size_t magdata_euler_flags = 0; /* EULER_FLG_xxx */
   double polar_gap = -1.0;
+  int flag_vec_rms = 1;
 
   /* initialize parameters */
-  params.flag_rms = 1;
   params.downsample = 0;
   params.max_kp = -1.0;
   params.max_dRC = -1.0;
@@ -1224,9 +1222,10 @@ main(int argc, char *argv[])
         {
           /* Swarm ASM-V */
           case 'a':
-            data = read_swarm(optarg, 1);
+            data = read_swarm(optarg, 0);
             magdata_flags = MAGDATA_GLOBFLG_EULER;
-            params.flag_rms = 0; /* no NEC data for rms flagging */
+            magdata_euler_flags = EULER_FLG_ZYZ | EULER_FLG_RINV;
+            flag_vec_rms = 0; /* no NEC data for rms flagging */
             break;
 
           /* Swarm official */
@@ -1295,6 +1294,12 @@ main(int argc, char *argv[])
     params.downsample = downsample;
   if (gradient_ns > 0)
     params.gradient_ns = gradient_ns;
+  if (flag_vec_rms == 0)
+    {
+      params.rms_thresh[0] = -1.0;
+      params.rms_thresh[1] = -1.0;
+      params.rms_thresh[2] = -1.0;
+    }
 
   /* check parameters */
   status = check_parameters(&params);

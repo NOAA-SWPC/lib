@@ -11,6 +11,7 @@
  * [-h swarm_shc_file]
  * [-p pomme_file]
  * [-i igrf12_mf_candidate]
+ * [-g ipgp_file]
  * [-z]
  * [-n nmax]
  * [-t epoch]
@@ -99,7 +100,7 @@ main(int argc, char *argv[])
   double epoch = -1.0;
   int diff = 0;
 
-  while ((c = getopt(argc, argv, "c:m:w:o:a:h:p:n:e:i:d")) != (-1))
+  while ((c = getopt(argc, argv, "c:m:w:o:a:h:p:n:e:i:g:d")) != (-1))
     {
       switch (c)
         {
@@ -145,6 +146,13 @@ main(int argc, char *argv[])
               msynth2 = msynth_pomme_read(optarg);
             break;
 
+          case 'g':
+            if (!msynth1)
+              msynth1 = msynth_ipgp_read(optarg);
+            else
+              msynth2 = msynth_ipgp_read(optarg);
+            break;
+
           case 'i':
             if (!msynth1)
               {
@@ -179,7 +187,7 @@ main(int argc, char *argv[])
 
   if (!msynth1)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-p pomme_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-t epoch] [-o output_file] [-d]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-p pomme_file] [-i igrf12_mf_candidate] [-g ipgp_file] [-z] [-n nmax] [-t epoch] [-o output_file] [-d]\n", argv[0]);
       exit(1);
     }
 

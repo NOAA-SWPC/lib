@@ -44,7 +44,7 @@
 #include "stage2_quaternions.c"
 #include "stage2_spikes.c"
 
-#define WRITE_JUMP_DATA                   0
+#define WRITE_JUMP_DATA                   1
 
 /*
 stage2_scalar_calibrate()

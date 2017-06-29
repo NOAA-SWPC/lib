@@ -36,8 +36,8 @@ msynth_ngdc720_read(const char *filename)
 msynth_workspace *
 msynth_emm_read(const char *filename)
 {
-  const size_t nmax = 740;
-  const double epoch = 2010.0;
+  const size_t nmax = 790;
+  const double epoch = 2017.0;
 
   return msynth_crust_read(filename, nmax, epoch);
 } /* msynth_emm_read() */

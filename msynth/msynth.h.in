@@ -9,7 +9,7 @@
 #define MSYNTH_WMM_FILE        "@abs_top_builddir@/msynth/cof/wmm/WMM2015.COF"
 #define MSYNTH_MF7_FILE        "@abs_top_builddir@/msynth/cof/MF7.cof"
 #define MSYNTH_NGDC720_FILE    "@abs_top_builddir@/msynth/cof/NGDC-720_V3p1.cof"
-#define MSYNTH_EMM_FILE        "@abs_top_builddir@/msynth/cof/EMM2015_crust.cof"
+#define MSYNTH_EMM_FILE        "@abs_top_builddir@/msynth/cof/EMM2017_crust.cof"
 #define MSYNTH_CHAOS_FILE      "@abs_top_builddir@/msynth/cof/CHAOS-6-x2_core.shc"
 #define MSYNTH_BOUMME_FILE     "@abs_top_builddir@/msynth/cof/boumme/boumme-0.5.txt"
 
@@ -138,6 +138,9 @@ msynth_workspace *msynth_igrf_read_mf(const char *filename);
 int msynth_igrf_read_sv(const char *filename, msynth_workspace *w);
 int msynth_igrf_write(const char *filename, const char *desc, const msynth_workspace *w);
 int msynth_igrf_sv_write(const char *filename, const char *desc, const msynth_workspace *w);
+
+/* msynth_ipgp.c */
+msynth_workspace *msynth_ipgp_read(const char *filename);
 
 /* msynth_pomme.c */
 msynth_workspace *msynth_pomme_read(const char *filename);
