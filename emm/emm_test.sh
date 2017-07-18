@@ -9,7 +9,7 @@ outdir="./emm_test_data"
 coefdir="./coef2017"
 
 start_year="2000"
-end_year="2017"
+end_year="2021"
 
 rm -rf ${outdir}
 mkdir -p ${outdir}

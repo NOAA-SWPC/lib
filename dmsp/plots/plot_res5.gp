@@ -27,12 +27,12 @@ idx1=3
 idx2=7
 set key bottom right horizontal tc variable font "Helvetica Bold,18"
 set title "Scalar residuals with CHAOS"
-plot 'dat08_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2008", \
-     'dat09_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2009", \
-     'dat10_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2010", \
-     'dat11_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2011", \
-     'dat12_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2012", \
-     'dat13_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2013"
+plot 'F15_2008.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2008", \
+     'F15_2009.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2009", \
+     'F15_2010.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2010", \
+     'F15_2011.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2011", \
+     'F15_2012.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2012", \
+     'F15_2013.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2013"
 
 load 'incrow.cfg'
 
@@ -42,21 +42,21 @@ set yrange [-300:300]
 idx1=6
 idx2=10
 set title "VFM B_3 residuals with CHAOS (projected onto geodetic normal)"
-plot 'dat08_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2008", \
-     'dat09_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2009", \
-     'dat10_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2010", \
-     'dat11_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2011", \
-     'dat12_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2012", \
-     'dat13_ic' us 1:(column(idx1)-column(idx2)) w dot ti "2013"
+plot 'F15_2008.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2008", \
+     'F15_2009.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2009", \
+     'F15_2010.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2010", \
+     'F15_2011.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2011", \
+     'F15_2012.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2012", \
+     'F15_2013.txt' us 1:(column(idx1)-column(idx2)) w dot ti "2013"
 
 load 'incrow.cfg'
 
 set title "VFM H residuals with CHAOS"
-plot 'dat08_ic' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2008", \
-     'dat09_ic' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2009", \
-     'dat10_ic' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2010", \
-     'dat11_ic' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2011", \
-     'dat12_ic' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2012", \
-     'dat13_ic' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2013"
+plot 'F15_2008.txt' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2008", \
+     'F15_2009.txt' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2009", \
+     'F15_2010.txt' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2010", \
+     'F15_2011.txt' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2011", \
+     'F15_2012.txt' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2012", \
+     'F15_2013.txt' us 1:(hypot($4,$5)-hypot($8,$9)) w dot ti "2013"
 
 unset multiplot

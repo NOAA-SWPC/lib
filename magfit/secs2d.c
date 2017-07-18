@@ -124,7 +124,7 @@ secs2d_alloc(const void * params)
   const double lon_max = mparams->lon_max;
   const double lon_min = mparams->lon_min;
   const double phi_min = lon_min * M_PI / 180.0;
-  const double diff = wrap180(lon_max - lon_min);
+  const double diff = lon_max - lon_min;
   const size_t nphi = GSL_MAX((size_t) (fabs(diff) / lon_spacing + 1.0), 2);
   const double dphi = diff / (nphi - 1.0) * M_PI / 180.0;
   const size_t npoles = ntheta * nphi;
@@ -565,18 +565,27 @@ secs2d_green_df(const double r, const double theta, const double phi,
                 double B[3], secs2d_state_t *state)
 {
   const double s = GSL_MIN(r, state->R) / GSL_MAX(r, state->R);
-  double thetap, stp, ctp;
+  double thetap, stp, ctp, d;
   size_t i;
 
   secs2d_transform(theta0, phi0, theta, phi, &thetap);
   stp = sin(thetap);
   ctp = cos(thetap);
+  d = sqrt(1.0 + s*s - 2.0*s*ctp);
 
   if (r >= state->R)
     {
-      B[0] = ((1.0 - s * ctp) / sqrt(1 + s*s - 2.0*s*ctp) - 1.0) / stp;
+      /* observation point above ionosphere layer */
+      B[0] = ((1.0 - s * ctp) / d - 1.0) / stp;
       B[1] = 0.0;
-      B[2] = -s * (1.0 / sqrt(1.0 + s*s - 2.0*s*ctp) - 1.0);
+      B[2] = -s * (1.0 / d - 1.0);
+    }
+  else
+    {
+      /* observation point below ionosphere layer */
+      B[0] = ((s - ctp) / d + ctp) / stp;
+      B[1] = 0.0;
+      B[2] = 1.0 - 1.0 / d;
     }
 
   for (i = 0; i < 3; ++i)

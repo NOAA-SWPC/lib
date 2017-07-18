@@ -385,7 +385,6 @@ sqfilt_linear_matrix_row(const double r, const double thetaq,
 {
   int s = 0;
   const double R = 6371.2;
-  green_workspace *green_p = w->green_workspace_p;
   mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
   double phi_sm, theta_sm, lat_sm;
   double lat = M_PI / 2.0 - thetaq;
@@ -394,26 +393,26 @@ sqfilt_linear_matrix_row(const double r, const double thetaq,
   size_t i, n;
 
   /* compute basis functions for M(r,thetaq,phi) */
-  green_calc(r, thetaq, phi, R, green_p);
+  green_calc_int(r, thetaq, phi, w->dX, w->dY, w->dZ, w->green_int_p);
 
   /* compute basis functions for K(r,thetaq_SM,phi_SM) */
   trans(GEO2SM, fday, phi, lat, &phi_sm, &lat_sm);
   theta_sm = M_PI / 2.0 - lat_sm;
 
-  green_calc_ext(r, theta_sm, phi_sm, R, green_p);
+  green_calc_ext(r, theta_sm, phi_sm, w->dX_ext, w->dY_ext, w->dZ_ext, w->green_ext_p);
 
-  for (i = 0; i < green_p->nnm; ++i)
+  for (i = 0; i < w->green_ext_p->nnm; ++i)
     {
       double phi_ss, lat_ss;
       double X, Y, Z;
 
-      trans_vec(SM2GEO, fday, phi_sm, lat_sm, green_p->dX_ext[i],
-                green_p->dY_ext[i], green_p->dZ_ext[i], &phi_ss,
+      trans_vec(SM2GEO, fday, phi_sm, lat_sm, w->dX_ext[i],
+                w->dY_ext[i], w->dZ_ext[i], &phi_ss,
                 &lat_ss, &X, &Y, &Z);
 
-      green_p->dX_ext[i] = X;
-      green_p->dY_ext[i] = Y;
-      green_p->dZ_ext[i] = Z;
+      w->dX_ext[i] = X;
+      w->dY_ext[i] = Y;
+      w->dZ_ext[i] = Z;
     }
 
   /* internal coefficients */
@@ -425,10 +424,10 @@ sqfilt_linear_matrix_row(const double r, const double thetaq,
       for (m = -M; m <= M; ++m)
         {
           size_t idx = sqfilt_nmidx(0, n, m, sqfilt_p);
-          size_t gidx = green_nmidx(n, m);
-          double val = b_int[0] * green_p->dX[gidx] +
-                       b_int[1] * green_p->dY[gidx] +
-                       b_int[2] * green_p->dZ[gidx];
+          size_t gidx = green_nmidx(n, m, w->green_int_p);
+          double val = b_int[0] * w->dX[gidx] +
+                       b_int[1] * w->dY[gidx] +
+                       b_int[2] * w->dZ[gidx];
 
           gsl_vector_set(v, idx, val);
         }
@@ -443,10 +442,10 @@ sqfilt_linear_matrix_row(const double r, const double thetaq,
       for (m = -M; m <= M; ++m)
         {
           size_t idx = sqfilt_nmidx(1, n, m, sqfilt_p);
-          size_t gidx = green_nmidx(n, m);
-          double val = b_int[0] * green_p->dX_ext[gidx] +
-                       b_int[1] * green_p->dY_ext[gidx] +
-                       b_int[2] * green_p->dZ_ext[gidx];
+          size_t gidx = green_nmidx(n, m, w->green_ext_p);
+          double val = b_int[0] * w->dX_ext[gidx] +
+                       b_int[1] * w->dY_ext[gidx] +
+                       b_int[2] * w->dZ_ext[gidx];
 
           gsl_vector_set(v, idx, val);
         }
@@ -552,7 +551,6 @@ static int
 sqfilt_model_int(const gsl_vector *c, double *X, double *Y, double *Z,
                  mag_workspace *w)
 {
-  green_workspace *green_p = w->green_workspace_p;
   mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
   size_t n;
 
@@ -568,12 +566,12 @@ sqfilt_model_int(const gsl_vector *c, double *X, double *Y, double *Z,
       for (m = -M; m <= M; ++m)
         {
           size_t idx = sqfilt_nmidx(0, n, m, sqfilt_p);
-          size_t gidx = green_nmidx(n, m);
+          size_t gidx = green_nmidx(n, m, w->green_int_p);
           double cnm = gsl_vector_get(c, idx);
 
-          *X += cnm * green_p->dX[gidx];
-          *Y += cnm * green_p->dY[gidx];
-          *Z += cnm * green_p->dZ[gidx];
+          *X += cnm * w->dX[gidx];
+          *Y += cnm * w->dY[gidx];
+          *Z += cnm * w->dZ[gidx];
         }
     }
 
@@ -584,7 +582,6 @@ static int
 sqfilt_model_ext(const gsl_vector *c, double *X, double *Y, double *Z,
                  mag_workspace *w)
 {
-  green_workspace *green_p = w->green_workspace_p;
   mag_sqfilt_scalar_workspace *sqfilt_p = w->sqfilt_scalar_workspace_p;
   size_t n;
 
@@ -600,12 +597,12 @@ sqfilt_model_ext(const gsl_vector *c, double *X, double *Y, double *Z,
       for (m = -M; m <= M; ++m)
         {
           size_t idx = sqfilt_nmidx(1, n, m, sqfilt_p);
-          size_t gidx = green_nmidx(n, m);
+          size_t gidx = green_nmidx(n, m, w->green_ext_p);
           double cnm = gsl_vector_get(c, idx);
 
-          *X += cnm * green_p->dX_ext[gidx];
-          *Y += cnm * green_p->dY_ext[gidx];
-          *Z += cnm * green_p->dZ_ext[gidx];
+          *X += cnm * w->dX_ext[gidx];
+          *Y += cnm * w->dY_ext[gidx];
+          *Z += cnm * w->dZ_ext[gidx];
         }
     }
 

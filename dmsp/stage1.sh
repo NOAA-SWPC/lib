@@ -4,6 +4,9 @@
 #
 # Usage: stage1.sh [FXX] [year]
 
+# load environment variables
+. $HOME/.bashrc
+
 # satellite to process
 dmsp_sat="F15"
 if test -n "$1"; then

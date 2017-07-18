@@ -12,6 +12,8 @@
  */
 
 int eci2ecef_pos(const time_t t, const double r_ECI[3], double r_ECEF[3]);
+int eci2ecef(const time_t t, const double r_ECI[3], const double v_ECI[3],
+             double r_ECEF[3], double v_ECEF[3]);
 int ecef2eci_pos(const time_t t, const double r_ECI[3], double r_ECEF[3]);
 int eci2sph_pos(const time_t t, const double r_ECI[3], double r_sph[3]);
 int sph2eci_pos(const time_t t, const double r, const double theta,

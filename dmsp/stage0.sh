@@ -40,7 +40,7 @@ bowman()
   outfile="$2"
 
   # Bowman ephemeris data files
-  bow_dir="/nfs/satmag_work/palken/dmsp_bowman"
+  bow_dir="/data/palken/DMSP/EPH_bowman"
 
   # find doy from inside DMSP file
   doy=`cat ${file} | awk 'NR == 7 {print $1}' | cut -c 5-7`
@@ -93,10 +93,10 @@ for file in `ls *${dmsp_sat}*`; do
     echo "Processing: ${file}"
 
     # Bowman ephemeris
-    #bowman ${file} ${outfile}
+    bowman ${file} ${outfile}
 
     # TENA ephemeris
-    tena ${file} ${outfile}
+    #tena ${file} ${outfile}
 
     # Original ephemeris
     #orig ${file} ${outfile}

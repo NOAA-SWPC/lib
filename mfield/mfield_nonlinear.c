@@ -549,8 +549,13 @@ mfield_init_nonlinear(mfield_workspace *w)
     gsl_multilarge_nlinear_parameters fdf_params =
       gsl_multilarge_nlinear_default_parameters();
 
+#if 1
     fdf_params.trs = gsl_multilarge_nlinear_trs_lm;
     fdf_params.scale = gsl_multilarge_nlinear_scale_levenberg;
+#else
+    fdf_params.trs = gsl_multilarge_nlinear_trs_ddogleg;
+    fdf_params.scale = gsl_multilarge_nlinear_scale_more;
+#endif
     w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, w->nres_tot, p);
   }
 

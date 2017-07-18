@@ -285,9 +285,24 @@ interp_eph(satdata_mag *data, eph_data *eph)
 
           calc_quaternions_ECEF(pos, vel, q);
         }
+      else if (w->data->flags & EPH_DATA_FLG_ECI)
+        {
+          time_t unix_time = satdata_epoch2timet(data->t[i]);
+          double pos_ECEF[3], vel_ECEF[3];
+
+          /* convert ECI position and velocity to ECEF */
+          eci2ecef(unix_time, pos, vel, pos_ECEF, vel_ECEF);
+
+          /* compute (r,theta,phi) for this point from ECEF position */
+          r = gsl_hypot3(pos_ECEF[0], pos_ECEF[1], pos_ECEF[2]);
+          theta = acos(pos_ECEF[2] / r);
+          phi = atan2(pos_ECEF[1], pos_ECEF[0]);
+
+          calc_quaternions_ECEF(pos_ECEF, vel_ECEF, q);
+        }
       else
         {
-          fprintf(stderr, "interp_eph: ECI not yet supported\n");
+          fprintf(stderr, "interp_eph: unknown interpolation type\n");
           return -1;
         }
 

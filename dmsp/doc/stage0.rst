@@ -17,10 +17,11 @@ spacecraft axes as follows,
    \begin{array}{ll}
      \textrm{velocity direction} & \hat{s}_1 = \hat{s}_2 \times \hat{s}_3 \\
      \textrm{east/west} & \hat{s}_2 = \left( \hat{s}_3 \times \mathbf{v} \right) / \left| \hat{s}_3 \times \mathbf{v} \right| \\
-     \textrm{geodetic downward} & \hat{s}_3 = -e_{\mu}
+     \textrm{geodetic downward} & \hat{s}_3 = -\hat{e}_{\mu}
    \end{array}
 
-Here, :math:`\hat{s}_3` is chosen as the local geodetic downward direction, since
+Here, :math:`\hat{e}_{\mu}` is the outward normal to the local ellipsoid as defined
+by WGS84. So :math:`\hat{s}_3` is chosen as the local geodetic downward direction, since
 the DMSP attitude control system is designed to keep the spacecraft fixed with
 respect to the geodetic normal to within 0.01 degrees. The vector :math:`\hat{s}_2`
 is defined to be normal to the velocity direction and geodetic downward. This is

@@ -101,7 +101,7 @@ main(int argc, char *argv[])
     }
 
   data_out = satdata_mag_alloc(data_in->n);
-  msynth_core = msynth_read(MSYNTH_BOUMME_FILE);
+  msynth_core = msynth_swarm_read(MSYNTH_CHAOS_FILE);
 
   fprintf(stderr, "main: computing magnetic field model (downsampling by %d)...", down_sample);
   gettimeofday(&tv0, NULL);

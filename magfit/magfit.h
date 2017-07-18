@@ -21,6 +21,12 @@
 
 typedef struct
 {
+  /* gauss parameters */
+  size_t nmax_int;       /* spherical harmonic degree for internal field */
+  size_t mmax_int;       /* spherical harmonic order for internal field */
+  size_t nmax_ext;       /* spherical harmonic degree for external field */
+  size_t mmax_ext;       /* spherical harmonic order for external field */
+
   /* SECS parameters */
   double lat_spacing1d;  /* latitude pole spacing for 1D SECS (degrees) */
   double lat_spacing2d;  /* latitude pole spacing for 2D SECS (degrees) */
@@ -70,6 +76,7 @@ const magfit_type * magfit_secs1d;
 const magfit_type * magfit_secs2d;
 const magfit_type * magfit_pca;
 const magfit_type * magfit_gaussint;
+const magfit_type * magfit_gauss;
 const magfit_type * magfit_rc;
 
 /*

@@ -25,7 +25,6 @@
 #define TEST_GUI       0
 
 #define NMAX_CORE      15
-#define START_YEAR     1900
 
 #define indx(n,m)     ( (n) * ((n) + 1) / 2 + (m) )
 
@@ -123,9 +122,9 @@ print_test_values(const int header, const double altd, const double latd,
   dD = (X*dY - Y*dX) / (H*H) * 3437.74677; /* convert to minutes */
 
 #if TEST_ALL
-  /* 12 decimal place for EMM testing */
-  /*printf("%5.1f %6.1f %6.1f %6.1f %7.2f %6.2f %9.1f %9.1f %9.1f %9.1f %9.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f\n",*/
-  printf("%6.1f %6g %5g %5g %6.2f %6.2f %8.12f %8.12f %8.12f %8.12f %8.12f %4.1f %4.1f %5.12f %5.12f %5.12f %5.12f %5.12f\n",
+  /* 1 decimal place for EMM testing */
+  printf("%5.1f %6.1f %6.1f %6.1f %7.2f %6.2f %9.1f %9.1f %9.1f %9.1f %9.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f %6.1f\n",
+  /*printf("%6.1f %6g %5g %5g %6.2f %6.2f %8.12f %8.12f %8.12f %8.12f %8.12f %4.1f %4.1f %5.12f %5.12f %5.12f %5.12f %5.12f\n",*/
          t,
          altd,
          latd,

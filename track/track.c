@@ -124,7 +124,7 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
   while (i < data->n - 1)
     {
       int s;
-      double lon_eq, t_eq, lt_eq;
+      double lon_eq, lat_eq, t_eq, lt_eq;
       size_t sidx, eidx;
       track_data *tptr;
 
@@ -158,6 +158,7 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
           t_eq = interp1d(data->latitude[idx], data->latitude[idx + 1],
                           data->t[idx], data->t[idx + 1], 0.0);
           lon_eq = data->longitude[idx];
+          lat_eq = data->latitude[idx];
 
           /* compute local time */
           unix_time = satdata_epoch2timet(t_eq);
@@ -185,6 +186,7 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
       tptr->n = eidx - sidx + 1;
       tptr->t_eq = t_eq;
       tptr->lon_eq = lon_eq;
+      tptr->lat_eq = lat_eq;
       tptr->lt_eq = lt_eq;
       tptr->nrms_scal = 0;
       tptr->nrms_vec = 0;

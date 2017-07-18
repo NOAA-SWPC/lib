@@ -83,6 +83,11 @@ magfit_default_parameters(void)
 {
   magfit_parameters params;
 
+  params.nmax_int = 60;
+  params.mmax_int = 30;
+  params.nmax_ext = 1;
+  params.mmax_ext = 0;
+
   params.lat_spacing1d = 0.5;
   params.lat_spacing2d = 2.0;
   params.lat_min = -60.0;
@@ -281,7 +286,7 @@ magfit_eval_B(const double t, const double r, const double theta, const double p
 
 /*
 magfit_eval_J()
-  Evaluate current density at a given (r,theta) using
+  Evaluate current density at a given (r,theta,phi) using
 previously computed coefficients
 
 Inputs: r     - radius (km)

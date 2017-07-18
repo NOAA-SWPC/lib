@@ -5,7 +5,7 @@
 #ifndef INCLUDED_ut1_h
 #define INCLUDED_ut1_h
 
-#define UT1_DATA_FILE    "/nfs/satmag_work/palken/data/DUT1/dut1.dat"
+#define UT1_DATA_FILE    "/data/palken/data/DUT1/dut1.dat"
 
 #define UT1_BAD_VALUE    (-9999.9)
 

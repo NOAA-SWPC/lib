@@ -29,9 +29,8 @@ static int mag_track_datagap(const double dlat_max, const size_t sidx,
                              const size_t eidx, const satdata_mag *data);
 static int mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
                                  satdata_mag *data, mag_workspace *w);
-static int mag_compute_F1(const double t_eq, const double phi_eq,
-                          const size_t sidx, const size_t eidx,
-                          const satdata_mag *data, mag_workspace *w);
+static int mag_compute_F1(const double t_eq, const double phi_eq, const double theta_eq, const size_t sidx,
+                          const size_t eidx, const satdata_mag *data, mag_workspace *w);
 static int mag_output(const int header, const mag_workspace *w);
 static int mag_callback_season(const double doy, const void *params);
 
@@ -61,18 +60,34 @@ mag_alloc(mag_params *params)
   w->ncurr = params->ncurr;
   w->EEJ = malloc(w->ncurr * sizeof(double));
 
-  w->green_workspace_p = green_alloc(params->sq_nmax_int);
+  w->green_int_p = green_alloc(params->sq_nmax_int, params->sq_mmax_int, R_EARTH_KM);
+  w->green_ext_p = green_alloc(params->sq_nmax_ext, params->sq_mmax_ext, R_EARTH_KM);
 
-  if (params->use_vector)
-    {
-      w->sqfilt_vector_workspace_p = mag_sqfilt_vector_alloc(params->sq_nmax_int, params->sq_mmax_int,
-                                                             params->sq_nmax_ext, params->sq_mmax_ext);
-    }
-  else
-    {
-      w->sqfilt_scalar_workspace_p = mag_sqfilt_scalar_alloc(params->sq_nmax_int, params->sq_mmax_int,
-                                                             params->sq_nmax_ext, params->sq_mmax_ext);
-    }
+  {
+    size_t nnm = w->green_int_p->nnm;
+
+    w->dX = malloc(nnm * sizeof(double));
+    w->dY = malloc(nnm * sizeof(double));
+    w->dZ = malloc(nnm * sizeof(double));
+    w->dX_ext = malloc(nnm * sizeof(double));
+    w->dY_ext = malloc(nnm * sizeof(double));
+    w->dZ_ext = malloc(nnm * sizeof(double));
+  }
+
+  /* allocate magfit workspace for Sq model */
+  {
+    magfit_parameters magfit_params = magfit_default_parameters();
+
+    magfit_params.nmax_int = params->sq_nmax_int;
+    magfit_params.mmax_int = params->sq_mmax_int;
+    magfit_params.nmax_ext = params->sq_nmax_ext;
+    magfit_params.mmax_ext = params->sq_mmax_ext;
+
+    w->magfit_workspace_p = magfit_alloc(magfit_gauss, &magfit_params);
+  }
+
+  w->sqfilt_scalar_workspace_p = mag_sqfilt_scalar_alloc(params->sq_nmax_int, params->sq_mmax_int,
+                                                         params->sq_nmax_ext, params->sq_mmax_ext);
 
   w->eej_workspace_p = mag_eej_alloc(params->year, params->ncurr,
                                      params->curr_altitude, params->qdlat_max);
@@ -142,6 +157,7 @@ mag_alloc(mag_params *params)
   w->log_profile = log_alloc(LOG_WRITE, "%s/profile.dat", params->log_dir);
   w->log_F2 = log_alloc(LOG_WRITE, "%s/F2.dat", params->log_dir);
   w->log_B2 = log_alloc(LOG_WRITE, "%s/B2.dat", params->log_dir);
+  w->log_B2_grad = log_alloc(LOG_WRITE, "%s/B2_grad.dat", params->log_dir);
   w->log_Sq_Lcurve = log_alloc(LOG_WRITE, "%s/Sq_lcurve.dat", params->log_dir);
   w->log_Sq_Lcorner = log_alloc(LOG_WRITE, "%s/Sq_lcorner.dat", params->log_dir);
   w->log_Sq_svd = log_alloc(LOG_WRITE, "%s/Sq_svd.dat", params->log_dir);
@@ -158,6 +174,7 @@ mag_alloc(mag_params *params)
   mag_log_profile(1, 0, 0.0, 1, w);
   mag_log_F2(1, w);
   mag_log_B2(1, w);
+  mag_log_B2_grad(1, w);
   mag_log_Sq_Lcurve(1, w);
   mag_log_Sq_Lcorner(1, w);
   mag_log_Sq_svd(1, w);
@@ -181,11 +198,32 @@ mag_free(mag_workspace *w)
   if (w->EEJ)
     free(w->EEJ);
 
-  if (w->green_workspace_p)
-    green_free(w->green_workspace_p);
+  if (w->dX)
+    free(w->dX);
 
-  if (w->sqfilt_vector_workspace_p)
-    mag_sqfilt_vector_free(w->sqfilt_vector_workspace_p);
+  if (w->dY)
+    free(w->dY);
+
+  if (w->dZ)
+    free(w->dZ);
+
+  if (w->dX_ext)
+    free(w->dX_ext);
+
+  if (w->dY_ext)
+    free(w->dY_ext);
+
+  if (w->dZ_ext)
+    free(w->dZ_ext);
+
+  if (w->green_int_p)
+    green_free(w->green_int_p);
+
+  if (w->green_ext_p)
+    green_free(w->green_ext_p);
+
+  if (w->magfit_workspace_p)
+    magfit_free(w->magfit_workspace_p);
 
   if (w->sqfilt_scalar_workspace_p)
     mag_sqfilt_scalar_free(w->sqfilt_scalar_workspace_p);
@@ -225,6 +263,9 @@ mag_free(mag_workspace *w)
 
   if (w->log_B2)
     log_free(w->log_B2);
+
+  if (w->log_B2_grad)
+    log_free(w->log_B2_grad);
 
   if (w->log_Sq_Lcurve)
     log_free(w->log_Sq_Lcurve);
@@ -431,7 +472,7 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       int s;
       track_data *tptr = &(track_p->tracks[i]);
       size_t sidx, eidx;
-      double lon_eq, t_eq, lt_eq, kp;
+      double lon_eq, lat_eq, t_eq, lt_eq, kp;
       time_t unix_time;
       int dir;
       char buf[2048];
@@ -446,6 +487,7 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       sidx = tptr->start_idx;
       eidx = tptr->end_idx;
       lon_eq = tptr->lon_eq;
+      lat_eq = tptr->lat_eq;
       t_eq = tptr->t_eq;
       lt_eq = tptr->lt_eq;
       unix_time = satdata_epoch2timet(tptr->t_eq);
@@ -480,13 +522,13 @@ mag_proc(const mag_params *params, track_workspace *track_p,
        * store track in workspace, compute magnetic coordinates, and
        * F^(1) residuals
        */ 
-      s = mag_compute_F1(t_eq, lon_eq * M_PI / 180.0, sidx, eidx, data, w);
+      s = mag_compute_F1(t_eq, lon_eq * M_PI / 180.0, M_PI / 2.0 - lat_eq * M_PI / 180.0, sidx, eidx, data, w);
       if (s)
         return s; /* error occurred */
 
       /* filter out Sq and compute B^(2) or F^(2) residuals */
       if (params->use_vector)
-        s = mag_sqfilt_vector(w, w->sqfilt_vector_workspace_p);
+        s = mag_sqfilt_vector(w, w->sqfilt_scalar_workspace_p);
       else
         s = mag_sqfilt_scalar(w, w->sqfilt_scalar_workspace_p);
 
@@ -494,7 +536,11 @@ mag_proc(const mag_params *params, track_workspace *track_p,
         return s;
 
       /* invert for EEJ height-integrated current density */
-      s = mag_eej_proc(&(w->track), w->EEJ, w->eej_workspace_p);
+      if (params->use_vector)
+        s = mag_eej_vector_proc(&(w->track), w->EEJ, w->eej_workspace_p);
+      else
+        s = mag_eej_proc(&(w->track), w->EEJ, w->eej_workspace_p);
+
       if (s)
         return s;
 
@@ -505,10 +551,7 @@ mag_proc(const mag_params *params, track_workspace *track_p,
       if (params->use_vector)
         mag_log_B2(0, w);
       else
-        {
-          mag_log_B2(0, w);
-          mag_log_F2(0, w);
-        }
+        mag_log_F2(0, w);
 
       /* output Sq SVD, L-curve and corners */
       mag_log_Sq_Lcurve(0, w);
@@ -708,6 +751,7 @@ residuals
 
 Inputs: t_eq   - time of equator crossing (CDF_EPOCH)
         phi_eq - longitude of equator crossing (radians)
+        theta_eq - geocentric colatitude of equator crossing (radians)
         sidx   - start index of track in 'data'
         eidx   - end index of track in 'data'
         data   - satellite data
@@ -720,7 +764,7 @@ residuals
 */
 
 static int
-mag_compute_F1(const double t_eq, const double phi_eq, const size_t sidx,
+mag_compute_F1(const double t_eq, const double phi_eq, const double theta_eq, const size_t sidx,
                const size_t eidx, const satdata_mag *data, mag_workspace *w)
 {
   int s = 0;
@@ -763,6 +807,7 @@ mag_compute_F1(const double t_eq, const double phi_eq, const size_t sidx,
       /* store this track */
       track->t_eq = t_eq;
       track->phi_eq = phi_eq;
+      track->theta_eq = theta_eq;
       track->t[idx] = data->t[i];
       track->theta[idx] = theta;
       track->lat_deg[idx] = 90.0 - theta*180.0/M_PI;

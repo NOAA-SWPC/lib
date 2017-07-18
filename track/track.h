@@ -45,6 +45,7 @@ typedef struct
   size_t n;         /* number of data points in this track */
   double t_eq;      /* timestamp of equator crossing (CDF_EPOCH) */
   double lon_eq;    /* longitude of equator crossing (deg) */
+  double lat_eq;    /* geocentric latitude of equator crossing (deg) */
   double lt_eq;     /* local time of equator crossing (hours) */
   int satdir;       /* satellite direction: +1 north, -1 south */
   double rms[4];    /* along-track rms (nT) */

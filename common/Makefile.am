@@ -54,7 +54,6 @@ libcommon_la_SOURCES = \
   quat.c               \
   ut1.c
 
-AM_CFLAGS = -std=c99 -g -O2 -Wall -W -D_XOPEN_SOURCE
 AM_CPPFLAGS =
 
 test_common_libs = -lm -lgsl -lgslcblas

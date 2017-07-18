@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = '7oct2015_C'
-outdir = '7oct2015_C/plots'
+logdir = 'log'
+outdir = 'log/plots'
 
 cmd = sprintf('mkdir -p %s', outdir)
 tstr = system(cmd)

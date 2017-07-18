@@ -80,12 +80,12 @@ eph_data_read_bowman(const char *filename)
       doy2md(year, doy, &month, &day);
 
       data->t[n] = computeEPOCH(year, month, day, hour, min, sec, msec);
-      data->X[n] = r_ECI[0];
-      data->Y[n] = r_ECI[1];
-      data->Z[n] = r_ECI[2];
-      data->VX[n] = VX;
-      data->VY[n] = VY;
-      data->VZ[n] = VZ;
+      data->X[n] = r_ECI[0] * 1.0e-3;
+      data->Y[n] = r_ECI[1] * 1.0e-3;
+      data->Z[n] = r_ECI[2] * 1.0e-3;
+      data->VX[n] = VX * 1.0e-3;
+      data->VY[n] = VY * 1.0e-3;
+      data->VZ[n] = VZ * 1.0e-3;
       data->latitude[n] = latc;
       data->longitude[n] = lonc;
 

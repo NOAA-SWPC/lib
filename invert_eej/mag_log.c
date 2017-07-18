@@ -166,52 +166,51 @@ mag_log_B2(const int header, const mag_workspace *w)
       /* print header information */
       i = 1;
       log_proc(w->log_B2, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
-      log_proc(w->log_B2, "# Field %zu: local time (hours)\n", i++);
-      log_proc(w->log_B2, "# Field %zu: season (day of year in [0,365])\n", i++);
-      log_proc(w->log_B2, "# Field %zu: geocentric radius (km)\n", i++);
-      log_proc(w->log_B2, "# Field %zu: longitude (degrees)\n", i++);
-      log_proc(w->log_B2, "# Field %zu: geocentric latitude (degrees)\n", i++);
       log_proc(w->log_B2, "# Field %zu: QD latitude (degrees)\n", i++);
-      log_proc(w->log_B2, "# Field %zu: measured X (nT)\n", i++);
-      log_proc(w->log_B2, "# Field %zu: measured Y (nT)\n", i++);
-      log_proc(w->log_B2, "# Field %zu: measured Z (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: X^(1) (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: Y^(1) (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: Z^(1) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: F^(1) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: X^(2) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: Y^(2) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: Z^(2) (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: F^(2) (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: internal Sq model X (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: internal Sq model Y (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: internal Sq model Z (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: external Sq model X (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: external Sq model Y (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: external Sq model Z (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: X^(2) fit from EEJ model (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: Y^(2) fit from EEJ model (nT)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: Z^(2) fit from EEJ model (nT)\n", i++);
       return s;
     }
 
   for (i = 0; i < track->n; i += downsample)
     {
       time_t unix_time = satdata_epoch2timet(track->t[i]);
-      double lt = get_localtime(unix_time, track->phi[i]);
 
-      log_proc(w->log_B2, "%ld %6.3f %6.2f %9.4f %9.4f %8.4f %8.4f %8.2f %8.2f %8.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n",
+      log_proc(w->log_B2, "%ld %8.4f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n",
                unix_time,
-               lt,
-               get_season(unix_time),
-               track->r[i],
-               track->phi[i] * 180.0 / M_PI,
-               track->lat_deg[i],
                track->qdlat[i],
-               track->X[i],
-               track->Y[i],
-               track->Z[i],
                track->X1[i],
                track->Y1[i],
                track->Z1[i],
+               track->F1[i],
+               track->X2[i],
+               track->Y2[i],
+               track->Z2[i],
+               track->F2[i],
                track->X_Sq_int[i],
                track->Y_Sq_int[i],
                track->Z_Sq_int[i],
                track->X_Sq_ext[i],
                track->Y_Sq_ext[i],
-               track->Z_Sq_ext[i]);
+               track->Z_Sq_ext[i],
+               track->X2_fit[i],
+               track->Y2_fit[i],
+               track->Z2_fit[i]);
     }
 
   log_proc(w->log_B2, "\n\n");

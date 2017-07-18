@@ -44,7 +44,7 @@
 #include "stage2_quaternions.c"
 #include "stage2_spikes.c"
 
-#define WRITE_JUMP_DATA                   1
+#define WRITE_JUMP_DATA                   0
 
 /*
 stage2_scalar_calibrate()
@@ -188,7 +188,6 @@ print_data(const char *filename, const satdata_mag *data, const track_workspace 
   fprintf(fp, "# Field %zu: modeled VFM B_1 (nT)\n", i++);
   fprintf(fp, "# Field %zu: modeled VFM B_2 (nT)\n", i++);
   fprintf(fp, "# Field %zu: modeled VFM B_3 (nT)\n", i++);
-  fprintf(fp, "# Field %zu: modeled NEC B_z (nT)\n", i++);
   fprintf(fp, "# Field %zu: satellite direction (+1 north, -1 south)\n", i++);
 
   for (i = 0; i < w->n; ++i)
@@ -216,7 +215,7 @@ print_data(const char *filename, const satdata_mag *data, const track_workspace 
           /* convert B_model into ellipsoid NEC */
           ellipsoid_nec2ell(r_ECEF, B_model, B_model_ell);
 
-          fprintf(fp, "%ld %10.4f %10.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %d\n",
+          fprintf(fp, "%ld %10.4f %10.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %12.4f %d\n",
                   satdata_epoch2timet(data->t[j]),
                   data->qdlat[j],
                   data->F[j],
@@ -227,7 +226,6 @@ print_data(const char *filename, const satdata_mag *data, const track_workspace 
                   B_model_VFM[0],
                   B_model_VFM[1],
                   B_model_VFM[2],
-                  B_model[2],
                   satdata_satdir(j, data->n, data->latitude));
         }
 
@@ -383,20 +381,21 @@ main(int argc, char *argv[])
 #if WRITE_JUMP_DATA
   const char *scal_file = "stage2_scal.dat";
   const char *spike_file = "stage2_spikes.dat";
+  const char *jump_file = "stage2_jumps.dat";
 #else
   const char *scal_file = NULL;
   const char *spike_file = NULL;
+  const char *jump_file = NULL;
 #endif
   char *outfile = NULL;
   char *param_file = NULL;
   char *res_file = NULL;
+  char *data_file = NULL;
   satdata_mag *data = NULL;
   eph_data *eph = NULL;
   track_workspace *track_p;
   gsl_vector *coef = gsl_vector_alloc(MAGCAL_P);
   struct timeval tv0, tv1;
-  double lt_min = 6.0;  /* local time interval for data selection at low/mid latitudes */
-  double lt_max = 18.0;
   double rms;
 
   while (1)
@@ -405,12 +404,10 @@ main(int argc, char *argv[])
       int option_index = 0;
       static struct option long_options[] =
         {
-          { "lt_min", required_argument, NULL, 'c' },
-          { "lt_max", required_argument, NULL, 'd' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:o:b:p:r:", long_options, &option_index);
+      c = getopt_long(argc, argv, "d:i:o:b:p:r:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -429,20 +426,16 @@ main(int argc, char *argv[])
             outfile = optarg;
             break;
 
+          case 'd':
+            data_file = optarg;
+            break;
+
           case 'b':
             fprintf(stderr, "main: reading Bowman ephemerides from %s...", optarg);
             gettimeofday(&tv0, NULL);
             eph = eph_data_read_bowman(optarg);
             gettimeofday(&tv1, NULL);
             fprintf(stderr, "done (%zu read, %g seconds)\n", eph->n, time_diff(tv0, tv1));
-
-          case 'c':
-            lt_min = atof(optarg);
-            break;
-
-          case 'd':
-            lt_max = atof(optarg);
-            break;
 
           case 'p':
             param_file = optarg;
@@ -459,7 +452,7 @@ main(int argc, char *argv[])
 
   if (!data)
     {
-      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [--lt_min lt_min] [--lt_max lt_max] [-p param_file] [-r residual_file]\n",
+      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [-p param_file] [-r residual_file] [-d data_file]\n",
               argv[0]);
       exit(1);
     }
@@ -489,7 +482,7 @@ main(int argc, char *argv[])
   }
 
   fprintf(stderr, "main: fixing track jumps...");
-  stage2_correct_jumps(data);
+  stage2_correct_jumps(jump_file, data);
   fprintf(stderr, "done\n");
 
   fprintf(stderr, "main: filtering tracks with rms test...");
@@ -527,6 +520,13 @@ main(int argc, char *argv[])
       print_parameters(fp, coef, t, rms);
 
       fclose(fp);
+    }
+
+  if (data_file)
+    {
+      fprintf(stderr, "main: printing data to %s...", data_file);
+      print_data(data_file, data, track_p);
+      fprintf(stderr, "done\n");
     }
 
   if (res_file)
