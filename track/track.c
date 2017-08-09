@@ -618,6 +618,7 @@ track_print_track(const int header, FILE *fp, const track_data *tptr,
       fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", j++);
       fprintf(fp, "# Field %zu: UT (hours)\n", j++);
       fprintf(fp, "# Field %zu: local time (hours)\n", j++);
+      fprintf(fp, "# Field %zu: local time at equator crossing (hours)\n", j++);
       fprintf(fp, "# Field %zu: season (doy)\n", j++);
       fprintf(fp, "# Field %zu: radius (km)\n", j++);
       fprintf(fp, "# Field %zu: longitude (degrees)\n", j++);
@@ -642,10 +643,14 @@ track_print_track(const int header, FILE *fp, const track_data *tptr,
       double ut = get_ut(unix_time);
       double lt = get_localtime(unix_time, data->longitude[didx] * M_PI / 180.0);
 
-      fprintf(fp, "%ld %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
+      if (data->flags[didx])
+        continue;
+
+      fprintf(fp, "%ld %.2f %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
               unix_time,
               ut,
               lt,
+              tptr->lt_eq,
               get_season(unix_time),
               data->altitude[didx] + data->R,
               data->longitude[didx],

@@ -84,7 +84,6 @@ print_data(const int down_sample, const satdata_mag *data)
   printf("# Field %zu: scalar field (nT)\n", i++);
   printf("# Field %zu: modeled scalar field (nT)\n", i++);
   printf("# Field %zu: VFM B_3 (nT)\n", i++);
-  printf("# Field %zu: NEC B_z (nT)\n", i++);
   printf("# Field %zu: modeled B_z (nT)\n", i++);
   printf("# Field %zu: modeled geodetic B_z (nT)\n", i++);
 
@@ -108,7 +107,7 @@ print_data(const int down_sample, const satdata_mag *data)
                    SATDATA_VEC_Z(data->B_ext, i);
       B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
 
-      printf("%ld %f %6.2f %10.4f %10.4f %10.4f %10.4f %2d %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
+      printf("%ld %f %6.2f %10.4f %10.4f %10.4f %10.4f %2d %10.4f %10.4f %10.4f %10.4f %10.4f\n",
              satdata_epoch2timet(data->t[i]),
              year,
              lt,
@@ -120,7 +119,6 @@ print_data(const int down_sample, const satdata_mag *data)
              data->F[i],
              B_model[3],
              SATDATA_VEC_Z(data->B_VFM, i),
-             SATDATA_VEC_Z(data->B, i),
              B_model[2],
              calc_mu3(data->r[i], theta, phi, B_model));
     }

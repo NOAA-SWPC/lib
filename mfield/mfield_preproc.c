@@ -286,12 +286,7 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
   for (i = 0; i < MFIELD_IDX_END; ++i)
     nmodel[i] = 0;
 
-  /*
-   * for some reason, the loop below adds more than 'ndata'
-   * points into mdata, it shouldn't do this but I'm not sure why
-   * so add 10000
-   */
-  mdata = magdata_alloc(ndata + 10000, data->R);
+  mdata = magdata_alloc(ndata, data->R);
   if (!mdata)
     return 0;
 
@@ -311,6 +306,8 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
       else
         magdata_copy_track_EW(&params, i, data, track_p, data2, track_p2, mdata, npts);
     }
+
+  fprintf(stderr, "ndata = %zu mdata_n = %zu, mdata_ntot = %zu\n", ndata, mdata->n, mdata->ntot);
 
   /*
    * now determine which points in mdata will be used for

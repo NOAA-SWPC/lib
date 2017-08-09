@@ -85,7 +85,7 @@ static int build_matrix_row(const double r, const double theta, const double phi
 pcafit_alloc()
   Allocate pca workspace
 
-Inputs: flags        - MAGFIT_SECS_FLG_xxx
+Inputs: flags        - MAGFIT_FLG_xxx
         lmax         - maximum degree for Legendre functions in expansion
         R_iono       - radius of ionosphere (km)
         pole_spacing - along-orbit latitude spacing of SECS poles (degrees)

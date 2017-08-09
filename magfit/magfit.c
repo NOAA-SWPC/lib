@@ -97,10 +97,11 @@ magfit_default_parameters(void)
   params.lon_max = 0.0;
   params.R = R_EARTH_KM + 110.0;
   params.lmax = MAGFIT_SECS_LMAX;
-  params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
 
   params.pca_modes = 16;
 
+  params.flags = MAGFIT_FLG_FIT_X | MAGFIT_FLG_FIT_Y | MAGFIT_FLG_FIT_Z;
+  params.flags |= MAGFIT_FLG_SECS_FIT_DF;
   params.qdmax = 40.0;
 
   params.rc_p = 2;

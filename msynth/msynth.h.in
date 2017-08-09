@@ -12,6 +12,7 @@
 #define MSYNTH_EMM_FILE        "@abs_top_builddir@/msynth/cof/EMM2017_crust.cof"
 #define MSYNTH_CHAOS_FILE      "@abs_top_builddir@/msynth/cof/CHAOS-6-x2_core.shc"
 #define MSYNTH_BOUMME_FILE     "@abs_top_builddir@/msynth/cof/boumme/boumme-0.5.txt"
+#define MSYNTH_BGGM_FILE       "@abs_top_builddir@/msynth/cof/bggm/bggm2017.txt"
 
 /* maximum number of snapshot models */
 #define MSYNTH_MAX_SNAPSHOT    500
@@ -117,6 +118,9 @@ int msynth_green_ext(const double r, const double theta, const double phi,
 
 /* msynth_arnaud.c */
 msynth_workspace *msynth_arnaud_read(const char *filename);
+
+/* msynth_bggm.c */
+msynth_workspace *msynth_bggm_read(const char *filename);
 
 /* msynth_swarm.c */
 msynth_workspace *msynth_swarm_read(const char *filename);

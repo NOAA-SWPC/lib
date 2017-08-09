@@ -768,6 +768,7 @@ mag_compute_F1(const double t_eq, const double phi_eq, const double theta_eq, co
                const size_t eidx, const satdata_mag *data, mag_workspace *w)
 {
   int s = 0;
+  const mag_params *params = w->params;
   size_t i, j;
   size_t idx = 0;
   mag_track *track = &(w->track);
@@ -780,6 +781,10 @@ mag_compute_F1(const double t_eq, const double phi_eq, const double theta_eq, co
       double B_int[4], B_crust[4], B_ext[4], B_tot[4];
 
       if (fabs(qdlat) > MAG_MAX_QD_LATITUDE)
+        continue;
+
+      /* if using vector data, make sure NEC measurement exists */
+      if (params->use_vector && (data->flags[i] & SATDATA_FLG_NOVEC_NEC))
         continue;
 
       B_int[0] = SATDATA_VEC_X(data->B_main, i);

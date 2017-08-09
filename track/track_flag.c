@@ -262,8 +262,8 @@ track_flag_time()
   Flag any tracks outside of [t_min,t_max]. The timestamp for
 comparison is the timestamp of the equator crossing
 
-Inputs: t_min  - minimum time (years)
-        t_max  - maximum time (years)
+Inputs: t_min  - minimum time (CDF_EPOCH)
+        t_max  - maximum time (CDF_EPOCH)
         data   - satellite data
         w      - track workspace
 
@@ -282,7 +282,7 @@ track_flag_time(const double t_min, const double t_max, satdata_mag *data, track
   for (i = 0; i < w->n; ++i)
     {
       track_data *tptr = &(w->tracks[i]);
-      double t = satdata_epoch2year(tptr->t_eq);
+      double t = tptr->t_eq;
 
       if (t < t_min || t > t_max)
         {

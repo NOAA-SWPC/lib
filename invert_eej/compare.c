@@ -43,7 +43,8 @@
 /* allowed difference in longitude */
 #define LON_WINDOW        (10.0)
 
-#define MAX_KP            (10.0)
+#define MIN_KP            (8.0)
+#define MAX_KP            (9.0)
 
 #define MAX_PAIRS         1000
 
@@ -161,7 +162,7 @@ wamnet_read(const char *filename)
       return 0;
     }
 
-  data = jicmag_alloc(700000);
+  data = jicmag_alloc(2000000);
 
   n = data->n;
 
@@ -228,7 +229,7 @@ find_pairs_mag(const double longitude, const satdata_eef *eef, const jicmag_data
   printf("# Field %zu: timestamp\n", i++);
   printf("# Field %zu: dH (nT)\n", i++);
   printf("# Field %zu: EEF (mV/m)\n", i++);
-  printf("# Field %zu: peak current density (A/m)\n", i++);
+  printf("# Field %zu: peak current density (mA/m)\n", i++);
   printf("# Field %zu: EEF (Anderson formula) (mV/m)\n", i++);
 
   for (i = 0; i < eef->n; ++i)
@@ -242,7 +243,11 @@ find_pairs_mag(const double longitude, const satdata_eef *eef, const jicmag_data
         continue;
 
       kp_get(t, &kp, kp_p);
-      if (kp > MAX_KP)
+      if ((kp < MIN_KP) || (kp > MAX_KP))
+        continue;
+
+      /* discard large outliers */
+      if (fabs(eef->J[i]) > 150.0)
         continue;
 
       ptr = bsearch(&t, mag->array, mag->n, sizeof(jicmag_datum), compare_mag);
@@ -265,6 +270,9 @@ find_pairs_mag(const double longitude, const satdata_eef *eef, const jicmag_data
 
           if (!isfinite(dH))
             fprintf(stderr, "here\n");
+
+          if (fabs(dH) > 170.0)
+            continue;
 
           f107_get(ptr->t, &f107, f107_p);
           msynth_eval(year, R + 150.0, julia_theta, julia_phi, B, msynth_p);
@@ -313,8 +321,8 @@ find_pairs(const satdata_eef *eef, const julia_data *julia,
                              JULIA_GEOCENTRIC_LAT * M_PI / 180.0;
   size_t i;
   size_t n = 0;
-  /*msynth_workspace *msynth_p = msynth_read("swarm_oer_parent_30d.txt");*/
   msynth_workspace *msynth_p = msynth_igrf_read(MSYNTH_IGRF_FILE);
+  /*msynth_workspace *msynth_p = msynth_swarm_read(MSYNTH_CHAOS_FILE);*/
 
   i = 1;
   printf("# Field %zu: timestamp\n", i++);
@@ -497,11 +505,17 @@ main(int argc, char *argv[])
   if (data_wamnet)
     {
       const double longitude_SAM = -5.77;
+      const double longitude_JIC = -76.87;
       double E_eef[MAX_PAIRS], dH[MAX_PAIRS], J[MAX_PAIRS];
-      size_t npairs = find_pairs_mag(longitude_SAM, eef_data, data_wamnet,
+#if 1
+      const double longitude = longitude_JIC;
+#else
+      const double longitude = longitude_SAM;
+#endif
+      size_t npairs = find_pairs_mag(longitude, eef_data, data_wamnet,
                                      E_eef, dH, J);
 
-      fprintf(stderr, "found %zu pairs\n", npairs);
+      fprintf(stderr, "found %zu pairs (longitude = %.2f)\n", npairs, longitude);
 
       fprintf(stderr, "r(E_eef,dH) = %f\n",
               gsl_stats_correlation(E_eef, 1, dH, 1, npairs));

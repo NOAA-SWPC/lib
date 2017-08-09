@@ -12,6 +12,7 @@
 
 #include <gsl/gsl_math.h>
 
+#include "common.h"
 #include "geo.h"
 #include "msynth.h"
 
@@ -19,14 +20,47 @@ int
 main(int argc, char *argv[])
 {
   msynth_workspace *w = NULL;
-  int c;
+  time_t unix_time;
   double t, r, theta, phi;
+  double latd, lond, altd, latc;
   double B[4];
 
-  while ((c = getopt(argc, argv, "c:w:a:h:i:")) != (-1))
+  /* default values */
+  latd = 0.0;
+  lond = 0.0;
+  altd = 0.0;
+  unix_time = 1420070400;
+
+  while (1)
     {
+      int c;
+      int option_index = 0;
+      static struct option long_options[] =
+        {
+          { "latitude", required_argument, NULL, 'A' },
+          { "longitude", required_argument, NULL, 'B' },
+          { "altitude", required_argument, NULL, 'C' },
+          { 0, 0, 0, 0 }
+        };
+
+      c = getopt_long(argc, argv, "A:B:C:c:w:a:h:i:l:t:", long_options, &option_index);
+      if (c == -1)
+        break;
+
       switch (c)
         {
+          case 'A':
+            latd = atof(optarg);
+            break;
+
+          case 'B':
+            lond = atof(optarg);
+            break;
+
+          case 'C':
+            altd = atof(optarg);
+            break;
+
           case 'c':
             fprintf(stderr, "main: reading coefficient file %s...", optarg);
             w = msynth_read(optarg);
@@ -51,34 +85,45 @@ main(int argc, char *argv[])
             fprintf(stderr, "done\n");
             break;
 
+          case 'l':
+            fprintf(stderr, "main: reading BGGM coefficient file %s...", optarg);
+            w = msynth_bggm_read(optarg);
+            fprintf(stderr, "done\n");
+            break;
+
           case 'w':
             fprintf(stderr, "main: reading WMM coefficient file %s...", optarg);
             w = msynth_wmm_read(optarg);
             fprintf(stderr, "done\n");
+            break;
+
+          case 't':
+            unix_time = atoi(optarg);
             break;
         }
     }
 
   if (!w)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-i igrf_file]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-i igrf_file] [-l bggm_file] [--latitude geodetic_lat] [--longitude longitude] [--height height]\n", argv[0]);
       exit(1);
     }
 
-  {
-    double latd = 0.0 * M_PI / 180.0;
-    double h = 400.0;
-    double latc; /* geocentric latitude */
+  geodetic2geo(latd * M_PI / 180.0, altd, &latc, &r);
+  theta = M_PI / 2.0 - latc;
+  phi = lond * M_PI / 180.0;
 
-    geodetic2geo(latd, h, &latc, &r);
-    theta = M_PI / 2.0 - latc;
-  }
+  putenv("TZ=GMT");
+  t = get_year(unix_time);
 
-  t = 2015.2;
-  phi = -50.0 * M_PI / 180.0;
+  fprintf(stderr, "date = %f / %s", t, ctime(&unix_time));
 
-  fprintf(stderr, "geocentric lat = %f [deg]\n", 90.0 - theta * 180.0 / M_PI);
-  fprintf(stderr, "geocentric lon = %f [deg]\n", phi * 180.0 / M_PI);
+  fprintf(stderr, "geodetic lat = %f [deg]\n", latd);
+  fprintf(stderr, "geodetic lon = %f [deg]\n", lond);
+  fprintf(stderr, "geodetic alt = %f [km]\n", altd);
+
+  fprintf(stderr, "geocentric lat = %f [deg]\n", latc * 180.0 / M_PI);
+  fprintf(stderr, "geocentric lon = %f [deg]\n", lond);
   fprintf(stderr, "geocentric r   = %f [km]\n", r);
 
   msynth_eval(t, r, theta, phi, B, w);
@@ -91,4 +136,4 @@ main(int argc, char *argv[])
   msynth_free(w);
 
   return 0;
-} /* main() */
+}

@@ -2,18 +2,18 @@
 #
 # Run magnetic field model on all epochs
 
-start_epoch="2012.5"
-end_epoch="2014.5"
+start_epoch="2010.0"
+end_epoch="2012.0"
 numit="5"
 
-input_files="data/F15_2011.dat data/F15_2012.dat data/F15_2013.dat data/swarmA.dat"
+input_files="data/F15.dat"
 
 prog="./mfield"
 coef_dir="$MYLIBHOME/mfield/coef"
 cfgfile="MF_dmsp.cfg"
 
 # SA damping parameter
-lambda_sa="2.0"
+lambda_sa="0.3"
 
 rm -rf ${coef_dir}
 mkdir ${coef_dir}
@@ -22,9 +22,9 @@ mkdir ${coef_dir}
 step="0.083333"
 
 # data window size in years
-window_size="3"
+window_size="4"
 
-extra_flags="-r -d -p 0"
+extra_flags="-r -d -p 30"
 
 for epoch in $(seq ${start_epoch} ${step} ${end_epoch}); do
 

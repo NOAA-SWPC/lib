@@ -46,13 +46,40 @@
 
 #define WRITE_JUMP_DATA                   0
 
+size_t
+stage2_flag_time(const double tmin, const double tmax, satdata_mag *data)
+{
+  size_t i;
+  size_t nflagged = 0;
+
+  for (i = 0; i < data->n; ++i)
+    {
+      if (data->t[i] >= tmin && data->t[i] <= tmax)
+        continue;
+
+      data->flags[i] |= SATDATA_FLG_TIME;
+      ++nflagged;
+    }
+
+  return nflagged;
+}
+
+int
+stage2_unflag_time(satdata_mag *data)
+{
+  size_t i;
+
+  for (i = 0; i < data->n; ++i)
+    data->flags[i] &= ~SATDATA_FLG_TIME;
+
+  return 0;
+}
+
 /*
 stage2_scalar_calibrate()
   Perform scalar calibration
 
-Inputs: tmin    - minimum time to use in inversion
-        tmax    - maximum time to use in inversion
-        data    - satellite data
+Inputs: data    - satellite data
         track_p - track workspace
         c       - (output) scalar calibration parameters
         rms     - (output) scalar residual rms after calibration (nT)
@@ -61,8 +88,8 @@ Return: success/error
 */
 
 int
-stage2_scalar_calibrate(const char *res_file, const time_t tmin, const time_t tmax, satdata_mag * data,
-                        track_workspace * track_p, gsl_vector * c, double *rms)
+stage2_scalar_calibrate(const char *res_file, satdata_mag * data, track_workspace * track_p,
+                        gsl_vector * c, double *rms)
 {
   int s = 0;
   size_t nflagged = satdata_nflagged(data);
@@ -80,13 +107,8 @@ stage2_scalar_calibrate(const char *res_file, const time_t tmin, const time_t tm
       track_data *tptr = &(track_p->tracks[i]);
       size_t start_idx = tptr->start_idx;
       size_t end_idx = tptr->end_idx;
-      time_t unix_time = satdata_epoch2timet(tptr->t_eq);
 
       if (tptr->flags)
-        continue;
-
-      if (tmin > 0 && tmax > 0 &&
-          (unix_time < tmin || unix_time > tmax))
         continue;
 
       for (j = start_idx; j <= end_idx; ++j)
@@ -144,9 +166,28 @@ stage2_scalar_calibrate(const char *res_file, const time_t tmin, const time_t tm
 }
 
 int
-print_parameters(FILE *fp, const gsl_vector *c, const time_t t, const double rms)
+print_parameters(FILE *fp, const int header, const gsl_vector *c, const time_t t, const double rms)
 {
   int s = 0;
+
+  if (header)
+    {
+      size_t i;
+
+      i = 1;
+      fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
+      fprintf(fp, "# Field %zu: rms misfit (nT)\n", i++);
+      fprintf(fp, "# Field %zu: scale factor X\n", i++);
+      fprintf(fp, "# Field %zu: scale factor Y\n", i++);
+      fprintf(fp, "# Field %zu: scale factor Z\n", i++);
+      fprintf(fp, "# Field %zu: offset X\n", i++);
+      fprintf(fp, "# Field %zu: offset Y\n", i++);
+      fprintf(fp, "# Field %zu: offset Z\n", i++);
+      fprintf(fp, "# Field %zu: angle AXY (degrees)\n", i++);
+      fprintf(fp, "# Field %zu: angle AXZ (degrees)\n", i++);
+      fprintf(fp, "# Field %zu: angle AYZ (degrees)\n", i++);
+      return s;
+    }
 
   fprintf(fp, "%ld %f %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e\n",
           t,
@@ -393,10 +434,16 @@ main(int argc, char *argv[])
   char *data_file = NULL;
   satdata_mag *data = NULL;
   eph_data *eph = NULL;
+  double period = -1.0; /* period in days for fitting scalar calibration parameters */
+  double period_ms = -1.0; /* period in ms for fitting scalar calibration parameters */
+  size_t nbins = 1;     /* number of time bins for fitting calibration parameters */
+  double *t;            /* array of timestamps, size nbins */
   track_workspace *track_p;
   gsl_vector *coef = gsl_vector_alloc(MAGCAL_P);
+  FILE *fp_param = NULL;
   struct timeval tv0, tv1;
   double rms;
+  size_t i;
 
   while (1)
     {
@@ -407,7 +454,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "d:i:o:b:p:r:", long_options, &option_index);
+      c = getopt_long(argc, argv, "d:i:o:b:p:r:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -445,6 +492,10 @@ main(int argc, char *argv[])
             res_file = optarg;
             break;
 
+          case 't':
+            period = atof(optarg);
+            break;
+
           default:
             break;
         }
@@ -452,13 +503,42 @@ main(int argc, char *argv[])
 
   if (!data)
     {
-      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [-p param_file] [-r residual_file] [-d data_file]\n",
+      fprintf(stderr, "Usage: %s <-i dmsp_index_file> <-b bowman_ephemeris_file> [-o output_file] [-p param_file] [-r residual_file] [-d data_file] [-t period]\n",
               argv[0]);
       exit(1);
     }
 
   if (outfile)
     fprintf(stderr, "output file = %s\n", outfile);
+
+  /* determine number of bins for fitting calibration parameters */
+  if (period > 0.0)
+    {
+      const double tmin = data->t[0];
+      const double tmax = data->t[data->n - 1];
+      const double dt = (tmax - tmin) / 8.64e7; /* convert to days */
+
+      nbins = dt / period;
+    }
+
+  /* convert to ms */
+  period_ms = period * 8.64e7;
+
+  /* build array of timestamps for each calibration bin */
+  t = malloc(nbins * sizeof(double));
+
+  if (nbins == 1)
+    {
+      t[0] = 0.5 * (data->t[data->n - 1] + data->t[0]);
+    }
+  else
+    {
+      for (i = 0; i < nbins; ++i)
+        t[i] = data->t[0] + period_ms * (i + 0.5);
+    }
+
+  fprintf(stderr, "main: period for calibration:  %.1f [days]\n", period);
+  fprintf(stderr, "main: number of temporal bins: %zu\n", nbins);
 
   track_p = track_alloc();
 
@@ -491,15 +571,62 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-  stage2_scalar_calibrate(scal_file, -1, -1, data, track_p, coef, &rms);
+  if (param_file)
+    {
+      fp_param = fopen(param_file, "w");
+      print_parameters(fp_param, 1, NULL, 0, 0.0);
+    }
 
-  fprintf(stderr, "main: applying calibration parameters to data...");
-  magcal_apply(coef, data);
-  fprintf(stderr, "done\n");
+  /* now do a scalar calibration separately for each time bin */
+  if (nbins == 1)
+    {
+      stage2_scalar_calibrate(scal_file, data, track_p, coef, &rms);
 
+      fprintf(stderr, "main: applying calibration parameters to data...");
+      magcal_apply(coef, data);
+      fprintf(stderr, "done\n");
+
+      if (fp_param)
+        {
+          time_t unix_time = satdata_epoch2timet(t[0]);
+          print_parameters(fp_param, 0, coef, unix_time, rms);
+        }
+    }
+  else
+    {
+      for (i = 0; i < nbins; ++i)
+        {
+          double tmin = t[i] - 0.5 * period_ms;
+          double tmax = t[i] + 0.5 * period_ms;
+
+          /* flag points outside of our time window */
+          stage2_flag_time(tmin, tmax, data);
+
+          /* calibrate points inside the time window [tmin,tmax] */
+          stage2_scalar_calibrate(scal_file, data, track_p, coef, &rms);
+
+          /* remove time flag */
+          stage2_unflag_time(data);
+
+#if 0
+          fprintf(stderr, "main: applying calibration parameters to data...");
+          magcal_apply(coef, data);
+          fprintf(stderr, "done\n");
+#endif
+
+          if (fp_param)
+            {
+              time_t unix_time = satdata_epoch2timet(t[i]);
+              print_parameters(fp_param, 0, coef, unix_time, rms);
+            }
+        }
+    }
+
+#if 0
   fprintf(stderr, "main: correcting quaternions for satellite drift...");
   stage2_correct_quaternions(quat_file, data, track_p);
   fprintf(stderr, "done (data written to %s)\n", quat_file);
+#endif
 
 #if 0
   {
@@ -511,16 +638,6 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: computing B_NEC...");
   stage2_vfm2nec(data);
   fprintf(stderr, "done\n");
-
-  if (param_file)
-    {
-      FILE *fp = fopen(param_file, "w");
-      time_t t = satdata_epoch2timet(data->t[data->n / 2]);
-
-      print_parameters(fp, coef, t, rms);
-
-      fclose(fp);
-    }
 
   if (data_file)
     {
@@ -547,6 +664,10 @@ main(int argc, char *argv[])
   track_free(track_p);
   satdata_mag_free(data);
   eph_data_free(eph);
+  free(t);
+
+  if (fp_param)
+    fclose(fp_param);
 
   return 0;
 }

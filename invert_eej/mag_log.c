@@ -166,6 +166,9 @@ mag_log_B2(const int header, const mag_workspace *w)
       /* print header information */
       i = 1;
       log_proc(w->log_B2, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: geocentric radius (km)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: geocentric latitude (deg)\n", i++);
+      log_proc(w->log_B2, "# Field %zu: longitude (deg)\n", i++);
       log_proc(w->log_B2, "# Field %zu: QD latitude (degrees)\n", i++);
       log_proc(w->log_B2, "# Field %zu: X^(1) (nT)\n", i++);
       log_proc(w->log_B2, "# Field %zu: Y^(1) (nT)\n", i++);
@@ -191,8 +194,11 @@ mag_log_B2(const int header, const mag_workspace *w)
     {
       time_t unix_time = satdata_epoch2timet(track->t[i]);
 
-      log_proc(w->log_B2, "%ld %8.4f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n",
+      log_proc(w->log_B2, "%ld %8.4f %8.4f %8.4f %8.4f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f %6.2f\n",
                unix_time,
+               track->r[i],
+               track->lat_deg[i],
+               track->phi[i] * 180.0 / M_PI,
                track->qdlat[i],
                track->X1[i],
                track->Y1[i],

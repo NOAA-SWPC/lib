@@ -1,44 +1,30 @@
-#!/usr/bin/env gnuplot
+#!/bin/sh
 
 set term pngcairo enh col size 1000,1000
 
-coefdir = 'coef'
-mapprog = '../msynth/print_map'
+coefdir="coef"
+mapprog="../msynth/print_map"
+plotprog="../msynth/plots/plotmap.py"
+outfile="F15.mp4"
+
+#plot_args="-c "uT/yr^2" --cbmin -2 --cbmax 2 --cblev 9"
+plot_args="-c "uT/yr^2""
 
 # maximum SH degree for SA maps
-nmax = "6"
+nmax="6"
 
-cmd = sprintf('ls %s/coef*.txt', coefdir)
-list = system(cmd)
+idx=1
+for f in $(ls ${coefdir}/coef*.txt); do
+  bname=$(basename $f ".txt")
+  istr=$(seq -f "%02g" $idx $idx)
+  outfile="${coefdir}/map.${istr}.png"
+  epoch=$(echo $f | sed -r 's/.*\.([0-9]*\.[0-9]*)\..*/\1/g')
+  echo "generating SA map for $f..."
+  tmpfile=$(mktemp)
+  ${mapprog} -c $f -n $nmax -o $tmpfile
+  python ${plotprog} -i $tmpfile -o ${outfile} -t "Epoch ${epoch}" ${plot_args}
+  rm -f $tmpfile
+  idx=$((idx+1))
+done
 
-load 'xlonon.cfg'
-load 'ylaton.cfg'
-set pm3d map
-
-set cblabel "uT/year^2"
-set cbrange [-3:3]
-set palette maxcolors 12
-
-idx = 1
-do for [file in list] {
-
-  epoch = system(sprintf("echo %s | sed -e 's/[a-z,\/]*\.//' | sed -e 's/\.txt//'", file))
-
-  outfile = sprintf('%s/map.%03d.txt', coefdir, idx)
-
-  # Create map
-  str = sprintf('Generating %s...', outfile)
-  print str
-  system(sprintf("%s -c %s -n %s -o %s", mapprog, file, nmax, outfile))
-
-  pngfile = sprintf('%s/map.%03d.png', coefdir, idx)
-  set out pngfile
-
-  set title "Epoch ".epoch." degree ".nmax
-
-  str = sprintf('Generating %s...', pngfile)
-  print str
-  splot outfile us 1:2:8
-
-  idx = idx + 1
-}
+#ffmpeg -framerate 4 -i map.%02d.png -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p -vf fps=25 ${outfile}

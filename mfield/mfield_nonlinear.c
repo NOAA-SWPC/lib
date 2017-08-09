@@ -551,7 +551,7 @@ mfield_init_nonlinear(mfield_workspace *w)
 
 #if 1
     fdf_params.trs = gsl_multilarge_nlinear_trs_lm;
-    fdf_params.scale = gsl_multilarge_nlinear_scale_levenberg;
+    fdf_params.scale = gsl_multilarge_nlinear_scale_more;
 #else
     fdf_params.trs = gsl_multilarge_nlinear_trs_ddogleg;
     fdf_params.scale = gsl_multilarge_nlinear_scale_more;

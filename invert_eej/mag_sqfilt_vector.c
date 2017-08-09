@@ -28,6 +28,11 @@
 
 static int sqfilt_calc_B2(mag_workspace *w, gauss_state_t * gauss_p);
 
+/* turn on/off different components in fit */
+#define FIT_X                      0
+#define FIT_Y                      0
+#define FIT_Z                      1
+
 /*
 mag_sqfilt_vector()
   Fit a simple spherical harmonic model to a single satellite
@@ -59,6 +64,17 @@ mag_sqfilt_vector(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
   gauss_params.mmax_int = mag_p->params->sq_mmax_int;
   gauss_params.nmax_ext = mag_p->params->sq_nmax_ext;
   gauss_params.mmax_ext = mag_p->params->sq_mmax_ext;
+  gauss_params.flags = 0;
+#if FIT_X
+  gauss_params.flags |= GAUSS_FLG_FIT_X;
+#endif
+#if FIT_Y
+  gauss_params.flags |= GAUSS_FLG_FIT_Y;
+#endif
+#if FIT_Z
+  gauss_params.flags |= GAUSS_FLG_FIT_Z;
+#endif
+
   gauss_p = gauss_alloc(&gauss_params);
 
   gauss_reset(gauss_p);

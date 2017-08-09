@@ -328,12 +328,12 @@ msynth_copy(const msynth_workspace *w)
 {
   msynth_workspace *w_copy;
 
-  w_copy = msynth_alloc(w->nmax, w->n_snapshot, w->epochs);
+  w_copy = msynth_alloc(w->nmax, w->n_epochs, w->epochs);
   if (!w_copy)
     return 0;
 
   /* copy coefficients */
-  memcpy(w_copy->c, w->c, w->n_snapshot * w->p * sizeof(double));
+  memcpy(w_copy->c, w->c, w->n_epochs * w->p * sizeof(double));
 
   w_copy->eval_nmin = w->eval_nmin;
   w_copy->eval_nmax = w->eval_nmax;
@@ -1420,7 +1420,7 @@ msynth_get_ddgnm(const double t, const size_t n, int m,
 
 /*
 msynth_epoch_idx()
-  Return index in [0,n_snapshot-1] for epoch corresponding to t
+  Return index in [0,n_epochs-1] for epoch corresponding to t
 
 Inputs: t - time (decimal years)
         w - workspace
@@ -1429,16 +1429,16 @@ Inputs: t - time (decimal years)
 size_t
 msynth_epoch_idx(const double t, const msynth_workspace *w)
 {
-  if (w->n_snapshot == 1)
+  if (w->n_epochs == 1)
     return 0; /* only 1 snapshot model available */
 
-  if (t >= w->epochs[w->n_snapshot - 1])
-    return w->n_snapshot - 1;
+  if (t >= w->epochs[w->n_epochs - 1])
+    return w->n_epochs - 1;
   else if (t <= w->epochs[0])
     return 0;
   else
     {
-      double *ptr = bsearch(&t, w->epochs, w->n_snapshot - 1, sizeof(double), msynth_compare);
+      double *ptr = bsearch(&t, w->epochs, w->n_epochs - 1, sizeof(double), msynth_compare);
 
       if (ptr == NULL)
         {

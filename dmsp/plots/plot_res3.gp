@@ -22,19 +22,19 @@ set key tc variable
 
 set multiplot layout nrow,ncol
 
-idx1=3
-idx2=7
+idx1=9
+idx2=10
 set title "DMSP F-15 scalar residuals against CHAOS"
 do for [i=8:13] {
   istr = sprintf('%02d', i)
-  file = 'dat'.istr
+  file = 'F15_20'.istr.'_stage1.txt'
 
   if (i == 13) {
     set xlabel "QD latitude (degrees)"
   }
 
-  plot file us 2:($12 == 1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Ascending', \
-       file us 2:($12 == -1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Descending'
+  plot file us 7:($8 == 1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Ascending', \
+       file us 7:($8 == -1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Descending'
   unset title
   unset xlabel
   load 'incrow.cfg'

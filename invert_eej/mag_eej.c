@@ -416,6 +416,15 @@ mag_eej_vector_proc(mag_track *track, double *J, mag_eej_workspace *w)
   magfit_workspace *magfit_p;
   magfit_parameters magfit_params = magfit_default_parameters();
 
+  magfit_params.lat_min = -40.0;
+  magfit_params.lat_max = 40.0;
+  magfit_params.lat_spacing1d = 0.25;
+#if 1
+  magfit_params.flags = MAGFIT_FLG_FIT_Z;
+#else
+  magfit_params.flags = MAGFIT_FLG_FIT_X | MAGFIT_FLG_FIT_Z;
+#endif
+  magfit_params.flags |= MAGFIT_FLG_SECS_FIT_DF;
   magfit_p = magfit_alloc(magfit_secs1d, &magfit_params);
 
   /* build LS matrix and rhs vector */

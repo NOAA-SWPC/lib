@@ -52,9 +52,9 @@ print_map(const char *filename, const double epoch, msynth_workspace *w)
   fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
   fprintf(fp, "# Field %zu: B_y (nT)\n", i++);
   fprintf(fp, "# Field %zu: B_z (nT)\n", i++);
-  fprintf(fp, "# Field %zu: SA B_x at CMB (uT)\n", i++);
-  fprintf(fp, "# Field %zu: SA B_y at CMB (uT)\n", i++);
-  fprintf(fp, "# Field %zu: SA B_z at CMB (uT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_r at CMB (uT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_theta at CMB (uT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_phi at CMB (uT)\n", i++);
 
   for (lon = -180.0; lon <= 180.0; lon += 1.0)
     {
@@ -75,9 +75,9 @@ print_map(const char *filename, const double epoch, msynth_workspace *w)
                   B[0],
                   B[1],
                   B[2],
-                  B_sa[0] * 1.0e-3,
-                  B_sa[1] * 1.0e-3,
-                  B_sa[2] * 1.0e-3);
+                  -B_sa[2] * 1.0e-3,
+                  -B_sa[0] * 1.0e-3,
+                  B_sa[1] * 1.0e-3);
         }
 
       fprintf(fp, "\n");

@@ -12,9 +12,11 @@
 /* mu_0 in units of: nT / (kA km^{-1}) */
 #define MAGFIT_MU_0                       (400.0 * M_PI)
 
-/* SECS flags */
-#define MAGFIT_SECS_FLG_FIT_DF            (1 << 0) /* fit divergence-free SECS */
-#define MAGFIT_SECS_FLG_FIT_CF            (1 << 1) /* fit curl-free SECS */
+#define MAGFIT_FLG_FIT_X                  (1 << 0) /* fit X component */
+#define MAGFIT_FLG_FIT_Y                  (1 << 1) /* fit Y component */
+#define MAGFIT_FLG_FIT_Z                  (1 << 2) /* fit Z component */
+#define MAGFIT_FLG_SECS_FIT_DF            (1 << 3) /* fit divergence-free SECS */
+#define MAGFIT_FLG_SECS_FIT_CF            (1 << 4) /* fit curl-free SECS */
 
 /* recommended lmax for 1D SECS */
 #define MAGFIT_SECS_LMAX                  200
@@ -37,10 +39,11 @@ typedef struct
   double lon_max;        /* maximum longitude for SECS poles (degrees) */
   double R;              /* reference radius (km) */
   size_t lmax;           /* maximum spherical harmonic degree for 1D SECS expansion */
-  size_t secs_flags;     /* MAGFIT_SECS_xxx flags */
 
   /* PCA parameters */
   size_t pca_modes;      /* number of PCA modes to use */
+
+  size_t flags;          /* MAGFIT_FLG_xxx */
 
   /* RC parameters */
   int rc_subtract_crust; /* subtract degree 45 crustal field prior to fitting RC model */

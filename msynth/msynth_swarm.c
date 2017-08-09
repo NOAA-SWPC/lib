@@ -192,6 +192,11 @@ msynth_swarm_write(const char *filename, const msynth_workspace *w)
       return 0;
     }
 
+  fprintf(fp, "%% Magnetic field model coefficients\n");
+  fprintf(fp, "%% nmax:   %zu\n", w->nmax);
+  fprintf(fp, "%% epoch:  %.4f\n", w->epochs[0]);
+  fprintf(fp, "%% radius: %.1f\n", w->R);
+
   fprintf(fp, "%% %3s %5s %20s %20s %20s\n",
           "n",
           "m",

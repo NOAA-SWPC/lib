@@ -23,19 +23,19 @@ set key tc variable
 
 set multiplot layout nrow,ncol
 
-idx1=6
-idx2=11
+idx1=11
+idx2=12
 set title "VFM B_3 residuals with CHAOS B_z"
 do for [i=8:13] {
   istr = sprintf('%02d', i)
-  file = 'dat'.istr
+  file = 'F15_20'.istr.'_stage1.txt'
 
   if (i == 13) {
     set xlabel "QD latitude (degrees)"
   }
 
-  plot file us 2:($12 == 1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Ascending', \
-       file us 2:($12 == -1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Descending'
+  plot file us 7:($8 == 1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Ascending', \
+       file us 7:($8 == -1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Descending'
   unset title
   unset xlabel
   load 'incrow.cfg'
@@ -43,19 +43,19 @@ do for [i=8:13] {
 
 load 'inccolumn.cfg'
 
-idx1=6
-idx2=10
+idx1=11
+idx2=13
 set title "VFM B_3 residuals with CHAOS projected onto geodetic normal"
 do for [i=8:13] {
   istr = sprintf('%02d', i)
-  file = 'dat'.istr
+  file = 'F15_20'.istr.'_stage1.txt'
 
   if (i == 13) {
     set xlabel "QD latitude (degrees)"
   }
 
-  plot file us 2:($12 == 1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Ascending', \
-       file us 2:($12 == -1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Descending'
+  plot file us 7:($8 == 1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Ascending', \
+       file us 7:($8 == -1 ? column(idx1)-column(idx2) : 1/0) w dot ti '20'.istr.' Descending'
   unset title
   unset xlabel
   load 'incrow.cfg'
