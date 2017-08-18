@@ -11,4 +11,4 @@ print_LDADD = libephemeris.la $(top_builddir)/common/libcommon.la -lm -lcdf -lsa
 check_PROGRAMS = test
 
 test_SOURCES = test.c
-test_LDADD = libephemeris.la $(top_builddir)/common/libcommon.la -lm -lcdf -lindices -lsatdata -lz -lgsl -lgslcblas
+test_LDADD = libephemeris.la $(top_builddir)/common/libcommon.la -lm -lcdf -lsatdata -lindices -lz -lgsl -lgslcblas
