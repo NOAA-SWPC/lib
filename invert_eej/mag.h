@@ -18,6 +18,7 @@
 #include "log.h"
 #include "inverteef.h"
 #include "mageq.h"
+#include "magfit.h"
 #include "msynth.h"
 #include "pde.h"
 #include "pomme.h"
@@ -95,6 +96,32 @@ typedef struct
   double X2[MAG_MAX_TRACK];       /* X^(1) - (M + K)_X (nT) */
   double Y2[MAG_MAX_TRACK];       /* Y^(1) - (M + K)_Y (nT) */
   double Z2[MAG_MAX_TRACK];       /* Z^(1) - (M + K)_Z (nT) */
+
+  double t_grad[MAG_MAX_TRACK];        /* timestamp for gradient point (CDF_EPOCH) */
+  double theta_grad[MAG_MAX_TRACK];    /* colatitude for gradient point in radians */
+  double phi_grad[MAG_MAX_TRACK];      /* longitude for gradient point in radians */
+  double r_grad[MAG_MAX_TRACK];        /* radius for gradient point in km */
+  double thetaq_grad[MAG_MAX_TRACK];   /* QD colatitude for gradient point in radians */
+  double qdlat_grad[MAG_MAX_TRACK];    /* QD latitude for gradient point in degrees */
+  double lat_deg_grad[MAG_MAX_TRACK];  /* geocentric latitude for gradient point in degrees */
+  double F_grad[MAG_MAX_TRACK];        /* scalar field measurement for gradient point in nT */
+  double X_grad[MAG_MAX_TRACK];        /* X field measurement for gradient point in nT */
+  double Y_grad[MAG_MAX_TRACK];        /* Y field measurement for gradient point in nT */
+  double Z_grad[MAG_MAX_TRACK];        /* Z field measurement for gradient point in nT */
+  double Bx_int_grad[MAG_MAX_TRACK];   /* Bx_internal NEC for gradient point (nT) */
+  double By_int_grad[MAG_MAX_TRACK];   /* By_internal NEC for gradient point (nT) */
+  double Bz_int_grad[MAG_MAX_TRACK];   /* Bz_internal NEC for gradient point (nT) */
+  double F_int_grad[MAG_MAX_TRACK];    /* F_internal for gradient point (nT) */
+  double dF_ext_grad[MAG_MAX_TRACK];   /* b_int . B_ext for gradient point (nT) */
+  double F1_grad[MAG_MAX_TRACK];       /* F_sat - F_int - dF_ext for gradient point (nT) */
+  double F2_grad[MAG_MAX_TRACK];       /* F^(1) - b . (M + K) for gradient point (nT) */
+  double X1_grad[MAG_MAX_TRACK];       /* X_sat - X_int - X_ext for gradient point (nT) */
+  double Y1_grad[MAG_MAX_TRACK];       /* Y_sat - Y_int - Y_ext for gradient point (nT) */
+  double Z1_grad[MAG_MAX_TRACK];       /* Z_sat - Z_int - Z_ext for gradient point (nT) */
+  double X2_grad[MAG_MAX_TRACK];       /* X^(1) - (M + K)_X for gradient point (nT) */
+  double Y2_grad[MAG_MAX_TRACK];       /* Y^(1) - (M + K)_Y for gradient point (nT) */
+  double Z2_grad[MAG_MAX_TRACK];       /* Z^(1) - (M + K)_Z for gradient point (nT) */
+
   double Sq_int[MAG_MAX_TRACK];   /* internal Sq model b . M (nT) */
   double Sq_ext[MAG_MAX_TRACK];   /* external Sq model b . K (nT) */
   double X_Sq_int[MAG_MAX_TRACK]; /* internal Sq model M_x (nT) */
@@ -104,7 +131,11 @@ typedef struct
   double Y_Sq_ext[MAG_MAX_TRACK]; /* external Sq model K_y (nT) */
   double Z_Sq_ext[MAG_MAX_TRACK]; /* external Sq model K_z (nT) */
   double F2_fit[MAG_MAX_TRACK];   /* fit to F^(2) from line current model */
+  double X2_fit[MAG_MAX_TRACK];   /* fit to X^(2) from current model (nT) */
+  double Y2_fit[MAG_MAX_TRACK];   /* fit to Y^(2) from current model (nT) */
+  double Z2_fit[MAG_MAX_TRACK];   /* fit to Z^(2) from current model (nT) */
   double phi_eq;                  /* longitude of equator crossing (rad) */
+  double theta_eq;                /* geocentric colatitude of equator crossing (rad) */
   double t_eq;                    /* time of equator crossing (CDF_EPOCH) */
   size_t n;                       /* number of data in this track */
 } mag_track;
@@ -196,47 +227,6 @@ typedef struct
 
 typedef struct
 {
-  gsl_matrix *X;     /* least squares matrix */
-  gsl_vector *c;     /* coefficient vector */
-  gsl_vector *rhs;   /* right hand side vector */
-  gsl_vector *L;     /* regularization matrix L */
-  size_t p;          /* number of coefficients for Sq model */
-  size_t n;          /* number of data for LS fit */
-  size_t ntot;       /* total data size allocated */
-  double rnorm;      /* residual norm || y - X c || */
-  double snorm;      /* solution norm || L c || */
-
-  size_t nmax_int;   /* maximum internal spherical harmonic degree */
-  size_t mmax_int;   /* maximum internal spherical harmonic order */
-  size_t nmax_ext;   /* maximum external spherical harmonic degree */
-  size_t mmax_ext;   /* maximum external spherical harmonic order */
-  size_t p_int;      /* number of internal coefficients */
-  size_t p_ext;      /* number of external coefficients */
-  size_t int_offset; /* offset in 'c' of internal coefficients */
-  size_t ext_offset; /* offset in 'c' of external coefficients */
-
-  /*
-   * indexing for coefficients, base[n] gives the offset in c for
-   * all coefficients of degree n
-   */
-  size_t *base_int;
-  size_t *base_ext;
-
-  gsl_vector *work1; /* workspace of size p */
-  gsl_vector *work2; /* workspace of size p */
-  gsl_vector *work3; /* workspace of size p */
-
-  size_t nreg;       /* number of regularization parameters for L-curve analysis */
-  gsl_vector *rho;   /* vector of residual norms */
-  gsl_vector *eta;   /* vector of solution norms */
-  gsl_vector *reg_param; /* vector of regularization parameters */
-  size_t reg_idx;    /* index of optimal regularization parameter */
-
-  gsl_multifit_linear_workspace *multifit_workspace_p;
-} mag_sqfilt_vector_workspace;
-
-typedef struct
-{
   mag_params *params;
 
   mag_track track;           /* stores current track for processing */
@@ -251,6 +241,7 @@ typedef struct
   log_workspace *log_profile;
   log_workspace *log_F2;
   log_workspace *log_B2;
+  log_workspace *log_B2_grad;
   log_workspace *log_Sq_Lcurve;
   log_workspace *log_Sq_Lcorner;
   log_workspace *log_Sq_svd;
@@ -264,7 +255,6 @@ typedef struct
   log_workspace *log_EEF;
 
   mag_sqfilt_scalar_workspace *sqfilt_scalar_workspace_p;
-  mag_sqfilt_vector_workspace *sqfilt_vector_workspace_p;
   mag_eej_workspace *eej_workspace_p;
   pde_workspace *pde_workspace_p;
   inverteef_workspace *inverteef_workspace_p;
@@ -272,12 +262,21 @@ typedef struct
   const char *output_file; /* output file */
   FILE *fp_output;
 
-  green_workspace *green_workspace_p;
+  double *dX;              /* internal X green's functions */
+  double *dY;              /* internal Y green's functions */
+  double *dZ;              /* internal Z green's functions */
+  double *dX_ext;          /* external X green's functions */
+  double *dY_ext;          /* external Y green's functions */
+  double *dZ_ext;          /* external Z green's functions */
+
+  green_workspace *green_int_p;
+  green_workspace *green_ext_p;
   kp_workspace *kp_workspace_p;
   pomme_workspace *pomme_workspace_p;
   estist_calc_workspace *estist_calc_workspace_p;
   msynth_workspace *core_workspace_p;
   msynth_workspace *lith_workspace_p;
+  magfit_workspace *magfit_workspace_p;
 } mag_workspace;
 
 /*
@@ -310,11 +309,17 @@ int mag_log_model(const int header, const mag_workspace *w);
 int mag_log_EEF(const int header, const time_t t, const double phi,
                 const double kp, const mag_workspace *w);
 
+/* mag_log_grad.c */
+int mag_log_B2_grad(const int header, const mag_workspace *w);
+
 /* mag_sqfilt_scalar.c */
 mag_sqfilt_scalar_workspace *mag_sqfilt_scalar_alloc(const size_t nmax_int, const size_t mmax_int,
                                                      const size_t nmax_ext, const size_t mmax_ext);
 void mag_sqfilt_scalar_free(mag_sqfilt_scalar_workspace *w);
 int mag_sqfilt_scalar(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w);
+
+/* mag_sqfilt_vector.c */
+int mag_sqfilt_vector(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w);
 
 /* mag_eej.c */
 mag_eej_workspace *mag_eej_alloc(const int year, const size_t ncurr,
@@ -322,5 +327,6 @@ mag_eej_workspace *mag_eej_alloc(const int year, const size_t ncurr,
                                  const double qdlat_max);
 void mag_eej_free(mag_eej_workspace *w);
 int mag_eej_proc(mag_track *track, double *J, mag_eej_workspace *w);
+int mag_eej_vector_proc(mag_track *track, double *J, mag_eej_workspace *w);
 
 #endif /* INCLUDED_mag_h */

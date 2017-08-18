@@ -81,7 +81,7 @@ grobs_iaga_read(const char *filename, grobs_data *data)
                 {
                   iaga_read_HDZF(fp, data);
                 }
-              else if (!strncmp(s2, "XYZF", 4))
+              else if (!strncmp(s2, "XYZF", 4) || !strncmp(s2, "XYZG", 4))
                 {
                   iaga_read_XYZF(fp, data);
                 }

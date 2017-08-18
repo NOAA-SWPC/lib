@@ -6,6 +6,7 @@ SUBDIRS =         \
   chaos           \
   curvefit        \
   efi             \
+  ephemeris       \
   green           \
   grid            \
   grobs           \
@@ -26,6 +27,7 @@ SUBDIRS =         \
   track           \
   magdata         \
   euler           \
+	emm             \
   estist          \
   champ           \
   poltor          \
@@ -33,4 +35,5 @@ SUBDIRS =         \
   pca             \
   swarm           \
   gd              \
+  dmsp            \
   mfield          

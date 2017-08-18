@@ -102,7 +102,7 @@ int
 test_chaos(void)
 {
   int s = 0;
-  msynth_workspace *w = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+  msynth_workspace *w = msynth_swarm_read(MSYNTH_CHAOS_FILE);
 
   msynth_free(w);
 

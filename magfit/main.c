@@ -284,11 +284,11 @@ main_proc(satdata_mag *data[3], track_workspace *track[3])
 
   if (T == magfit_secs1d)
     {
-      magfit_params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
+      magfit_params.flags |= MAGFIT_FLG_SECS_FIT_DF | MAGFIT_FLG_SECS_FIT_CF;
     }
   else if (T == magfit_secs2d)
     {
-      magfit_params.secs_flags = MAGFIT_SECS_FLG_FIT_DF;
+      magfit_params.flags |= MAGFIT_FLG_SECS_FIT_DF;
     }
   else if (T == magfit_pca)
     {

@@ -36,7 +36,7 @@ typedef struct
   size_t n;         /* total number of measurements in system */
   size_t p;         /* p_df + p_cf */
   size_t nmax;      /* maximum number of measurements in LS system */
-  size_t flags;     /* MAGFIT_SECS_FLG_xxx */
+  size_t flags;     /* MAGFIT_FLG_xxx */
   size_t npoles;    /* number of poles */
   double dtheta;    /* spacing of 1D SECS poles in radians */
 
@@ -79,7 +79,7 @@ static size_t secs1d_ncoeff(void * vstate);
 static int secs1d_add_datum(const double t, const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
 static int secs1d_fit(double * rnorm, double * snorm, void * vstate);
-static int secs1d_eval_B(const double r, const double theta, const double phi,
+static int secs1d_eval_B(const double t, const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs1d_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
@@ -97,7 +97,7 @@ static double secs1d_tancot(const double theta, const double theta0, secs1d_stat
 secs1d_alloc()
   Allocate secs 1d workspace
 
-Inputs: flags        - MAGFIT_SECS_FLG_xxx
+Inputs: flags        - MAGFIT_FLG_xxx
         lmax         - maximum degree for Legendre functions in expansion
         R_iono       - radius of ionosphere (km)
         pole_spacing - along-orbit latitude spacing of SECS poles (degrees)
@@ -110,7 +110,7 @@ secs1d_alloc(const void * params)
 {
   const magfit_parameters *mparams = (const magfit_parameters *) params;
   secs1d_state_t *state;
-  const size_t flags = mparams->secs_flags;
+  const size_t flags = mparams->flags;
   const double lat_spacing = mparams->lat_spacing1d;
   const double lat_min = mparams->lat_min;
   const double lat_max = mparams->lat_max;
@@ -134,13 +134,13 @@ secs1d_alloc(const void * params)
   state->cf_offset = 0;
   state->dtheta = dtheta;
 
-  if (flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (flags & MAGFIT_FLG_SECS_FIT_DF)
     {
       state->df_offset = state->p;
       state->p += npoles;
     }
 
-  if (flags & MAGFIT_SECS_FLG_FIT_CF)
+  if (flags & MAGFIT_FLG_SECS_FIT_CF)
     {
       state->cf_offset = state->p;
       state->p += npoles;
@@ -305,33 +305,38 @@ secs1d_add_datum(const double t, const double r, const double theta, const doubl
   size_t rowidx = state->n;
   double wi = 1.0;
 
-  (void) t; /* unused parameter */
+  (void) t;   /* unused parameter */
   (void) phi; /* unused parameter */
 
-  /* upweight equatorial data */
-  if (fabs(qdlat) < 10.0)
-    wi = SECS1D_WEIGHT_EEJ;
-
-  if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_DF)
     {
-      gsl_vector_view vx = gsl_matrix_row(state->X, rowidx);
-      gsl_vector_view vz = gsl_matrix_row(state->X, rowidx + 1);
+      gsl_vector_view vx, vz;
 
-      /* set rhs vector */
-      gsl_vector_set(state->rhs, rowidx, B[0]);
-      gsl_vector_set(state->rhs, rowidx + 1, B[2]);
+      if (fabs(qdlat) < 5.0)
+        wi *= 10.0;
 
-      /* set weight vector */
-      gsl_vector_set(state->wts, rowidx, wi);
-      gsl_vector_set(state->wts, rowidx + 1, wi);
+      if (state->flags & MAGFIT_FLG_FIT_X)
+        {
+          vx = gsl_matrix_row(state->X, rowidx);
+          gsl_vector_set(state->rhs, rowidx, B[0]);
+          gsl_vector_set(state->wts, rowidx, wi);
+          ++rowidx;
+        }
 
-      /* build 2 rows of the LS matrix for DF SECS */
+      if (state->flags & MAGFIT_FLG_FIT_Z)
+        {
+          vz = gsl_matrix_row(state->X, rowidx);
+          gsl_vector_set(state->rhs, rowidx, B[2]);
+          gsl_vector_set(state->wts, rowidx, wi);
+          ++rowidx;
+        }
+
+      /* build rows of the LS matrix for DF SECS */
       build_matrix_row_df(r, theta, &vx.vector, &vz.vector, state);
-
-      rowidx += 2;
     }
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
+  if ((state->flags & MAGFIT_FLG_SECS_FIT_CF) &&
+      (state->flags & MAGFIT_FLG_FIT_Y))
     {
       gsl_vector_view vy = gsl_matrix_row(state->X, rowidx);
 
@@ -344,7 +349,7 @@ secs1d_add_datum(const double t, const double r, const double theta, const doubl
       /* build 1 row of the LS matrix for CF SECS */
       build_matrix_row_cf(r, theta, &vy.vector, state);
 
-      rowidx += 1;
+      ++rowidx;
     }
 
   state->n = rowidx;
@@ -426,12 +431,13 @@ secs1d_fit(double * rnorm, double * snorm, void * vstate)
   /* compute GCV curve */
   gsl_multifit_linear_gcv(&bs.vector, reg_param, G, &lambda_gcv, &G_gcv, state->multifit_p);
 
-  /* the L-curve method often overdamps the system - I think its because some L-curves have
-   * multiple corners and its finding the wrong one */
-#if 1
-  lambda = GSL_MIN(lambda_l, 1.0e-4 * s0);
+  /* the L-curve method often overdamps the system, not sure why */
+#if 0 /*XXX*/
+  lambda_l *= 1.0e-2;
+  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
 #else
-  lambda = lambda_l;
+  lambda_l = GSL_MAX(lambda_l, 1.0e-5 * s0);
+  lambda_l = 1.0e-4*s0;
 #endif
 
   /* solve regularized system with lambda */
@@ -481,7 +487,8 @@ secs1d_eval_B()
   Evaluate magnetic field at a given (r,theta) using
 previously computed 1D SECS coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -492,7 +499,7 @@ Notes:
 */
 
 static int
-secs1d_eval_B(const double r, const double theta, const double phi,
+secs1d_eval_B(const double t, const double r, const double theta, const double phi,
               double B[3], void * vstate)
 {
   secs1d_state_t *state = (secs1d_state_t *) vstate;
@@ -500,13 +507,14 @@ secs1d_eval_B(const double r, const double theta, const double phi,
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
 
+  (void) t;   /* unused parameter */
   (void) phi; /* unused parameter */
 
   B[0] = 0.0;
   B[1] = 0.0;
   B[2] = 0.0;
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_DF)
     {
       build_matrix_row_df(r, theta, &vx.vector, &vz.vector, state);
 
@@ -514,7 +522,7 @@ secs1d_eval_B(const double r, const double theta, const double phi,
       gsl_blas_ddot(&vz.vector, state->c, &B[2]);
     }
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_CF)
     {
       build_matrix_row_cf(r, theta, &vy.vector, state);
 
@@ -556,14 +564,14 @@ secs1d_eval_J(const double r, const double theta, const double phi,
   J[1] = 0.0;
   J[2] = 0.0;
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_DF)
     {
       build_matrix_row_df_J(theta, &vy.vector, state);
 
       gsl_blas_ddot(&vy.vector, state->c, &J[1]);
     }
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_CF)
     {
       build_matrix_row_cf_J(theta, &vx.vector, &vz.vector, state);
 
@@ -783,8 +791,11 @@ build_matrix_row_df(const double r, const double theta,
 {
   size_t i;
 
-  gsl_vector_set_zero(X);
-  gsl_vector_set_zero(Z);
+  if (state->flags & MAGFIT_FLG_FIT_X)
+    gsl_vector_set_zero(X);
+
+  if (state->flags & MAGFIT_FLG_FIT_Z)
+    gsl_vector_set_zero(Z);
 
   /* initialize needed arrays */
   secs1d_green_df_init(theta, state);
@@ -796,8 +807,11 @@ build_matrix_row_df(const double r, const double theta,
       /* compute divergence-free 1D SECS Green's functions */
       secs1d_green_df(r, theta, i, B, state);
 
-      gsl_vector_set(X, state->df_offset + i, B[0]);
-      gsl_vector_set(Z, state->df_offset + i, B[2]);
+      if (state->flags & MAGFIT_FLG_FIT_X)
+        gsl_vector_set(X, state->df_offset + i, B[0]);
+
+      if (state->flags & MAGFIT_FLG_FIT_Z)
+        gsl_vector_set(Z, state->df_offset + i, B[2]);
     }
 
   return 0;
@@ -821,6 +835,9 @@ build_matrix_row_cf(const double r, const double theta,
                     gsl_vector *Y, secs1d_state_t *state)
 {
   size_t i;
+
+  if (!(state->flags & MAGFIT_FLG_FIT_Y))
+    return -1;
 
   gsl_vector_set_zero(Y);
 

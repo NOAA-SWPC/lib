@@ -229,7 +229,7 @@ print_data(const char *filename, const size_t flags,
   FILE *fp;
   size_t nflagged;
   /*msynth_workspace *msynth_p = msynth_read(MSYNTH_BOUMME_FILE);*/
-  msynth_workspace *msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+  msynth_workspace *msynth_p = msynth_swarm_read(MSYNTH_CHAOS_FILE);
 
   fp = fopen(filename, "w");
   if (!fp)

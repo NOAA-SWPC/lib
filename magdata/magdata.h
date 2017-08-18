@@ -19,10 +19,14 @@
 #define MAGDATA_FLG_DY_NS             (1 << 5)  /* along-track DY measurement available (both VFM and NEC) */
 #define MAGDATA_FLG_DZ_NS             (1 << 6)  /* along-track DZ measurement available (both VFM and NEC) */
 #define MAGDATA_FLG_DF_NS             (1 << 7)  /* along-track DF measurement available */
-#define MAGDATA_FLG_TRACK_START       (1 << 8)  /* start of track in data structure */
-#define MAGDATA_FLG_FIT_MF            (1 << 9)  /* fit main field to this data point */
-#define MAGDATA_FLG_FIT_EULER         (1 << 10) /* fit Euler angles to this data point */
-#define MAGDATA_FLG_DISCARD           (1 << 11) /* discard this data point */
+#define MAGDATA_FLG_DX_EW             (1 << 8)  /* east-west DX measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_DY_EW             (1 << 9)  /* east-west DY measurement available (both VFM and NEC)*/
+#define MAGDATA_FLG_DZ_EW             (1 << 10) /* east-west DZ measurement available (both VFM and NEC) */
+#define MAGDATA_FLG_DF_EW             (1 << 11) /* east-west DF measurement available */
+#define MAGDATA_FLG_TRACK_START       (1 << 12) /* start of track in data structure */
+#define MAGDATA_FLG_FIT_MF            (1 << 13) /* fit main field to this data point */
+#define MAGDATA_FLG_FIT_EULER         (1 << 14) /* fit Euler angles to this data point */
+#define MAGDATA_FLG_DISCARD           (1 << 15) /* discard this data point */
 
 /* global flags */
 #define MAGDATA_GLOBFLG_EULER         (1 << 0)  /* fit Euler angles to this dataset */
@@ -48,8 +52,29 @@
 /* scalar measurement available */
 #define MAGDATA_ExistScalar(x)        (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_F))
 
+#define MAGDATA_ExistVectorNS(x)       (!MAGDATA_Discarded(x) && \
+                                       ((x) & MAGDATA_FLG_DX_NS) && \
+                                       ((x) & MAGDATA_FLG_DY_NS) && \
+                                       ((x) & MAGDATA_FLG_DZ_NS))
+
+/* vector north-south gradient X/Y/Z measurements available */
+#define MAGDATA_ExistDX_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DX_NS))
+#define MAGDATA_ExistDY_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DY_NS))
+#define MAGDATA_ExistDZ_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DZ_NS))
+
+/* scalar north-south gradient measurement available */
+#define MAGDATA_ExistDF_NS(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DF_NS))
+
+/* vector east-west gradient X/Y/Z measurements available */
+#define MAGDATA_ExistDX_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DX_EW))
+#define MAGDATA_ExistDY_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DY_EW))
+#define MAGDATA_ExistDZ_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DZ_EW))
+
+/* scalar east-west gradient measurement available */
+#define MAGDATA_ExistDF_EW(x)         (!MAGDATA_Discarded(x) && ((x) & MAGDATA_FLG_DF_EW))
+
 /* check if fitting Euler angles to this data point */
-#define MAGDATA_FitEuler(x)           (MAGDATA_ExistVector(x) && \
+#define MAGDATA_FitEuler(x)           ((MAGDATA_ExistVector(x) || MAGDATA_ExistVectorNS(x)) && \
                                        ((x) & MAGDATA_FLG_FIT_EULER))
 
 /* check if fitting MF model to this data point */
@@ -69,7 +94,9 @@ typedef struct
   double q[4];           /* quaternions */
   double ne;             /* electron density cm^{-3} */
   int satdir;            /* +1 north, -1 south */
+  double lt_eq;          /* local time of equator crossing */
 
+  double t_ns;           /* timestamp for along-track point (CDF_EPOCH) */
   double r_ns;           /* radius for along-track point (km) */
   double theta_ns;       /* geocentric (or QD) colatitude for along-track point (radians) */
   double phi_ns;         /* longitude for along-track point (radians) */
@@ -78,6 +105,8 @@ typedef struct
   double B_vfm_ns[3];    /* along-track magnetic field vector in VFM frame (nT) */
   double B_model_ns[3];  /* along-track main/crustal/external field model in NEC frame (nT) */
   double F_ns;           /* along-track magnetic field scalar measurement (nT) */
+  double q_ns[4];        /* along-track quaternions */
+  double lt_eq_ns;       /* local time of equator crossing for gradient point */
 
   size_t flags;          /* MAGDATA_FLG_xxx flags */
 } magdata_datum;
@@ -103,9 +132,12 @@ typedef struct
   double *q;           /* quaternions */
   double *weights;     /* spatial weights */
   int *satdir;         /* +1 north, -1 south */
+  double *lt_eq;       /* local time of equator crossing */
 
   double *ne;          /* electron density cm^{-3} */
 
+  double *t_ns;        /* timestamp for along-track point (CDF_EPOCH) */
+  double *ts_ns;       /* along-track scaled timestamp for MF modeling (dimensionless), not written to output file */
   double *r_ns;        /* radius for along-track point (km) */
   double *theta_ns;    /* geocentric colatitude for along-track point (radians) */
   double *phi_ns;      /* longitude for along-track point (radians) */
@@ -113,10 +145,15 @@ typedef struct
   double *Bx_nec_ns;   /* NEC along-track X measurement (nT) */
   double *By_nec_ns;   /* NEC along-track Y measurement (nT) */
   double *Bz_nec_ns;   /* NEC along-track Z measurement (nT) */
+  double *Bx_vfm_ns;   /* VFM along-track X measurement (nT) */
+  double *By_vfm_ns;   /* VFM along-track Y measurement (nT) */
+  double *Bz_vfm_ns;   /* VFM along-track Z measurement (nT) */
   double *Bx_model_ns; /* NEC along-track X main/crustal/external field (nT) */
   double *By_model_ns; /* NEC along-track Y main/crustal/external field (nT) */
   double *Bz_model_ns; /* NEC along-track Z main/crustal/external field (nT) */
   double *F_ns;        /* along-track scalar measurement (nT) */
+  double *q_ns;        /* along-track quaternions */
+  double *lt_eq_ns;    /* along-track local time of equator crossing */
 
   size_t *flags;       /* MAGDATA_FLG_xxx flags */
 
@@ -139,6 +176,7 @@ typedef struct
   size_t ngrad;        /* number of along-track difference measurements */
   size_t nres;         /* number of total residuals */
 
+  size_t euler_flags;  /* EULER_FLG_xxx flags for Euler angle convention */
   size_t global_flags; /* MAGDATA_GLOBFLG_xxx flags applying to all data */
 
   track_weight_workspace *weight_workspace_p;
@@ -147,10 +185,13 @@ typedef struct
 /* parameters for copying tracks into magdata structure */
 typedef struct
 {
-  double grad_dt_ns;   /* time interval for along-track differences */
-  int model_main;      /* include main field in B_model */
-  int model_crust;     /* include crustal field in B_model */
-  int model_ext;       /* include external field in B_model */
+  double grad_dt_ns;    /* time interval for along-track differences (seconds) */
+  double grad_dt_ew;    /* maximum time interval for E/W differences (seconds) */
+  double grad_dphi_max; /* maximum allowed longitudinal separation for E/W gradients (degrees) */
+  double grad_dlat_max; /* maximum allowed latitudinal separation for E/W gradients (degrees) */
+  int model_main;       /* include main field in B_model */
+  int model_crust;      /* include crustal field in B_model */
+  int model_ext;        /* include external field in B_model */
 } magdata_params;
 
 /*
@@ -160,13 +201,14 @@ typedef struct
 magdata *magdata_alloc(const size_t n, const double R);
 magdata *magdata_realloc(const size_t n, const double R, magdata *data);
 void magdata_free(magdata *data);
+int magdata_set_euler(const size_t flags, magdata *data);
 int magdata_datum_init(magdata_datum *datum);
 int magdata_add(const magdata_datum *datum, magdata *data);
 int magdata_init(magdata *data);
 int magdata_unit_weights(magdata *data);
 int magdata_calc(magdata *data);
 int magdata_print(const char *filename, const magdata *data);
-int magdata_map(const char *filename, const magdata *data);
+int magdata_map(const char *prefix, const magdata *data);
 int magdata_residual(const size_t idx, double B[4], const magdata *data);
 int magdata_residual_ns(const size_t idx, double B[4], const magdata *data);
 int magdata_residual_dB_ns(const size_t idx, double dB[4], const magdata *data);
@@ -180,6 +222,11 @@ int magdata_flag_t(const double t0, const double t1, magdata *data);
 int magdata_flag_scalar(magdata *data);
 int magdata_copy_track(const magdata_params *params, const size_t track_idx,
                        const satdata_mag *data, const track_workspace *track_p,
-                       magdata *mdata, size_t ntype[4]);
+                       magdata *mdata, size_t ntype[6]);
+int magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
+                          const satdata_mag *data, const track_workspace *track_p,
+                          const satdata_mag *data2, const track_workspace *track_p2,
+                          magdata *mdata, size_t ntype[6]);
+satdata_mag *magdata_mag2sat(const magdata *mdata);
 
 #endif /* INCLUDED_magdata_h */

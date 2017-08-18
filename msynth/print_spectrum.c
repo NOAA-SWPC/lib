@@ -10,9 +10,11 @@
  * [-a arnaud_file]
  * [-b NGDC720_file]
  * [-f EMM_crust_file]
- * [-h chaos_file]
+ * [-h swarm_file]
  * [-p pomme_file]
  * [-i igrf12_mf_candidate]
+ * [-g ipgp_file]
+ * [-l bggm_file]
  * [-z]
  * [-n nmax]
  * [-e epoch]
@@ -47,7 +49,7 @@ main(int argc, char *argv[])
   size_t nmax = 0;
   double epoch = -1.0;
 
-  while ((c = getopt(argc, argv, "a:b:c:e:f:m:w:o:h:p:zn:i:dt:")) != (-1))
+  while ((c = getopt(argc, argv, "a:b:c:e:f:g:l:m:w:o:h:p:zn:i:dt:")) != (-1))
     {
       switch (c)
         {
@@ -79,6 +81,13 @@ main(int argc, char *argv[])
               msynth2 = msynth_emm_read(optarg);
             break;
 
+          case 'l':
+            if (!msynth1)
+              msynth1 = msynth_bggm_read(optarg);
+            else
+              msynth2 = msynth_bggm_read(optarg);
+            break;
+
           case 'm':
             if (!msynth1)
               msynth1 = msynth_mf7_read(optarg);
@@ -95,9 +104,9 @@ main(int argc, char *argv[])
 
           case 'h':
             if (!msynth1)
-              msynth1 = msynth_chaos_read(optarg);
+              msynth1 = msynth_swarm_read(optarg);
             else
-              msynth2 = msynth_chaos_read(optarg);
+              msynth2 = msynth_swarm_read(optarg);
             break;
 
           case 'p':
@@ -105,6 +114,13 @@ main(int argc, char *argv[])
               msynth1 = msynth_pomme_read(optarg);
             else
               msynth2 = msynth_pomme_read(optarg);
+            break;
+
+          case 'g':
+            if (!msynth1)
+              msynth1 = msynth_ipgp_read(optarg);
+            else
+              msynth2 = msynth_ipgp_read(optarg);
             break;
 
           case 'i':
@@ -144,14 +160,14 @@ main(int argc, char *argv[])
             break;
 
           case 'd':
-            msynth2 = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+            msynth2 = msynth_swarm_read(MSYNTH_CHAOS_FILE);
             break;
         }
     }
 
   if (!msynth1)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h chaos_file] [-p pomme_file] [-t tgcm_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-e epoch] [-o output_file] [-d]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-l bggm_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h swarm_shc_file] [-p pomme_file] [-t tgcm_file] [-i igrf12_mf_candidate] [-g ipgp_file] [-z] [-n nmax] [-e epoch] [-o output_file] [-d]\n", argv[0]);
       exit(1);
     }
 
@@ -187,6 +203,14 @@ main(int argc, char *argv[])
       msynth_print_correlation(corrfile, msynth1, msynth2);
       fprintf(stderr, "done\n");
     }
+
+#if 0
+  /*XXX*/
+  {
+    const char *sfile = "new.txt";
+    msynth_swarm_write(sfile, msynth1);
+  }
+#endif
 
   msynth_free(w);
   msynth_free(msynth1);

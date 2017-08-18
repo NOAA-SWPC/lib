@@ -17,10 +17,6 @@
 
 #include "msynth.h"
 
-static int msynth_eval_g(const double t, const double r, const double theta,
-                         const double phi, const double epoch, const double *g,
-                         const double *dg, const double *ddg, double B[4],
-                         msynth_workspace *w);
 static int msynth_eval_dgdt(const double t, const double r, const double theta,
                             const double phi, const double epoch,
                             const double *dg, const double *ddg,
@@ -217,10 +213,78 @@ msynth_eval(const double t, const double r, const double theta,
   const double *dg = g + w->sv_offset;
   const double *ddg = g + w->sa_offset;
 
-  s = msynth_eval_g(t, r, theta, phi, epoch, g, dg, ddg, B, w);
+  /* compute Green's functions */
+  s = msynth_green(r, theta, phi, w);
+  if (s)
+    return s;
+
+  /* evaluate sum of Gauss coefficients times Green's functions */
+  s = msynth_eval_sum(t, epoch, g, dg, ddg, B, w);
+  if (s)
+    return s;
 
   return s;
 } /* msynth_eval() */
+
+/*
+msynth_eval2()
+  Evaluate magnetic field model at given point
+
+Inputs: r     - geocentric radius (km)
+        theta - geocentric colatitude (radians)
+        phi   - geocentric longitude (radians)
+        B_mf  - (output) main magnetic field (nT)
+        B_sv  - (output) SV magnetic field (nT)
+        B_sa  - (output) SA magnetic field (nT)
+        w     - workspace
+*/
+
+int
+msynth_eval2(const double t, const double r, const double theta,
+             const double phi, double B_mf[3], double B_sv[3], double B_sa[3],
+             msynth_workspace *w)
+{
+  int s = 0;
+  const size_t epoch_idx = msynth_epoch_idx(t, w);
+  const double *g = w->c + epoch_idx * w->p;
+  const double *dg = g + w->sv_offset;
+  const double *ddg = g + w->sa_offset;
+  size_t n;
+
+  for (n = 0; n < 3; ++n)
+    {
+      B_mf[n] = 0.0;
+      B_sv[n] = 0.0;
+      B_sa[n] = 0.0;
+    }
+
+  s += msynth_green(r, theta, phi, w);
+
+  for (n = w->eval_nmin; n <= w->eval_nmax; ++n)
+    {
+      int ni = (int) n;
+      int m;
+
+      for (m = -ni; m <= ni; ++m)
+        {
+          size_t cidx = msynth_nmidx(n, m, w);
+
+          B_mf[0] += g[cidx] * w->dX[cidx];
+          B_mf[1] += g[cidx] * w->dY[cidx];
+          B_mf[2] += g[cidx] * w->dZ[cidx];
+
+          B_sv[0] += dg[cidx] * w->dX[cidx];
+          B_sv[1] += dg[cidx] * w->dY[cidx];
+          B_sv[2] += dg[cidx] * w->dZ[cidx];
+
+          B_sa[0] += ddg[cidx] * w->dX[cidx];
+          B_sa[1] += ddg[cidx] * w->dY[cidx];
+          B_sa[2] += ddg[cidx] * w->dZ[cidx];
+        }
+    }
+
+  return s;
+}
 
 /*
 msynth_eval_dBdt()
@@ -268,12 +332,12 @@ msynth_copy(const msynth_workspace *w)
 {
   msynth_workspace *w_copy;
 
-  w_copy = msynth_alloc(w->nmax, w->n_snapshot, w->epochs);
+  w_copy = msynth_alloc(w->nmax, w->n_epochs, w->epochs);
   if (!w_copy)
     return 0;
 
   /* copy coefficients */
-  memcpy(w_copy->c, w->c, w->n_snapshot * w->p * sizeof(double));
+  memcpy(w_copy->c, w->c, w->n_epochs * w->p * sizeof(double));
 
   w_copy->eval_nmin = w->eval_nmin;
   w_copy->eval_nmax = w->eval_nmax;
@@ -529,6 +593,54 @@ msynth_print_spectrum_m(const char *filename, const msynth_workspace *w)
   return 0;
 } /* msynth_print_spectrum_m() */
 
+/* print sensitivity matrix between two sets of coefficients */
+int
+msynth_print_smatrix(const char *filename, const msynth_workspace *w1,
+                     const msynth_workspace *w2)
+{
+  FILE *fp;
+  const size_t nmin = GSL_MAX(w1->eval_nmin, w2->eval_nmin);
+  const size_t nmax = GSL_MIN(w1->eval_nmax, w2->eval_nmax);
+  size_t n;
+  
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "msynth_print_smatrix: cannot open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  n = 1;
+  fprintf(fp, "# Field %zu: spherical harmonic degree n\n", n++);
+  fprintf(fp, "# Field %zu: spherical harmonic order m\n", n++);
+  fprintf(fp, "# Field %zu: model difference for coefficient (n,m)\n", n++);
+
+  for (n = nmin; n <= nmax; ++n)
+    {
+      int ni = (int) n;
+      int m;
+
+      for (m = -ni; m <= ni; ++m)
+        {
+          size_t cidx1 = msynth_nmidx(n, m, w1);
+          size_t cidx2 = msynth_nmidx(n, m, w2);
+          double gnm = w1->c[cidx1] - w2->c[cidx2];
+
+          fprintf(fp, "%4d %4zu %10.4f\n",
+                  m,
+                  n,
+                  gnm);
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  fclose(fp);
+
+  return 0;
+}
+
 /* print degree correlation between two sets of coefficients */
 int
 msynth_print_correlation(const char *filename, const msynth_workspace *w1,
@@ -536,7 +648,8 @@ msynth_print_correlation(const char *filename, const msynth_workspace *w1,
 {
   size_t n;
   FILE *fp;
-  size_t nmax = GSL_MIN(w1->eval_nmax, w2->eval_nmax);
+  const size_t nmin = GSL_MAX(w1->eval_nmin, w2->eval_nmin);
+  const size_t nmax = GSL_MIN(w1->eval_nmax, w2->eval_nmax);
   gsl_vector *c1 = gsl_vector_alloc(w1->p);
   gsl_vector *c2 = gsl_vector_alloc(w2->p);
   gsl_vector_view v;
@@ -562,7 +675,7 @@ msynth_print_correlation(const char *filename, const msynth_workspace *w1,
   fprintf(fp, "# Field %zu: SV R_n\n", n++);
   fprintf(fp, "# Field %zu: SA R_n\n", n++);
 
-  for (n = 1; n <= nmax; ++n)
+  for (n = nmin; n <= nmax; ++n)
     {
       size_t base = n * n - 1;
       size_t len = 2 * n + 1;
@@ -642,21 +755,32 @@ msynth_calc_sv(msynth_workspace *w)
         }
     }
 
+  /* zero SA for last snapshot model */
+  {
+    double *cptr = w->c + i * w->p;
+    size_t n;
+
+    for (n = 1; n <= w->nmax; ++n)
+      {
+        int m, ni = (int) n;
+
+        for (m = -ni; m <= ni; ++m)
+          {
+            size_t cidx = msynth_nmidx(n, m, w);
+            cptr[cidx + w->sa_offset] = 0.0;
+          }
+      }
+  }
+
   return s;
 } /* msynth_calc_sv() */
 
-/*******************************************************
- *             INTERNAL ROUTINES                       *
- *******************************************************/
-
 /*
-msynth_eval_g()
-  Evaluate magnetic field model for given g,dg,ddg coefficients
+msynth_eval_sum()
+  Evaluate magnetic field model by summing Gauss coefficients
+times Green's functions
 
 Inputs: t     - timestamp (decimal years)
-        r     - radius (km)
-        theta - colatitude (radians)
-        phi   - longitude (radians)
         epoch - epoch of closest snapshot model
         g     - main field coefficients (nT)
         dg    - secular variation coefficients (nT/year)
@@ -667,13 +791,16 @@ Inputs: t     - timestamp (decimal years)
                 B[2] = B_z
                 B[3] = |B|
         w     - workspace
+
+Notes:
+1) The arrays w->dX, w->dY, w->dZ must be initialized prior
+to calling this functions (see msynth_green())
 */
 
-static int
-msynth_eval_g(const double t, const double r, const double theta,
-              const double phi, const double epoch, const double *g,
-              const double *dg, const double *ddg, double B[4],
-              msynth_workspace *w)
+int
+msynth_eval_sum(const double t, const double epoch, const double *g,
+                const double *dg, const double *ddg, double B[4],
+                msynth_workspace *w)
 {
   int s = 0;
   size_t n;
@@ -684,13 +811,6 @@ msynth_eval_g(const double t, const double r, const double theta,
   const double t1 = t - t0;        /* SV term (years) */
   const double t2 = 0.5 * t1 * t1; /* SA term (years^2) */
 
-  /* after this date, use a linear model for gnm */
-  const double tend = 5013.5; /* XXX */
-  const double t3 = tend - t0;
-  const double t4 = 0.5 * t3 * t3;
-
-  s += msynth_green(r, theta, phi, w);
-
   B[0] = B[1] = B[2] = 0.0;
 
   for (n = w->eval_nmin; n <= w->eval_nmax; ++n)
@@ -700,23 +820,7 @@ msynth_eval_g(const double t, const double r, const double theta,
       for (m = -ni; m <= ni; ++m)
         {
           size_t cidx = msynth_nmidx(n, m, w);
-          double gnm;
-
-          /*
-           * use the parabola taylor series for the period when
-           * data was available, and after that use the tangent
-           * line to the parabola at the point tend
-           */
-          if (t <= tend)
-            {
-              gnm = g[cidx] + dg[cidx] * t1 + ddg[cidx] * t2;
-            }
-          else
-            {
-              /* set gnm to the tangent line to the parabola at tend */
-              gnm = g[cidx] + dg[cidx] * t3 + ddg[cidx] * t4 +
-                    (dg[cidx] + ddg[cidx] * t3) * (t - tend);
-            }
+          double gnm = g[cidx] + dg[cidx] * t1 + ddg[cidx] * t2;
 
           B[0] += gnm * w->dX[cidx];
           B[1] += gnm * w->dY[cidx];
@@ -727,7 +831,11 @@ msynth_eval_g(const double t, const double r, const double theta,
   B[3] = sqrt(B[0]*B[0] + B[1]*B[1] + B[2]*B[2]);
 
   return s;
-} /* msynth_eval_g() */
+}
+
+/*******************************************************
+ *             INTERNAL ROUTINES                       *
+ *******************************************************/
 
 /*
 msynth_eval_dgdt()
@@ -1291,19 +1399,27 @@ msynth_get_ddgnm(const double t, const size_t n, int m,
   return ddg[cidx];
 } /* msynth_get_ddgnm() */
 
+/*
+msynth_epoch_idx()
+  Return index in [0,n_epochs-1] for epoch corresponding to t
+
+Inputs: t - time (decimal years)
+        w - workspace
+*/
+
 size_t
 msynth_epoch_idx(const double t, const msynth_workspace *w)
 {
-  if (w->n_snapshot == 1)
+  if (w->n_epochs == 1)
     return 0; /* only 1 snapshot model available */
 
-  if (t >= w->epochs[w->n_snapshot - 1])
-    return w->n_snapshot - 1;
+  if (t >= w->epochs[w->n_epochs - 1])
+    return w->n_epochs - 1;
   else if (t <= w->epochs[0])
     return 0;
   else
     {
-      double *ptr = bsearch(&t, w->epochs, w->n_snapshot - 1, sizeof(double), msynth_compare);
+      double *ptr = bsearch(&t, w->epochs, w->n_epochs - 1, sizeof(double), msynth_compare);
 
       if (ptr == NULL)
         {

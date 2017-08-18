@@ -60,10 +60,10 @@ static size_t gaussint_ncoeff(void * vstate);
 static int gaussint_add_datum(const double t, const double r, const double theta, const double phi,
                               const double qdlat, const double B[3], void * vstate);
 static int gaussint_fit(double * rnorm, double * snorm, void * vstate);
-static int gaussint_eval_B(const double r, const double theta, const double phi,
-                         double B[3], void * vstate);
+static int gaussint_eval_B(const double t, const double r, const double theta, const double phi,
+                           double B[3], void * vstate);
 static int gaussint_eval_J(const double r, const double theta, const double phi,
-                         double J[3], void * vstate);
+                           double J[3], void * vstate);
 static double gaussint_eval_chi(const double theta, const double phi, void * vstate);
 
 static int build_matrix_row(const double r, const double theta, const double phi,
@@ -277,10 +277,11 @@ gaussint_fit(double * rnorm, double * snorm, void * vstate)
 
 /*
 gaussint_eval_B()
-  Evaluate magnetic field at a given (r,theta) using
+  Evaluate magnetic field at a given (r,theta,phi) using
 previously computed coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -291,7 +292,7 @@ Notes:
 */
 
 static int
-gaussint_eval_B(const double r, const double theta, const double phi,
+gaussint_eval_B(const double t, const double r, const double theta, const double phi,
                 double B[3], void * vstate)
 {
   int status = GSL_SUCCESS;
@@ -299,6 +300,8 @@ gaussint_eval_B(const double r, const double theta, const double phi,
   gsl_vector_view vx = gsl_matrix_row(state->X, 0);
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
+
+  (void) t;
 
   build_matrix_row(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
 

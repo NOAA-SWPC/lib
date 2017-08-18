@@ -1,4 +1,4 @@
-check_PROGRAMS = test test_zenith test_sunrise time2fday test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_ut1 doy2md
+check_PROGRAMS = test test_zenith test_sunrise time2fday test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_ut1 doy2md test_sph
 
 doy2md_SOURCES = doy2md.c
 test_SOURCES = test.c
@@ -19,6 +19,7 @@ test_omni_SOURCES = test_omni.c
 test_geo_SOURCES = test_geo.c
 test_julian_SOURCES = test_julian.c
 test_ut1_SOURCES = test_ut1.c
+test_sph_SOURCES = test_sph.c
 
 lib_LTLIBRARIES = libcommon.la
 
@@ -39,8 +40,8 @@ libcommon_la_SOURCES = \
   histogramNd.c        \
   interp.c             \
   julian.c             \
-  lse.c                \
   lapack_lls.c         \
+	lse.c                \
   lunar.c              \
   oct.c                \
   omni.c               \
@@ -50,9 +51,9 @@ libcommon_la_SOURCES = \
   solpos.c             \
   tcalc.c              \
   tcalc2.c             \
+  quat.c               \
   ut1.c
 
-AM_CFLAGS = -std=c99 -g -O2 -Wall -W -D_XOPEN_SOURCE
 AM_CPPFLAGS =
 
 test_common_libs = -lm -lgsl -lgslcblas
@@ -76,3 +77,4 @@ test_omni_LDADD = libcommon.la ${test_common_libs}
 test_geo_LDADD = libcommon.la ${test_common_libs}
 test_julian_LDADD = libcommon.la ${test_common_libs}
 test_ut1_LDADD = libcommon.la ${test_common_libs}
+test_sph_LDADD = libcommon.la ${test_common_libs}

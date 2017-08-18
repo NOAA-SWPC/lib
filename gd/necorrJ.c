@@ -142,12 +142,7 @@ interp_ne(const time_t t, const double qdlat, const satdata_mag *data)
       int half_window = 15; /* number of minutes in half time window */
       int idx1 = GSL_MAX(0, idx - half_window*60*2);
       int idx2 = GSL_MIN(data->n - 1, idx + half_window*60*2);
-      int qidx;
-      
-      if (data->qdlat[idx1] < data->qdlat[idx2])
-        qidx = (int) bsearch_double(data->qdlat, qdlat, idx1, idx2);
-      else
-        qidx = (int) bsearch_desc_double(data->qdlat, qdlat, idx1, idx2);
+      int qidx = (int) bsearch_double(data->qdlat, qdlat, idx1, idx2);
 
       Ne = interp1d(data->qdlat[qidx], data->qdlat[qidx + 1],
                     data->ne[qidx], data->ne[qidx + 1], qdlat);

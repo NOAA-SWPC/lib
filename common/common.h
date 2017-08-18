@@ -62,10 +62,17 @@ void array2d_free(size_t size_x, double **a);
 int sphcross(double A[3], double B[3], double C[3]);
 int sph_basis(const double theta, const double phi,
               double rhat[3], double that[3], double phat[3]);
+int ecef2sph_basis(const double X[3], double rhat[3], double that[3], double phat[3]);
+void sph2ecef(const double r, const double theta, const double phi, double X[3]);
+void sph2ecef_vec(const double theta, const double phi, const double V_sph[3], double V_ecef[3]);
+void ecef2sph_vec(const double theta, const double phi, const double V_ecef[3], double V_sph[3]);
 double vec_dot(const double a[3], const double b[3]);
+int vec_cross(const double A[3], const double B[3], double C[3]);
 double vec_norm(const double v[3]);
 int vec_unit(const double v[3], double unit[3]);
 double time_diff(struct timeval a, struct timeval b);
+int progress_bar(FILE *fp, const double progress, const size_t bar_width);
+int check_LT(const double lt, const double lt_min, const double lt_max);
 
 extern int putenv(char *string);
 

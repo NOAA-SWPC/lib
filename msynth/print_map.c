@@ -8,9 +8,10 @@
  * [-m mf7_file]
  * [-w wmm_file]
  * [-a arnaud_file]
- * [-h chaos_file]
+ * [-h swarm_shc_file]
  * [-p pomme_file]
  * [-i igrf12_mf_candidate]
+ * [-g ipgp_file]
  * [-z]
  * [-n nmax]
  * [-t epoch]
@@ -33,10 +34,10 @@
 #include "msynth.h"
 
 int
-print_map(const char *filename, const double epoch,
-          msynth_workspace *w)
+print_map(const char *filename, const double epoch, msynth_workspace *w)
 {
   const double r = 6371.2;
+  const double c = 3485.0; /* CMB radius */
   double lon, lat;
   FILE *fp;
   size_t i;
@@ -51,6 +52,9 @@ print_map(const char *filename, const double epoch,
   fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
   fprintf(fp, "# Field %zu: B_y (nT)\n", i++);
   fprintf(fp, "# Field %zu: B_z (nT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_r at CMB (uT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_theta at CMB (uT)\n", i++);
+  fprintf(fp, "# Field %zu: SA B_phi at CMB (uT)\n", i++);
 
   for (lon = -180.0; lon <= 180.0; lon += 1.0)
     {
@@ -59,16 +63,21 @@ print_map(const char *filename, const double epoch,
       for (lat = -89.9; lat <= 89.9; lat += 1.0)
         {
           double theta = M_PI / 2.0 - lat * M_PI / 180.0;
-          double B[4];
+          double B[4], B_mf[3], B_sv[3], B_sa[3];
 
           msynth_eval(epoch, r, theta, phi, B, w);
 
-          fprintf(fp, "%f %f %f %f %f\n",
+          msynth_eval2(epoch, c, theta, phi, B_mf, B_sv, B_sa, w);
+
+          fprintf(fp, "%f %f %f %f %f %f %f %f\n",
                   lon,
                   lat,
                   B[0],
                   B[1],
-                  B[2]);
+                  B[2],
+                  -B_sa[2] * 1.0e-3,
+                  -B_sa[0] * 1.0e-3,
+                  B_sa[1] * 1.0e-3);
         }
 
       fprintf(fp, "\n");
@@ -91,7 +100,7 @@ main(int argc, char *argv[])
   double epoch = -1.0;
   int diff = 0;
 
-  while ((c = getopt(argc, argv, "c:m:w:o:a:h:p:n:e:i:d")) != (-1))
+  while ((c = getopt(argc, argv, "c:m:w:o:a:h:p:n:e:i:g:d")) != (-1))
     {
       switch (c)
         {
@@ -125,9 +134,9 @@ main(int argc, char *argv[])
 
           case 'h':
             if (!msynth1)
-              msynth1 = msynth_chaos_read(optarg);
+              msynth1 = msynth_swarm_read(optarg);
             else
-              msynth2 = msynth_chaos_read(optarg);
+              msynth2 = msynth_swarm_read(optarg);
             break;
 
           case 'p':
@@ -135,6 +144,13 @@ main(int argc, char *argv[])
               msynth1 = msynth_pomme_read(optarg);
             else
               msynth2 = msynth_pomme_read(optarg);
+            break;
+
+          case 'g':
+            if (!msynth1)
+              msynth1 = msynth_ipgp_read(optarg);
+            else
+              msynth2 = msynth_ipgp_read(optarg);
             break;
 
           case 'i':
@@ -164,14 +180,14 @@ main(int argc, char *argv[])
 
           case 'd':
             diff = 1;
-            msynth2 = msynth_chaos_read(MSYNTH_CHAOS_FILE);
+            msynth2 = msynth_swarm_read(MSYNTH_CHAOS_FILE);
             break;
         }
     }
 
   if (!msynth1)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h chaos_file] [-p pomme_file] [-i igrf12_mf_candidate] [-z] [-n nmax] [-t epoch] [-o output_file] [-d]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-w wmm_file] [-a arnaud_file] [-h swarm_shc_file] [-p pomme_file] [-i igrf12_mf_candidate] [-g ipgp_file] [-z] [-n nmax] [-t epoch] [-o output_file] [-d]\n", argv[0]);
       exit(1);
     }
 
@@ -197,6 +213,12 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: printing map to %s...", outfile);
   print_map(outfile, epoch, w);
   fprintf(stderr, "done\n");
+
+  /*XXX*/
+  {
+    const char *sfile = "F15_new.txt";
+    msynth_swarm_write(sfile, w);
+  }
 
   msynth_free(w);
   msynth_free(msynth1);

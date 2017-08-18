@@ -7,6 +7,7 @@
 #include <math.h>
 #include <complex.h>
 
+#include "common.h"
 #include "ellipsoid.h"
 
 static int ellipsoid_cart2ell(const double r[3], double *mu, double *nu,
@@ -120,7 +121,7 @@ e_mu = dr/dmu / |dr/dmu|
 e_nu = dr/dnu / |dr/dnu|
 e_phi = dr/dphi / |dr/dphi|
 
-Inputs: r     - Cartesian position vector (X,Y,Z) in km
+Inputs: r     - ECEF Cartesian position vector (X,Y,Z) in km
         e_mu  - (output) Cartesian components of e_mu
         e_nu  - (output) Cartesian components of e_nu
         e_phi - (output) Cartesian components of e_phi
@@ -189,3 +190,37 @@ ellipsoid_basis_mu(const double r[3], const double mu, double e_mu[3],
 
   return s;
 } /* ellipsoid_basis_mu() */
+
+/*
+ellipsoid_nec2ell()
+  Given B in NEC, convert to ellipsoid "NEC"
+
+Inputs: r_ECEF - ECEF position vector (km)
+        B_nec  - NEC vector (X, Y Z)
+        B_ell  - (output) vector in ellipsoid coordinates
+                 B_ell[0]
+                 B_ell[1]
+                 B_ell[2] - downward geodetic vertical (-e_mu)
+*/
+
+int
+ellipsoid_nec2ell(const double r_ECEF[3], const double B_nec[3], double B_ell[3])
+{
+  double rhat[3], that[3], phat[3];
+  double e_mu[3], e_nu[3], e_phi[3];
+
+  /* compute local ECEF spherical basis vectors */
+  ecef2sph_basis(r_ECEF, rhat, that, phat);
+
+  /* compute local ECEF ellipsoid basis vectors */
+  ellipsoid_basis(r_ECEF, e_mu, e_nu, e_phi);
+
+  B_ell[2] = -B_nec[0] * vec_dot(that, e_mu) +
+              B_nec[1] * vec_dot(phat, e_mu) -
+              B_nec[2] * vec_dot(rhat, e_mu);
+
+  /* reverse sign to point inward */
+  B_ell[2] = -B_ell[2];
+
+  return 0;
+}

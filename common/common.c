@@ -465,7 +465,16 @@ sphcross(double A[3], double B[3], double C[3])
   return 0;
 } /* sphcross() */
 
-/* compute Cartesian components of spherical basis vectors */
+/*
+sph_basis()
+  compute Cartesian components of spherical basis vectors
+
+Inputs: theta - colatitude (radians)
+        phi   - longitude (radians)
+        rhat  - (output) ECEF rhat vector
+        that  - (output) ECEF that vector
+        phat  - (output) ECEF phat vector
+*/
 int
 sph_basis(const double theta, const double phi,
           double rhat[3], double that[3], double phat[3])
@@ -485,10 +494,118 @@ sph_basis(const double theta, const double phi,
   return 0;
 } /* sph_basis() */
 
+/*
+ecef2sph_basis()
+  Compute spherical basis vectors in ECEF basis, given
+an ECEF position
+
+Inputs: X    - ECEF (X, Y, Z) position
+        rhat - (output) ECEF rhat vector
+        that - (output) ECEF that vector
+        phat - (output) ECEF phat vector
+*/
+
+int
+ecef2sph_basis(const double X[3], double rhat[3], double that[3], double phat[3])
+{
+  const double rho = gsl_hypot(X[0], X[1]);
+  const double r = gsl_hypot(rho, X[2]);
+
+  rhat[0] = X[0] / r;
+  rhat[1] = X[1] / r;
+  rhat[2] = X[2] / r;
+
+  that[0] = (X[0] / rho) * (X[2] / r);
+  that[1] = (X[1] / rho) * (X[2] / r);
+  that[2] = -rho / r;
+
+  phat[0] = -X[1] / rho;
+  phat[1] = X[0] / rho;
+  phat[2] = 0.0;
+
+  return 0;
+}
+
+void
+sph2ecef(const double r, const double theta, const double phi, double X[3])
+{
+  X[0] = r * sin(theta) * cos(phi);
+  X[1] = r * sin(theta) * sin(phi);
+  X[2] = r * cos(theta);
+}
+
+/*
+sph2ecef_vec()
+  Transform a vector in a spherical coordinate basis into Cartesian (ECEF)
+coordinates
+
+Inputs: theta  - colatitude of point for transformation (radians)
+        phi    - longitude of point for transformation (radians)
+        V_sph  - vector in spherical basis:
+                 [ Vr ]
+                 [ Vt ]
+                 [ Vp ]
+        V_ecef - (output) ECEF vector (X, Y, Z)
+*/
+
+void
+sph2ecef_vec(const double theta, const double phi, const double V_sph[3], double V_ecef[3])
+{
+  const double st = sin(theta);
+  const double ct = cos(theta);
+  const double sp = sin(phi);
+  const double cp = cos(phi);
+
+  V_ecef[0] = st * cp * V_sph[0] + ct * cp * V_sph[1] - sp * V_sph[2];
+  V_ecef[1] = st * sp * V_sph[0] + ct * sp * V_sph[1] + cp * V_sph[2];
+  V_ecef[2] = ct * V_sph[0] - st * V_sph[1];
+}
+
+/*
+ecef2sph_vec()
+  Transform a vector in ECEF coordinates to spherical coordinates
+
+Inputs: theta  - colatitude of point for transformation (radians)
+        phi    - longitude of point for transformation (radians)
+        V_ecef - ECEF vector (X, Y, Z)
+        V_sph  - (output) vector in spherical basis:
+                 [ Vr ]
+                 [ Vt ]
+                 [ Vp ]
+*/
+
+void
+ecef2sph_vec(const double theta, const double phi, const double V_ecef[3], double V_sph[3])
+{
+  const double st = sin(theta);
+  const double ct = cos(theta);
+  const double sp = sin(phi);
+  const double cp = cos(phi);
+
+  V_sph[0] = st * cp * V_ecef[0] + st * sp * V_ecef[1] + ct * V_ecef[2];
+  V_sph[1] = ct * cp * V_ecef[0] + ct * sp * V_ecef[1] - st * V_ecef[2];
+  V_sph[2] = -sp * V_ecef[0] + cp * V_ecef[1];
+}
+
 double
 vec_dot(const double a[3], const double b[3])
 {
   return (a[0]*b[0] + a[1]*b[1] + a[2]*b[2]);
+}
+
+/* C = A x B
+idx 0: x component
+idx 1: y component
+idx 2: z component
+*/
+int
+vec_cross(const double A[3], const double B[3], double C[3])
+{
+  C[0] = (A[1]*B[2] - A[2]*B[1]);
+  C[1] = (A[2]*B[0] - A[0]*B[2]);
+  C[2] = (A[0]*B[1] - A[1]*B[0]);
+
+  return 0;
 }
 
 double
@@ -518,4 +635,70 @@ time_diff(struct timeval a, struct timeval b)
   sec2 = (double) b.tv_sec + b.tv_usec * 1.0e-6;
 
   return sec2 - sec1;
+}
+
+/*
+progress_bar()
+  Print a progress bar
+
+Inputs: fp        - where to print progress bar
+        progress  - amount of progress in [0,1]
+        bar_width - how many characters to make progress bar
+*/
+
+int
+progress_bar(FILE *fp, const double progress, const size_t bar_width)
+{
+  const size_t pos = bar_width * progress;
+  size_t k;
+
+  fprintf(fp, "[");
+
+  for (k = 0; k < bar_width; ++k)
+    {
+      if (k < pos)
+        fprintf(fp, "=");
+      else if (k == pos)
+        fprintf(fp, ">");
+      else
+        fprintf(fp, " ");
+    }
+
+  fprintf(fp, "] %.2f%%\r", progress * 100.0);
+  fflush(fp);
+
+  return 0;
+}
+
+/*
+check_LT()
+  Check if a given LT is within [lt_min,lt_max] accounting for mod 24. So it
+is possible to have input lt_min < lt_max in order to select data across midnight.
+
+Example: [lt_min,lt_max] = [6,18] will select daytime data between 6am and 6pm
+         [lt_min,lt_max] = [18,6] will select nighttime data between 6pm and 6am
+         [lt_min,lt_max] = [22,5] will select nighttime data between 10pm and 5am
+         [lt_min,lt_max] = [0,5] will select data between midnight and 5am
+
+Return: 1 if LT \in [lt_min,lt_max] (mod 24); 0 otherwise
+*/
+
+int
+check_LT(const double lt, const double lt_min, const double lt_max)
+{
+  double a, b;
+
+  b = fmod(lt_max - lt_min, 24.0);
+  if (b < 0.0)
+    b += 24.0;
+
+  a = fmod(lt - lt_min, 24.0);
+  if (a < 0.0)
+    a += 24.0;
+
+  if (a > b)
+    return 0; /* invalid local time */
+
+  /* valid local time */
+  return 1;
 }

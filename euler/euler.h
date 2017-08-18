@@ -12,13 +12,16 @@
 
 #include "magdata.h"
 
-#define EULER_FLG_DERIV_ALPHA       (1 << 0)
-#define EULER_FLG_DERIV_BETA        (1 << 1)
-#define EULER_FLG_DERIV_GAMMA       (1 << 2)
-#define EULER_FLG_ROTSC             (1 << 3) /* rotate to NEC with star camera quaternions */
-#define EULER_FLG_ZYX               (1 << 4) /* ZYX Euler convention (Swarm) */
-#define EULER_FLG_ZYZ               (1 << 5) /* ZYZ Euler convention (Swarm ASM-V) */
-#define EULER_FLG_RINV              (1 << 6) /* apply R_inv matrix prior to Euler rotation (Swarm ASM-V) */
+#define EULER_FLG_ZYX               (1 << 0) /* ZYX Euler convention (Swarm) */
+#define EULER_FLG_ZYZ               (1 << 1) /* ZYZ Euler convention (Swarm ASM-V) */
+#define EULER_FLG_DERIV_ALPHA       (1 << 2) /* first derivative wrt alpha */
+#define EULER_FLG_DERIV_BETA        (1 << 3) /* first derivative wrt beta */
+#define EULER_FLG_DERIV_GAMMA       (1 << 4) /* first derivative wrt gamma */
+#define EULER_FLG_DERIV2_ALPHA      (1 << 5) /* second derivative wrt alpha */
+#define EULER_FLG_DERIV2_BETA       (1 << 6) /* second derivative wrt beta */
+#define EULER_FLG_DERIV2_GAMMA      (1 << 7) /* second derivative wrt gamma */
+#define EULER_FLG_ROTSC             (1 << 8) /* rotate to NEC with star camera quaternions */
+#define EULER_FLG_RINV              (1 << 9) /* apply R_inv matrix prior to Euler rotation (Swarm ASM-V) */
 
 #define EULER_IDX_ALPHA             0
 #define EULER_IDX_BETA              1
@@ -65,6 +68,8 @@ int euler_vfm2nec(const size_t flags, const double alpha, const double beta,
 int euler_nec2vfm(const size_t flags, const double alpha, const double beta,
                   const double gamma, const double q[],
                   const double B_in[3], double B_out[3]);
+int euler_apply_R3(const size_t flags, const double alpha, const double beta,
+                   const double gamma, const double B_in[3], double B_out[3]);
 int euler_Rq(const double *q, gsl_matrix *Rq);
 
 #endif /* INCLUDED_euler_h */

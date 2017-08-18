@@ -132,6 +132,11 @@ Inputs: theta   - geodetic colatitude (radians)
         E1      - (output) components (east, north, up) of E1 vector
         E2      - (output) components (east, north, up) of E2 vector
         E3      - (output) components (east, north, up) of E3 vector
+        w       - workspace
+
+Notes:
+1) Workspace w is not used in this function, but apex_alloc() MUST be called
+to load coefficients for appropriate epoch prior to calling this function
 */
 
 int
@@ -214,6 +219,11 @@ Inputs: theta   - geocentric colatitude (radians)
         E1      - (output) components (east, north, up) of E1 vector
         E2      - (output) components (east, north, up) of E2 vector
         E3      - (output) components (east, north, up) of E3 vector
+        w       - workspace
+
+Notes:
+1) Workspace w is not used in this function, but apex_alloc() MUST be called
+to load coefficients for appropriate epoch prior to calling this function
 */
 
 int

@@ -14,6 +14,7 @@
 #include "cfg.h"
 #include "common.h"
 #include "mag.h"
+#include "mag_grad.h"
 #include "track.h"
 
 static int
@@ -78,9 +79,7 @@ parse_config_file(const char *filename, mag_params *params)
 {
   int s;
   config_t cfg;
-  config_setting_t *setting;
   double fval;
-  char *strptr;
 
   config_init(&cfg);
 
@@ -110,6 +109,7 @@ print_help(char *argv[])
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "\t --champ_file | -c file              - CHAMP index file\n");
   fprintf(stderr, "\t --swarm_file | -s file              - Swarm index file\n");
+  fprintf(stderr, "\t --swarm_file2 | -r file             - Swarm index file 2\n");
   fprintf(stderr, "\t --output_file | -o file             - output file\n");
   fprintf(stderr, "\t --log_dir | -l dir                  - log directory\n");
   fprintf(stderr, "\t --lt_min | -a lt_min                - minimum local time (hours)\n");
@@ -134,6 +134,7 @@ int
 main(int argc, char *argv[])
 {
   satdata_mag *data = NULL;
+  satdata_mag *data2 = NULL;
   struct timeval tv0, tv1;
   mag_workspace *mag_workspace_p;
   track_workspace *track_workspace_p;
@@ -145,7 +146,7 @@ main(int argc, char *argv[])
   params.log_dir = "log";
   params.output_file = NULL;
   params.curr_altitude = 110.0;
-  params.ncurr = 161;
+  params.ncurr = 81;
   params.qdlat_max = 20.0;
   params.lt_min = 6.0;
   params.lt_max = 18.0;
@@ -185,6 +186,7 @@ main(int argc, char *argv[])
         {
           { "champ_file", required_argument, NULL, 'c' },
           { "swarm_file", required_argument, NULL, 's' },
+          { "swarm_file2", required_argument, NULL, 'r' },
           { "output_file", required_argument, NULL, 'o' },
           { "log_dir", required_argument, NULL, 'l' },
           { "lt_min", required_argument, NULL, 'a' },
@@ -207,7 +209,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:s:t:u:v:w:zA:C:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:r:s:t:u:v:w:zA:C:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -286,6 +288,26 @@ main(int argc, char *argv[])
 
               fprintf(stderr, "main: filtering instrument flags...");
               nflag = satdata_swarm_filter_instrument(1, data);
+              fprintf(stderr, "done (%zu data flagged)\n", nflag);
+            }
+
+            break;
+
+          case 'r':
+            fprintf(stderr, "main: reading %s...", optarg);
+            gettimeofday(&tv0, NULL);
+            data2 = satdata_swarm_read_idx(optarg, 0);
+            gettimeofday(&tv1, NULL);
+            if (!data2)
+              exit(1);
+            fprintf(stderr, "done (%zu points read, %g seconds)\n",
+                    data2->n, time_diff(tv0, tv1));
+
+            {
+              size_t nflag;
+
+              fprintf(stderr, "main: filtering instrument flags...");
+              nflag = satdata_swarm_filter_instrument(1, data2);
               fprintf(stderr, "done (%zu data flagged)\n", nflag);
             }
 
@@ -409,13 +431,29 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: Sq external mmax         %zu\n", params.sq_mmax_ext);
 
   track_workspace_p = track_alloc();
-
   track_init(data, NULL, track_workspace_p);
 
   params.year = (int) satdata_epoch2year(data->t[0]);
   mag_workspace_p = mag_alloc(&params);
 
-  mag_proc(&params, track_workspace_p, data, mag_workspace_p);
+  if (data2 == NULL)
+    {
+      /* process data from single satellite */
+      mag_proc(&params, track_workspace_p, data, mag_workspace_p);
+    }
+  else
+    {
+      /* process data from 2 satellites */
+      track_workspace *track_workspace_p2 = track_alloc();
+
+      track_init(data2, NULL, track_workspace_p2);
+
+      mag_grad_proc(&params, track_workspace_p, data,
+                    track_workspace_p2, data2,
+                    mag_workspace_p);
+
+      track_free(track_workspace_p2);
+    }
 
   mag_free(mag_workspace_p);
   satdata_mag_free(data);

@@ -40,7 +40,7 @@ typedef struct
   size_t n;         /* total number of measurements in system */
   size_t p;         /* p_df + p_cf */
   size_t nmax;      /* maximum number of measurements in LS system */
-  size_t flags;     /* MAGFIT_SECS_FLG_xxx */
+  size_t flags;     /* MAGFIT_FLG_xxx */
   size_t ntheta;    /* number of poles in theta direction */
   size_t nphi;      /* number of poles in phi direction */
 
@@ -74,7 +74,7 @@ static size_t secs2d_ncoeff(void * vstate);
 static int secs2d_add_datum(const double t, const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
 static int secs2d_fit(double * rnorm, double * snorm, void * vstate);
-static int secs2d_eval_B(const double r, const double theta, const double phi,
+static int secs2d_eval_B(const double t, const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int secs2d_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
@@ -112,7 +112,7 @@ secs2d_alloc(const void * params)
 {
   const magfit_parameters *mparams = (const magfit_parameters *) params;
   secs2d_state_t *state;
-  const size_t flags = mparams->secs_flags;
+  const size_t flags = mparams->flags;
   const double lat_spacing = mparams->lat_spacing2d;
   const double lat_max = mparams->lat_max;
   const double lat_min = mparams->lat_min;
@@ -127,7 +127,7 @@ secs2d_alloc(const void * params)
   const double lon_max = mparams->lon_max;
   const double lon_min = mparams->lon_min;
   const double phi_min = lon_min * M_PI / 180.0;
-  const double diff = wrap180(lon_max - lon_min);
+  const double diff = lon_max - lon_min;
   const size_t nphi = GSL_MAX((size_t) (fabs(diff) / lon_spacing + 1.0), 2);
   const double dphi = diff / (nphi - 1.0) * M_PI / 180.0;
   const size_t npoles = ntheta * nphi;
@@ -147,13 +147,13 @@ secs2d_alloc(const void * params)
   state->df_offset = 0;
   state->cf_offset = 0;
 
-  if (flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (flags & MAGFIT_FLG_SECS_FIT_DF)
     {
       state->df_offset = state->p;
       state->p += npoles;
     }
 
-  if (flags & MAGFIT_SECS_FLG_FIT_CF)
+  if (flags & MAGFIT_FLG_SECS_FIT_CF)
     {
       state->cf_offset = state->p;
       state->p += npoles;
@@ -285,7 +285,7 @@ secs2d_add_datum(const double t, const double r, const double theta, const doubl
 
   (void) t;
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_DF)
     {
       /* upweight equatorial data */
       if (fabs(qdlat) < 10.0)
@@ -307,7 +307,7 @@ secs2d_add_datum(const double t, const double r, const double theta, const doubl
       rowidx += 3;
     }
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_CF)
     {
       /*XXX*/
     }
@@ -446,7 +446,8 @@ secs2d_eval_B()
   Evaluate magnetic field at a given (r,theta) using
 previously computed 1D SECS coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -457,7 +458,7 @@ Notes:
 */
 
 static int
-secs2d_eval_B(const double r, const double theta, const double phi,
+secs2d_eval_B(const double t, const double r, const double theta, const double phi,
               double B[3], void * vstate)
 {
   secs2d_state_t *state = (secs2d_state_t *) vstate;
@@ -465,13 +466,13 @@ secs2d_eval_B(const double r, const double theta, const double phi,
   gsl_vector_view vy = gsl_matrix_row(state->X, 1);
   gsl_vector_view vz = gsl_matrix_row(state->X, 2);
 
-  (void) phi; /* unused parameter */
+  (void) t;   /* unused parameter */
 
   B[0] = 0.0;
   B[1] = 0.0;
   B[2] = 0.0;
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_DF)
     {
       secs2d_matrix_row_df(r, theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
 
@@ -480,7 +481,7 @@ secs2d_eval_B(const double r, const double theta, const double phi,
       gsl_blas_ddot(&vz.vector, state->c, &B[2]);
     }
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_CF)
     {
       secs2d_matrix_row_cf(r, theta, &vy.vector, state);
 
@@ -521,7 +522,7 @@ secs2d_eval_J(const double r, const double theta, const double phi,
   J[1] = 0.0;
   J[2] = 0.0;
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_DF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_DF)
     {
       secs2d_matrix_row_df_J(theta, phi, &vx.vector, &vy.vector, &vz.vector, state);
 
@@ -530,7 +531,7 @@ secs2d_eval_J(const double r, const double theta, const double phi,
       gsl_blas_ddot(&vz.vector, state->c, &J[2]);
     }
 
-  if (state->flags & MAGFIT_SECS_FLG_FIT_CF)
+  if (state->flags & MAGFIT_FLG_SECS_FIT_CF)
     {
       secs2d_matrix_row_cf_J(theta, &vx.vector, &vz.vector, state);
 
@@ -567,18 +568,27 @@ secs2d_green_df(const double r, const double theta, const double phi,
                 double B[3], secs2d_state_t *state)
 {
   const double s = GSL_MIN(r, state->R) / GSL_MAX(r, state->R);
-  double thetap, stp, ctp;
+  double thetap, stp, ctp, d;
   size_t i;
 
   secs2d_transform(theta0, phi0, theta, phi, &thetap);
   stp = sin(thetap);
   ctp = cos(thetap);
+  d = sqrt(1.0 + s*s - 2.0*s*ctp);
 
   if (r >= state->R)
     {
-      B[0] = ((1.0 - s * ctp) / sqrt(1 + s*s - 2.0*s*ctp) - 1.0) / stp;
+      /* observation point above ionosphere layer */
+      B[0] = ((1.0 - s * ctp) / d - 1.0) / stp;
       B[1] = 0.0;
-      B[2] = -s * (1.0 / sqrt(1.0 + s*s - 2.0*s*ctp) - 1.0);
+      B[2] = -s * (1.0 / d - 1.0);
+    }
+  else
+    {
+      /* observation point below ionosphere layer */
+      B[0] = ((s - ctp) / d + ctp) / stp;
+      B[1] = 0.0;
+      B[2] = 1.0 - 1.0 / d;
     }
 
   for (i = 0; i < 3; ++i)

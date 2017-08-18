@@ -20,16 +20,19 @@
 /* minimum number of along-track data points for rms calculation */
 #define TRACK_RMS_NDATA      200
 
-#define TRACK_FLG_RMS        (1 << 0) /* flagged due to high rms */
-#define TRACK_FLG_JUMP       (1 << 1) /* flagged due to data jump */
-#define TRACK_FLG_SATDIR     (1 << 2) /* flagged due to satellite direction */
-#define TRACK_FLG_UT         (1 << 3) /* flagged due to UT */
-#define TRACK_FLG_LT         (1 << 4) /* flagged due to local time */
-#define TRACK_FLG_KP         (1 << 5) /* flagged due to kp */
-#define TRACK_FLG_DOY        (1 << 6) /* flagged due to doy / season */
-#define TRACK_FLG_ALTITUDE   (1 << 7) /* flagged due to altitude */
-#define TRACK_FLG_LONGITUDE  (1 << 8) /* flagged due to longitude */
-#define TRACK_FLG_INCOMPLETE (1 << 9) /* flagged due to missing data */
+#define TRACK_FLG_RMS        (1 << 0)  /* flagged due to high rms */
+#define TRACK_FLG_JUMP       (1 << 1)  /* flagged due to data jump */
+#define TRACK_FLG_SATDIR     (1 << 2)  /* flagged due to satellite direction */
+#define TRACK_FLG_UT         (1 << 3)  /* flagged due to UT */
+#define TRACK_FLG_LT         (1 << 4)  /* flagged due to local time */
+#define TRACK_FLG_KP         (1 << 5)  /* flagged due to kp */
+#define TRACK_FLG_RC         (1 << 6)  /* flagged due to RC */
+#define TRACK_FLG_DOY        (1 << 7)  /* flagged due to doy / season */
+#define TRACK_FLG_ALTITUDE   (1 << 8)  /* flagged due to altitude */
+#define TRACK_FLG_LONGITUDE  (1 << 9)  /* flagged due to longitude */
+#define TRACK_FLG_INCOMPLETE (1 << 10) /* flagged due to missing data */
+#define TRACK_FLG_PB         (1 << 11) /* flagged due to plasma bubble detected */
+#define TRACK_FLG_TIME       (1 << 12) /* flagged due to timestamp */
 
 typedef struct
 {
@@ -42,6 +45,7 @@ typedef struct
   size_t n;         /* number of data points in this track */
   double t_eq;      /* timestamp of equator crossing (CDF_EPOCH) */
   double lon_eq;    /* longitude of equator crossing (deg) */
+  double lat_eq;    /* geocentric latitude of equator crossing (deg) */
   double lt_eq;     /* local time of equator crossing (hours) */
   int satdir;       /* satellite direction: +1 north, -1 south */
   double rms[4];    /* along-track rms (nT) */
@@ -82,6 +86,7 @@ size_t track_nflagged(const track_workspace *w);
 size_t track_data_nflagged(const track_data *tptr, const satdata_mag *data);
 int track_find(const double t_eq, const double phi_eq, const double dt_min,
                const double dphi, size_t *idx, const track_workspace *w);
+int track_find_t(const double t, size_t *idx, const track_workspace *w);
 int track_print(const char *filename, const size_t flags,
                 const satdata_mag *data, track_workspace *w);
 int track_print_track(const int header, FILE *fp, const track_data *tptr,
@@ -99,6 +104,7 @@ size_t track_flag_rms(const char *outfile, const double thresh[4],
                       size_t *ndata_flagged, satdata_mag *data, track_workspace *w);
 size_t track_flag_jumps(const double thresh, satdata_mag *data, track_workspace *w);
 size_t track_flag_satdir(const int satdir, satdata_mag *data, track_workspace *w);
+size_t track_flag_time(const double t_min, const double t_max, satdata_mag *data, track_workspace *w);
 size_t track_flag_ut(const double ut_min, const double ut_max, satdata_mag *data,
                      track_workspace *w);
 size_t track_flag_lt(const double lt_min, const double lt_max, size_t *ndata_flagged,
@@ -119,9 +125,10 @@ size_t track_flag_n(const size_t nmin, satdata_mag *data, track_workspace *w);
 int track_fix_offsets(const satdata_mag *data, track_workspace *w);
 
 /* track_synth.c */
+int track_synth_int(satdata_mag *data, msynth_workspace *msynth_core_p, msynth_workspace *msynth_crust_p);
 int track_synth(const int down_sample, const satdata_mag *data_in,
                 satdata_mag *data_out, msynth_workspace *msynth_core);
-int track_synth_chaos(const int down_sample, const satdata_mag *data_in,
+int track_synth_chaos(const int down_sample, satdata_mag *data_in,
                       satdata_mag *data_out, msynth_workspace *msynth_core);
 
 #endif /* INCLUDED_track_h */

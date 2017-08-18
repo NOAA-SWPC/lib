@@ -11,13 +11,11 @@
  * 4. mfield_alloc          - allocate mfield_workspace
  * 5. mfield_init           - initialize various internal parameters
  *                            (time scaling, etc)
- * 6. mfield_set_damping    - set coefficent damping parameters (requires
- *                            time scaling parameters)
- * 7. mfield_calc_linear    - build linear LS matrix and solve system
- * 8. mfield_calc_nonlinear - solve nonlinear LS system; the initial
+ * 6. mfield_calc_linear    - build linear LS matrix and solve system
+ * 7. mfield_calc_nonlinear - solve nonlinear LS system; the initial
  *                            guess for the nonlinear procedure is the
  *                            linearized solution
- * 9. mfield_free
+ * 8. mfield_free
  */
 
 #include <stdio.h>
@@ -52,32 +50,15 @@
 #include "common.h"
 #include "euler.h"
 #include "lls.h"
+#include "lapack_wrapper.h"
 #include "mfield.h"
 #include "oct.h"
 #include "track_weight.h"
-
-/*
- * scale time to dimensionless units for SV/SA terms - this
- * helps improve the condition of the least squares A^T A matrix
- */
-#define MFIELD_SCALE_TIME            1
-
-#define MFIELD_REGULARIZE            1
-
-/* weighting factors for data (multiplies spatial weights) */
-#define MFIELD_WEIGHT_F              (1.0)
-#define MFIELD_WEIGHT_X              (1.0)
-#define MFIELD_WEIGHT_Y              (1.0)
-#define MFIELD_WEIGHT_Z              (1.0)
 
 static int mfield_green(const double r, const double theta, const double phi,
                         mfield_workspace *w);
 static int mfield_eval_g(const double t, const double r, const double theta, const double phi,
                          const gsl_vector *c, double B[4], mfield_workspace *w);
-static int mfield_print_residuals(const int header, FILE *fp,
-                                  const gsl_vector *r,
-                                  const gsl_vector *w_rob,
-                                  const gsl_vector *w_spatial);
 static int mfield_update_histogram(const gsl_vector *r, gsl_histogram *h);
 static int mfield_print_histogram(FILE *fp, gsl_histogram *h);
 static int mfield_compare_int(const void *a, const void *b);
@@ -144,20 +125,17 @@ mfield_alloc(const mfield_parameters *params)
   w->nnm_sv = (w->nmax_sv + 1) * (w->nmax_sv + 1) - 1;
   w->nnm_sa = (w->nmax_sa + 1) * (w->nmax_sa + 1) - 1;
 
-#if !MFIELD_FIT_SECVAR
-  w->nnm_sv = 0;
-#endif
+  if (!params->fit_sv)
+    w->nnm_sv = 0;
 
-#if !MFIELD_FIT_SECACC
-  w->nnm_sa = 0;
-#endif
+  if (!params->fit_sa || !params->fit_sv)
+    w->nnm_sa = 0;
 
   /* total (internal) model coefficients */
   w->p_int = w->nnm_mf + w->nnm_sv + w->nnm_sa;
   w->p = w->p_int;
 
-#if MFIELD_FIT_EULER
-  if (w->data_workspace_p)
+  if (params->fit_euler && w->data_workspace_p)
     {
       size_t i;
       size_t sum = 0;
@@ -178,14 +156,17 @@ mfield_alloc(const mfield_parameters *params)
 
           w->offset_euler[i] = 3 * sum;
           sum += w->nbins_euler[i];
+
+          fprintf(stderr, "mfield_alloc: number of Euler bins for satellite %zu: %zu\n", i, w->nbins_euler[i]);
         }
 
       w->neuler = 3 * sum;
       /*w->neuler = 3 * w->nsat;*/
     }
-#else
-  w->neuler = 0;
-#endif
+  else
+    {
+      w->neuler = 0;
+    }
 
   w->next = 0;
 
@@ -308,14 +289,6 @@ mfield_alloc(const mfield_parameters *params)
 
   w->niter = 0;
 
-  /* maximum observations to accumulate at once in LS system */
-  w->data_block = MFIELD_BLOCK_SIZE;
-  
-  /* add factor 4 for (X,Y,Z,F) */
-  w->block_J = gsl_matrix_alloc(4 * w->data_block, w->p);
-  w->block_f = gsl_vector_alloc(4 * w->data_block);
-  w->wts = gsl_vector_alloc(4 * w->data_block);
-
   w->JTJ_vec = gsl_matrix_alloc(w->p_int, w->p_int);
 
   w->eigen_workspace_p = gsl_eigen_symm_alloc(w->p);
@@ -323,21 +296,28 @@ mfield_alloc(const mfield_parameters *params)
   w->lambda_diag = gsl_vector_calloc(w->p);
   w->LTL = gsl_vector_calloc(w->p);
 
-  w->block_dX = gsl_matrix_alloc(w->data_block, w->nnm_mf);
-  w->block_dY = gsl_matrix_alloc(w->data_block, w->nnm_mf);
-  w->block_dZ = gsl_matrix_alloc(w->data_block, w->nnm_mf);
-  w->fp_dX = fopen("mat/dX.dat", "w+");
-  w->fp_dY = fopen("mat/dY.dat", "w+");
-  w->fp_dZ = fopen("mat/dZ.dat", "w+");
-
   w->max_threads = (size_t) omp_get_max_threads();
   w->omp_dX = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
   w->omp_dY = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
   w->omp_dZ = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dX_grad = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dY_grad = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
+  w->omp_dZ_grad = gsl_matrix_alloc(w->max_threads, w->nnm_mf);
 
   /* initialize green workspaces and omp_J */
   {
+    /*
+     * Number of components added to omp_J matrix:
+     * X, Y, Z, F, DX_NS, DY_NS, DZ_NS, DF_NS, DX_EW, DY_EW, DZ_EW, DF_EW
+     */
+    const size_t ncomp = 12;
     size_t i;
+
+    /*
+     * maximum observations to accumulate at once in LS system, calculated to make
+     * each omp_J matrix approximately of size 'MFIELD_MATRIX_SIZE'
+     */
+    w->data_block = MFIELD_MATRIX_SIZE / (ncomp * w->p_int * sizeof(double));
 
     w->green_array_p = malloc(w->max_threads * sizeof(green_workspace *));
     w->omp_J = malloc(w->max_threads * sizeof(gsl_matrix *));
@@ -348,7 +328,7 @@ mfield_alloc(const mfield_parameters *params)
     for (i = 0; i < w->max_threads; ++i)
       {
         w->green_array_p[i] = green_alloc(w->nmax_mf, w->nmax_mf, w->R);
-        w->omp_J[i] = gsl_matrix_alloc(4 * w->data_block, w->p_int);
+        w->omp_J[i] = gsl_matrix_alloc(ncomp * w->data_block, w->p_int);
         w->omp_GTG[i] = gsl_matrix_alloc(w->nnm_mf, w->nnm_mf);
         w->omp_JTJ[i] = gsl_matrix_alloc(w->p_int, w->p_int);
       }
@@ -408,6 +388,9 @@ mfield_free(mfield_workspace *w)
   if (w->wts_spatial)
     gsl_vector_free(w->wts_spatial);
 
+  if (w->wts_robust)
+    gsl_vector_free(w->wts_robust);
+
   if (w->wts_final)
     gsl_vector_free(w->wts_final);
 
@@ -438,26 +421,8 @@ mfield_free(mfield_workspace *w)
   if (w->weight_workspace_p)
     track_weight_free(w->weight_workspace_p);
 
-  if (w->block_J)
-    gsl_matrix_free(w->block_J);
-
-  if (w->block_f)
-    gsl_vector_free(w->block_f);
-
-  if (w->wts)
-    gsl_vector_free(w->wts);
-
   if (w->JTJ_vec)
     gsl_matrix_free(w->JTJ_vec);
-
-  if (w->block_dX)
-    gsl_matrix_free(w->block_dX);
-
-  if (w->block_dY)
-    gsl_matrix_free(w->block_dY);
-
-  if (w->block_dZ)
-    gsl_matrix_free(w->block_dZ);
 
   if (w->omp_dX)
     gsl_matrix_free(w->omp_dX);
@@ -468,14 +433,14 @@ mfield_free(mfield_workspace *w)
   if (w->omp_dZ)
     gsl_matrix_free(w->omp_dZ);
 
-  if (w->fp_dX)
-    fclose(w->fp_dX);
+  if (w->omp_dX_grad)
+    gsl_matrix_free(w->omp_dX_grad);
 
-  if (w->fp_dY)
-    fclose(w->fp_dY);
+  if (w->omp_dY_grad)
+    gsl_matrix_free(w->omp_dY_grad);
 
-  if (w->fp_dZ)
-    fclose(w->fp_dZ);
+  if (w->omp_dZ_grad)
+    gsl_matrix_free(w->omp_dZ_grad);
 
   if (w->nlinear_workspace_p)
     gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
@@ -503,6 +468,41 @@ mfield_free(mfield_workspace *w)
 
   free(w);
 } /* mfield_free() */
+
+/* initialize parameter structure */
+int
+mfield_init_params(mfield_parameters * params)
+{
+  params->epoch = -1.0;
+  params->R = -1.0;
+  params->nmax_mf = 0;
+  params->nmax_sv = 0;
+  params->nmax_sa = 0;
+  params->nsat = 0;
+  params->euler_period = 0.0;
+  params->max_iter = 0;
+  params->fit_sv = 0;
+  params->fit_sa = 0;
+  params->fit_euler = 0;
+  params->fit_ext = 0;
+  params->qdlat_fit_cutoff = -1.0;
+  params->scale_time = 0;
+  params->regularize = 0;
+  params->use_weights = 0;
+  params->lambda_sa = 0.0;
+  params->weight_X = 0.0;
+  params->weight_Y = 0.0;
+  params->weight_Z = 0.0;
+  params->weight_F = 0.0;
+  params->weight_DX = 0.0;
+  params->weight_DY = 0.0;
+  params->weight_DZ = 0.0;
+  params->synth_data = 0;
+  params->synth_noise = 0;
+  params->synth_nmin = 0;
+
+  return 0;
+}
 
 /*
 mfield_copy()
@@ -574,15 +574,17 @@ int
 mfield_init(mfield_workspace *w)
 {
   int s = 0;
+  const mfield_parameters *params = &(w->params);
   size_t i, j;
 
   /* initialize t_mu and t_sigma */
   mfield_data_init(w->data_workspace_p);
 
-#if MFIELD_SCALE_TIME
-  w->t_mu = w->data_workspace_p->t_mu;
-  w->t_sigma = w->data_workspace_p->t_sigma;
-#endif
+  if (params->scale_time)
+    {
+      w->t_mu = w->data_workspace_p->t_mu;
+      w->t_sigma = w->data_workspace_p->t_sigma;
+    }
 
   fprintf(stderr, "mfield_init: t_mu    = %g [years]\n", w->t_mu);
   fprintf(stderr, "mfield_init: t_sigma = %g [years]\n", w->t_sigma);
@@ -593,6 +595,11 @@ mfield_init(mfield_workspace *w)
   /* find time of first available data in CDF_EPOCH */
   w->t0_data = w->data_workspace_p->t0_data;
 
+  /* convert to dimensionless units with time scale */
+  w->lambda_mf = 0.0;
+  w->lambda_sv = params->lambda_sv / w->t_sigma;
+  w->lambda_sa = params->lambda_sa / (w->t_sigma * w->t_sigma);
+
   /* initialize spatial weighting histogram and time scaling */
   for (i = 0; i < w->nsat; ++i)
     {
@@ -601,21 +608,41 @@ mfield_init(mfield_workspace *w)
       for (j = 0; j < mptr->n; ++j)
         {
           const double u = satdata_epoch2year(mptr->t[j]) - w->epoch;
+          const double v = satdata_epoch2year(mptr->t_ns[j]) - w->epoch;
 
           /* center and scale time */
           mptr->ts[j] = (u - w->t_mu) / w->t_sigma;
+          mptr->ts_ns[j] = (v - w->t_mu) / w->t_sigma;
 
-          if (mptr->flags[j] & MAGDATA_FLG_DISCARD)
+          if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
-#if 0
+#if 1
           if (mptr->flags[j] & MAGDATA_FLG_X)
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
           if (mptr->flags[j] & MAGDATA_FLG_Y)
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
           if (mptr->flags[j] & MAGDATA_FLG_Z)
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
-          if (mptr->flags[j] & MAGDATA_FLG_F)
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DX_EW))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DY_NS | MAGDATA_FLG_DY_EW))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DZ_EW))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
+
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
             track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
 #else
           track_weight_add_data(mptr->theta[j], mptr->phi[j], w->weight_workspace_p);
@@ -630,30 +657,6 @@ mfield_init(mfield_workspace *w)
 
   return s;
 } /* mfield_init() */
-
-/*
-mfield_set_damping()
-  Set damping parameters for SV, SA coefficients
-
-Inputs: lambda_sv - damping parameter for SV coefficients (years)
-        lambda_sa - damping parameter for SA coefficients (years^2)
-
-Notes:
-1) The above units ensure the Tikhonov term ||Lg||^2 has units of nT^2,
-similar to the residual vector term ||f||^2
-*/
-
-int
-mfield_set_damping(const double lambda_sv, const double lambda_sa,
-                   mfield_workspace *w)
-{
-  /* convert to dimensionless units with time scale */
-  w->lambda_mf = 0.0;
-  w->lambda_sv = lambda_sv / w->t_sigma;
-  w->lambda_sa = lambda_sa / (w->t_sigma * w->t_sigma);
-
-  return GSL_SUCCESS;
-} /* mfield_set_damping() */
 
 /*
 mfield_calc_uncertainties()
@@ -879,16 +882,13 @@ mfield_eval_dBdt(const double t, const double r, const double theta,
 {
   int s = 0;
   gsl_vector *c = w->c_copy;
-#if MFIELD_FIT_SECVAR
-  gsl_vector_view dg = gsl_vector_subvector(c, w->sv_offset, w->nnm_sv);
-#else
-  gsl_vector_view dg;
-#endif
-#if MFIELD_FIT_SECACC
-  gsl_vector_view ddg = gsl_vector_subvector(c, w->sa_offset, w->nnm_sa);
-#else
-  gsl_vector_view ddg;
-#endif
+  gsl_vector_view dg, ddg;
+
+  if (w->nnm_sv > 0)
+    dg = gsl_vector_subvector(c, w->sv_offset, w->nnm_sv);
+
+  if (w->nnm_sa > 0)
+    ddg = gsl_vector_subvector(c, w->sa_offset, w->nnm_sa);
 
   /* convert coefficients to physical time units */
   mfield_coeffs(1, w->c, c, w);
@@ -1665,14 +1665,14 @@ mfield_coeff_nmidx(const size_t n, const int m)
   return nmidx - 1;
 } /* mfield_coeff_nmidx() */
 
-double
+inline double
 mfield_get_mf(const gsl_vector *c, const size_t idx,
               const mfield_workspace *w)
 {
   return gsl_vector_get(c, idx);
 }
 
-double
+inline double
 mfield_get_sv(const gsl_vector *c, const size_t idx,
               const mfield_workspace *w)
 {
@@ -1682,7 +1682,7 @@ mfield_get_sv(const gsl_vector *c, const size_t idx,
     return 0.0;
 }
 
-double
+inline double
 mfield_get_sa(const gsl_vector *c, const size_t idx,
               const mfield_workspace *w)
 {
@@ -1692,76 +1692,35 @@ mfield_get_sa(const gsl_vector *c, const size_t idx,
     return 0.0;
 }
 
-int
+inline int
 mfield_set_mf(gsl_vector *c, const size_t idx,
-              const double x,
-              const mfield_workspace *w)
+              const double x, const mfield_workspace *w)
 {
   gsl_vector_set(c, idx, x);
   return GSL_SUCCESS;
 }
 
-int
+inline int
 mfield_set_sv(gsl_vector *c, const size_t idx,
-              const double x,
-              const mfield_workspace *w)
+              const double x, const mfield_workspace *w)
 {
-#if MFIELD_FIT_SECVAR
   /* check idx in case nmax_sv is less than nmax_mf */
   if (idx < w->nnm_sv)
     gsl_vector_set(c, idx + w->sv_offset, x);
-#endif
+
   return GSL_SUCCESS;
 }
 
-int
+inline int
 mfield_set_sa(gsl_vector *c, const size_t idx,
-              const double x,
-              const mfield_workspace *w)
+              const double x, const mfield_workspace *w)
 {
-#if MFIELD_FIT_SECACC
   /* check idx in case nmax_sa is less than nmax_mf */
   if (idx < w->nnm_sa)
     gsl_vector_set(c, idx + w->sa_offset, x);
-#endif
+
   return GSL_SUCCESS;
 }
-
-static int
-mfield_print_residuals(const int header, FILE *fp,
-                       const gsl_vector *r,
-                       const gsl_vector *w_rob,
-                       const gsl_vector *w_spatial)
-{
-  size_t i;
-
-  if (!fp)
-    return GSL_SUCCESS;
-
-  if (header)
-    {
-      i = 1;
-      fprintf(fp, "# Field %zu: residual (nT)\n", i++);
-      fprintf(fp, "# Field %zu: robust weight\n", i++);
-      fprintf(fp, "# Field %zu: spatial weight\n", i++);
-      fprintf(fp, "# Field %zu: final weight (robust x spatial)\n", i++);
-      return GSL_SUCCESS;
-    }
-
-  for (i = 0; i < r->size; ++i)
-    {
-      double robi = gsl_vector_get(w_rob, i);
-      double spati = gsl_vector_get(w_spatial, i);
-
-      fprintf(fp, "%.5e %.5e %.5e %.5e\n",
-              gsl_vector_get(r, i),
-              robi,
-              spati,
-              robi * spati);
-    }
-
-  return GSL_SUCCESS;
-} /* mfield_print_residuals() */
 
 static int
 mfield_update_histogram(const gsl_vector *r, gsl_histogram *h)

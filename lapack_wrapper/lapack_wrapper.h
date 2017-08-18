@@ -24,5 +24,8 @@ int lapack_eigen_herm(const gsl_matrix_complex * m, gsl_vector *eval, gsl_matrix
 int lapack_svd(const gsl_matrix * A, gsl_vector * S, gsl_matrix * U, gsl_matrix * V);
 int lapack_complex_svd(const gsl_matrix_complex * A, gsl_vector * S,
                        gsl_matrix_complex * U, gsl_matrix_complex * V);
+int lapack_cholesky_solve(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x,
+                          double * rcond, gsl_matrix * L);
+int lapack_cholesky_invert(gsl_matrix * A);
 
 #endif /* INCLUDED_lapack_common_h */

@@ -79,7 +79,7 @@ static size_t pcafit_ncoeff(void * vstate);
 static int pcafit_add_datum(const double t, const double r, const double theta, const double phi,
                             const double qdlat, const double B[3], void * vstate);
 static int pcafit_fit(double * rnorm, double * snorm, void * vstate);
-static int pcafit_eval_B(const double r, const double theta, const double phi,
+static int pcafit_eval_B(const double t, const double r, const double theta, const double phi,
                          double B[3], void * vstate);
 static int pcafit_eval_J(const double r, const double theta, const double phi,
                          double J[3], void * vstate);
@@ -93,7 +93,7 @@ static int build_matrix_row(const double r, const double theta, const double phi
 pcafit_alloc()
   Allocate pca workspace
 
-Inputs: flags        - MAGFIT_SECS_FLG_xxx
+Inputs: flags        - MAGFIT_FLG_xxx
         lmax         - maximum degree for Legendre functions in expansion
         R_iono       - radius of ionosphere (km)
         pole_spacing - along-orbit latitude spacing of SECS poles (degrees)
@@ -274,6 +274,8 @@ pcafit_add_datum(const double t, const double r, const double theta, const doubl
          B_mean[2]);
 #endif
 
+  (void) t;
+
   /* upweight equatorial data */
   if (fabs(qdlat) <= 10.0)
     wi = PCA_WEIGHT_EEJ;
@@ -436,7 +438,8 @@ pcafit_eval_B()
   Evaluate magnetic field at a given (r,theta) using
 previously computed coefficients
 
-Inputs: r      - radius (km)
+Inputs: t      - timestamp (CDF_EPOCH)
+        r      - radius (km)
         theta  - colatitude (radians)
         phi    - longitude (radians)
         B      - (output) magnetic field vector (nT)
@@ -447,7 +450,7 @@ Notes:
 */
 
 static int
-pcafit_eval_B(const double r, const double theta, const double phi,
+pcafit_eval_B(const double t, const double r, const double theta, const double phi,
               double B[3], void * vstate)
 {
   int status;
@@ -455,7 +458,8 @@ pcafit_eval_B(const double r, const double theta, const double phi,
   double B_mean[3];
   size_t i;
 
-  /* compute field perturbation */
+  (void) t;
+
   status = pca_B(state->c, r, theta, phi, B, state->pca_workspace_p);
   if (status)
     return status;

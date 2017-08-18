@@ -394,6 +394,104 @@ mag_eej_proc(mag_track *track, double *J, mag_eej_workspace *w)
   return s;
 } /* mag_eej() */
 
+/*
+mag_eej_vector_proc()
+  Invert F^(2) residual for EEJ current density
+
+Inputs: track - satellite track
+        J     - (output) where to store EEJ height integrated
+                current density in A/m (array of size ncurr)
+        w     - workspace
+
+Notes:
+1) On output, track->F2_fit is updated to contain the fit from the line
+current model
+*/
+
+int
+mag_eej_vector_proc(mag_track *track, double *J, mag_eej_workspace *w)
+{
+  int s = 0;
+  size_t i;
+  magfit_workspace *magfit_p;
+  magfit_parameters magfit_params = magfit_default_parameters();
+
+  magfit_params.lat_min = -40.0;
+  magfit_params.lat_max = 40.0;
+  magfit_params.lat_spacing1d = 0.25;
+#if 1
+  magfit_params.flags = MAGFIT_FLG_FIT_Z;
+#else
+  magfit_params.flags = MAGFIT_FLG_FIT_X | MAGFIT_FLG_FIT_Z;
+#endif
+  magfit_params.flags |= MAGFIT_FLG_SECS_FIT_DF;
+  magfit_p = magfit_alloc(magfit_secs1d, &magfit_params);
+
+  /* build LS matrix and rhs vector */
+  for (i = 0; i < track->n; ++i)
+    {
+      double B[3];
+
+      /* ignore data outside [-qd_max,qd_max] */
+      if (fabs(track->qdlat[i]) > w->qdlat_max)
+        continue;
+
+      B[0] = track->X2[i];
+      B[1] = track->Y2[i];
+      B[2] = track->Z2[i];
+
+      magfit_add_datum(track->t[i], track->r[i], track->theta[i], track->phi[i],
+                       track->qdlat[i], B, magfit_p);
+    }
+
+  /* fit EEJ model */
+  magfit_fit(&(w->rnorm), &(w->snorm), magfit_p);
+
+  fprintf(stderr, "mag_eej_vector_proc: final regularization factor = %g\n",
+          gsl_vector_get(w->reg_param, w->reg_idx));
+  fprintf(stderr, "mag_eej_vector_proc: residual norm = %e\n", w->rnorm);
+  fprintf(stderr, "mag_eej_vector_proc: solution norm = %e\n", w->snorm);
+
+  /* fill output current vector */
+  {
+    double r = R_EARTH_KM + 110.0;
+    double qdlat, alon, alat;
+
+    apex_transform(track->theta_eq, track->phi_eq, r * 1.0e3, &alon, &alat,
+                   &qdlat, NULL, NULL, NULL, w->apex_workspace_p);
+
+    for (i = 0; i < w->p; ++i)
+      {
+        double K[3];
+        double qdlat = -w->qdlat_max + i * w->dqdlat;
+        double glat, glon, theta;
+
+        apex_transform_inv(qdlat, alon, 110.0 * 1.0e3, &glat, &glon, w->apex_workspace_p);
+        theta = M_PI / 2.0 - glat;
+
+        magfit_eval_J(R_EARTH_KM + 110.0, theta, 0.0, K, magfit_p);
+        J[i] = K[1] * 1.0e-3; /* convert to A/m */
+      }
+  }
+
+  /* compute and store F^(2) fit */
+  for (i = 0; i < track->n; ++i)
+    {
+      double B[3];
+
+      magfit_eval_B(track->t[i], track->r[i], track->theta[i], track->phi[i],
+                    B, magfit_p);
+
+      track->X2_fit[i] = B[0];
+      track->Y2_fit[i] = B[1];
+      track->Z2_fit[i] = B[2];
+    }
+
+  magfit_free(magfit_p);
+
+  return s;
+}
+
 static int
 mag_eej_matrix_row(const double r, const double theta, const double phi,
                    const double b[3], gsl_vector *v, const mag_eej_workspace *w)
@@ -536,7 +634,7 @@ eej_ls(const gsl_matrix *X, const gsl_vector *y, gsl_vector *c,
 
   lambda = GSL_MAX(gsl_vector_get(w->reg_param, w->reg_idx), 1.0e-3*smax);
 
-  w->reg_idx = bsearch_desc_double(w->reg_param->data, lambda, 0, w->nreg - 1);
+  w->reg_idx = bsearch_double(w->reg_param->data, lambda, 0, w->nreg - 1);
   lambda = gsl_vector_get(w->reg_param, w->reg_idx);
 
   /* solve LS system with optimal lambda */

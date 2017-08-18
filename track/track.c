@@ -124,7 +124,7 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
   while (i < data->n - 1)
     {
       int s;
-      double lon_eq, t_eq, lt_eq;
+      double lon_eq, lat_eq, t_eq, lt_eq;
       size_t sidx, eidx;
       track_data *tptr;
 
@@ -149,18 +149,16 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
 
           /* there is an equator crossing, find time and longitude */
 
-          if (data->latitude[eidx] > data->latitude[sidx])
-            idx = bsearch_double(data->latitude, 0.0, sidx, eidx);
-          else if (data->latitude[eidx] < data->latitude[sidx])
-            idx = bsearch_desc_double(data->latitude, 0.0, sidx, eidx);
+          idx = bsearch_double(data->latitude, 0.0, sidx, eidx);
 
           /* sanity check we found equator crossing */
-          assert(data->latitude[idx] * data->latitude[idx + 1] < 0.0);
+          assert(data->latitude[idx] * data->latitude[idx + 1] <= 0.0);
 
           /* interpolate t, but not longitude due to wrapping effects */
           t_eq = interp1d(data->latitude[idx], data->latitude[idx + 1],
                           data->t[idx], data->t[idx + 1], 0.0);
           lon_eq = data->longitude[idx];
+          lat_eq = data->latitude[idx];
 
           /* compute local time */
           unix_time = satdata_epoch2timet(t_eq);
@@ -188,6 +186,7 @@ track_init(satdata_mag *data, msynth_workspace *msynth_p, track_workspace *w)
       tptr->n = eidx - sidx + 1;
       tptr->t_eq = t_eq;
       tptr->lon_eq = lon_eq;
+      tptr->lat_eq = lat_eq;
       tptr->lt_eq = lt_eq;
       tptr->nrms_scal = 0;
       tptr->nrms_vec = 0;
@@ -300,7 +299,7 @@ Inputs: track_idx - track index
 Return: number of data flagged
 
 Notes:
-1) satellite data is flagged with SATDATA_FLG_OUTLIER
+1) satellite data is flagged with 'flags'
 */
 
 size_t
@@ -404,8 +403,8 @@ track_smooth(const double alpha, satdata_mag *data, track_workspace *w)
         }
       else
         {
-          idxn = bsearch_desc_double(&data->qdlat[sidx], 55.0, 0, tptr->n - 1);
-          idxs = bsearch_desc_double(&data->qdlat[sidx], -55.0, 0, tptr->n - 1);
+          idxn = bsearch_double(&data->qdlat[sidx], 55.0, 0, tptr->n - 1);
+          idxs = bsearch_double(&data->qdlat[sidx], -55.0, 0, tptr->n - 1);
 
           npts = idxn + 1;
           track_ema_reverse(alpha, &data->flags[sidx], tptr->Bf, npts);
@@ -526,6 +525,38 @@ track_find(const double t_eq, const double phi_eq, const double dt_min,
   return s;
 }
 
+/*
+track_find_t()
+  Find track whose equator crossing is closest in time to a given timestamp
+
+Inputs: t   - timestamp for comparison (CDF_EPOCH)
+        idx - (output) index of track
+        w   - track workspace
+*/
+
+int
+track_find_t(const double t, size_t *idx, const track_workspace *w)
+{
+  int s = GSL_FAILURE;
+  size_t i;
+  double dt_min = 1.0e9;
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      double dt = fabs(t - tptr->t_eq);
+
+      if (dt < dt_min)
+        {
+          dt_min = dt;
+          *idx = i;
+          s = GSL_SUCCESS;
+        }
+    }
+
+  return s;
+}
+
 int
 track_print(const char *filename, const size_t flags,
             const satdata_mag *data, track_workspace *w)
@@ -587,6 +618,7 @@ track_print_track(const int header, FILE *fp, const track_data *tptr,
       fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", j++);
       fprintf(fp, "# Field %zu: UT (hours)\n", j++);
       fprintf(fp, "# Field %zu: local time (hours)\n", j++);
+      fprintf(fp, "# Field %zu: local time at equator crossing (hours)\n", j++);
       fprintf(fp, "# Field %zu: season (doy)\n", j++);
       fprintf(fp, "# Field %zu: radius (km)\n", j++);
       fprintf(fp, "# Field %zu: longitude (degrees)\n", j++);
@@ -611,13 +643,14 @@ track_print_track(const int header, FILE *fp, const track_data *tptr,
       double ut = get_ut(unix_time);
       double lt = get_localtime(unix_time, data->longitude[didx] * M_PI / 180.0);
 
-      if (SATDATA_BadData(data->flags[didx]))
+      if (data->flags[didx])
         continue;
 
-      fprintf(fp, "%ld %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
+      fprintf(fp, "%ld %.2f %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
               unix_time,
               ut,
               lt,
+              tptr->lt_eq,
               get_season(unix_time),
               data->altitude[didx] + data->R,
               data->longitude[didx],

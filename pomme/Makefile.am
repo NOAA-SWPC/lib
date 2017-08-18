@@ -9,4 +9,4 @@ test_SOURCES = test.c
 test_LDADD = libpomme.la $(top_builddir)/common/libcommon.la $(top_builddir)/estist/libestist_calc.la -lindices -lm -lgfortran -lgsl -lgslcblas
 
 test_ext_SOURCES = test_ext.c
-test_ext_LDADD = libpomme.la $(top_builddir)/common/libcommon.la $(top_builddir)/estist/libestist_calc.la -lindices -lm -lgfortran -lgsl -lgslcblas
+test_ext_LDADD = libpomme.la $(top_builddir)/common/libcommon.la $(top_builddir)/estist/libestist_calc.la -lindices -lm -lgsl -lgslcblas -lgfortran

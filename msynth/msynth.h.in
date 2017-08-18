@@ -9,9 +9,10 @@
 #define MSYNTH_WMM_FILE        "@abs_top_builddir@/msynth/cof/wmm/WMM2015.COF"
 #define MSYNTH_MF7_FILE        "@abs_top_builddir@/msynth/cof/MF7.cof"
 #define MSYNTH_NGDC720_FILE    "@abs_top_builddir@/msynth/cof/NGDC-720_V3p1.cof"
-#define MSYNTH_EMM_FILE        "@abs_top_builddir@/msynth/cof/EMM2015_crust.cof"
-#define MSYNTH_CHAOS_FILE      "@abs_top_builddir@/msynth/cof/CHAOS-6_core.shc"
-#define MSYNTH_BOUMME_FILE     "@abs_top_builddir@/msynth/cof/boumme/boumme-0.4.txt"
+#define MSYNTH_EMM_FILE        "@abs_top_builddir@/msynth/cof/EMM2017_crust.cof"
+#define MSYNTH_CHAOS_FILE      "@abs_top_builddir@/msynth/cof/CHAOS-6-x2_core.shc"
+#define MSYNTH_BOUMME_FILE     "@abs_top_builddir@/msynth/cof/boumme/boumme-0.5.txt"
+#define MSYNTH_BGGM_FILE       "@abs_top_builddir@/msynth/cof/bggm/bggm2017.txt"
 
 /* maximum number of snapshot models */
 #define MSYNTH_MAX_SNAPSHOT    500
@@ -72,6 +73,12 @@ int msynth_set_data_interval(const double data_start, const double data_end,
                              msynth_workspace *w);
 int msynth_eval(const double t, const double r, const double theta,
                 const double phi, double B[4], msynth_workspace *w);
+int msynth_eval2(const double t, const double r, const double theta,
+                 const double phi, double B_mf[3], double B_sv[3], double B_sa[3],
+                 msynth_workspace *w);
+int msynth_eval_sum(const double t, const double epoch, const double *g,
+                    const double *dg, const double *ddg, double B[4],
+                    msynth_workspace *w);
 int msynth_eval_dBdt(const double t, const double r, const double theta,
                      const double phi, double dBdt[4],
                      msynth_workspace *w);
@@ -89,6 +96,9 @@ int msynth_print_spectrum_m(const char *filename, const msynth_workspace *w);
 double msynth_spectrum(const double t, const size_t n, const msynth_workspace *w);
 double msynth_spectrum_sv(const double t, const size_t n, const msynth_workspace *w);
 double msynth_spectrum_sa(const double t, const size_t n, const msynth_workspace *w);
+int msynth_print_smatrix(const char *filename, const msynth_workspace *w1, const msynth_workspace *w2);
+int msynth_print_correlation(const char *filename, const msynth_workspace *w1,
+                             const msynth_workspace *w2);
 size_t msynth_nmidx(const size_t n, const int m, const msynth_workspace *w);
 double msynth_get_epoch(const double t, const msynth_workspace *w);
 double msynth_get_mf(const double t, const size_t idx, const msynth_workspace *w);
@@ -108,12 +118,18 @@ int msynth_green(const double r, const double theta, const double phi,
                  msynth_workspace *w);
 int msynth_green_ext(const double r, const double theta, const double phi,
                      msynth_workspace *w);
+int msynth_green_init_ALF(const double theta, msynth_workspace * w);
+int msynth_green_init_phi(const double phi, msynth_workspace * w);
+int msynth_green_calc_int(const double r, const double theta, msynth_workspace * w);
 
 /* msynth_arnaud.c */
 msynth_workspace *msynth_arnaud_read(const char *filename);
 
-/* msynth_chaos.c */
-msynth_workspace *msynth_chaos_read(const char *filename);
+/* msynth_bggm.c */
+msynth_workspace *msynth_bggm_read(const char *filename);
+
+/* msynth_swarm.c */
+msynth_workspace *msynth_swarm_read(const char *filename);
 
 /* msynth_crust.c */
 msynth_workspace *msynth_mf7_read(const char *filename);
@@ -134,6 +150,9 @@ int msynth_igrf_read_sv(const char *filename, msynth_workspace *w);
 int msynth_igrf_write(const char *filename, const char *desc, const msynth_workspace *w);
 int msynth_igrf_sv_write(const char *filename, const char *desc, const msynth_workspace *w);
 
+/* msynth_ipgp.c */
+msynth_workspace *msynth_ipgp_read(const char *filename);
+
 /* msynth_pomme.c */
 msynth_workspace *msynth_pomme_read(const char *filename);
 
@@ -141,5 +160,8 @@ msynth_workspace *msynth_pomme_read(const char *filename);
 msynth_workspace *msynth_wmm_read(const char *filename);
 int msynth_wmm_write(const char *filename, const msynth_workspace *w);
 int msynth_wmm_replace_sv(const msynth_workspace *w_sv, msynth_workspace *w);
+
+/* msynth_tgcm.c */
+msynth_workspace *msynth_tgcm_read(const char *filename);
 
 #endif /* INCLUDED_msynth_h */

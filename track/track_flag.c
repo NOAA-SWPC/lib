@@ -258,6 +258,43 @@ track_flag_satdir(const int satdir, satdata_mag *data, track_workspace *w)
 } /* track_flag_satdir() */
 
 /*
+track_flag_time()
+  Flag any tracks outside of [t_min,t_max]. The timestamp for
+comparison is the timestamp of the equator crossing
+
+Inputs: t_min  - minimum time (CDF_EPOCH)
+        t_max  - maximum time (CDF_EPOCH)
+        data   - satellite data
+        w      - track workspace
+
+Return: number of tracks flagged
+*/
+
+size_t
+track_flag_time(const double t_min, const double t_max, satdata_mag *data, track_workspace *w)
+{
+  size_t i;
+  size_t ntrack_flagged = 0;  /* number of entire tracks flagged */
+
+  if (data->n == 0)
+    return 0;
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      double t = tptr->t_eq;
+
+      if (t < t_min || t > t_max)
+        {
+          track_flag_track(i, TRACK_FLG_TIME, data, w);
+          ++ntrack_flagged;
+        }
+    }
+
+  return ntrack_flagged;
+}
+
+/*
 track_flag_ut()
   Flag any tracks outside of [ut_min,ut_max]. The UT for
 comparison is the UT at the time of the equator crossing
@@ -319,26 +356,16 @@ track_flag_lt(const double lt_min, const double lt_max, size_t *ndata_flagged,
   size_t i;
   size_t nflagged = 0;        /* number of points flagged */
   size_t ntrack_flagged = 0;  /* number of entire tracks flagged for UT */
-  double a, b;
 
   if (data->n == 0)
     return 0;
 
-  b = fmod(lt_max - lt_min, 24.0);
-  if (b < 0.0)
-    b += 24.0;
-
   for (i = 0; i < w->n; ++i)
     {
       track_data *tptr = &(w->tracks[i]);
-      time_t t = satdata_epoch2timet(tptr->t_eq);
-      double lt = get_localtime(t, tptr->lon_eq * M_PI / 180.0);
+      int good_LT = check_LT(tptr->lt_eq, lt_min, lt_max);
 
-      a = fmod(lt - lt_min, 24.0);
-      if (a < 0.0)
-        a += 24.0;
-
-      if (a > b)
+      if (!good_LT)
         {
           nflagged += track_flag_track(i, TRACK_FLG_LT, data, w);
           ++ntrack_flagged;
@@ -447,16 +474,15 @@ track_flag_lon(const double lon_min, const double lon_max,
 
 /*
 track_flag_kp()
-  Flag any tracks with kp outside of [kp_min,kp_max]. The kp for
-comparison is the kp at the time of the equator crossing. Since
-kp is a 3-hour index, it shouldn't change over the entire track.
+  Flag any tracks with kp outside of [kp_min,kp_max]. 3 kp values
+are compared: beginning of track, equator crossing, and end of track.
 
 Inputs: kp_min - minimum kp
         kp_max - maximum kp
         data   - satellite data
         w      - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
@@ -476,25 +502,35 @@ track_flag_kp(const double kp_min, const double kp_max, satdata_mag *data, track
   for (i = 0; i < w->n; ++i)
     {
       track_data *tptr = &(w->tracks[i]);
-      time_t t = satdata_epoch2timet(tptr->t_eq);
-      double kp;
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+      time_t t1 = satdata_epoch2timet(data->t[start_idx]);
+      time_t t2 = satdata_epoch2timet(tptr->t_eq);
+      time_t t3 = satdata_epoch2timet(data->t[end_idx]);
+      double kp1, kp2, kp3;
 
-      s = kp_get(t, &kp, kp_p);
-      if (s == 0 &&
-          (kp < kp_min || kp > kp_max))
+      s = kp_get(t1, &kp1, kp_p);
+      s += kp_get(t2, &kp2, kp_p);
+      s += kp_get(t3, &kp3, kp_p);
+      if (s)
+        {
+          fprintf(stderr, "track_flag_kp: error: kp not available for track %zu\n", i);
+          continue;
+        }
+
+      if ((kp1 < kp_min || kp1 > kp_max) ||
+          (kp2 < kp_min || kp2 > kp_max) ||
+          (kp3 < kp_min || kp3 > kp_max))
         {
           nflagged += track_flag_track(i, TRACK_FLG_KP, data, w);
           ++ntrack_flagged;
         }
     }
 
-  fprintf(stderr, "track_flag_kp: flagged %zu/%zu (%.1f%%) tracks due to kp\n",
-          ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
-
   kp_free(kp_p);
 
-  return nflagged;
-} /* track_flag_kp() */
+  return ntrack_flagged;
+}
 
 /*
 track_flag_meanalt()

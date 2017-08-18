@@ -138,6 +138,52 @@ eci2ecef_pos(const time_t t, const double r_ECI[3], double r_ECEF[3])
 } /* eci2ecef_pos() */
 
 /*
+eci2ecef()
+  Transform position and velocity vectors in ECI coordinates to ECEF
+
+Inputs: t      - timestamp
+        r_ECI  - ECI (X,Y,Z) position vector
+        v_ECI  - ECI (X,Y,Z) velocity vector
+        r_ECEF - (output) ECEF (X,Y,Z) position vector
+        v_ECEF - (output) ECEF (X,Y,Z) velocity vector
+*/
+
+int
+eci2ecef(const time_t t, const double r_ECI[3], const double v_ECI[3],
+         double r_ECEF[3], double v_ECEF[3])
+{
+  int s = 0;
+  const double omega_e = 7.29211585275553e-5; /* average intertial rotation rate of Earth (rad/s) */
+  double jd, GAST;
+  double cs, sn;
+
+  /* compute julian day from unix time */
+  jd = (t / 86400.0) + 2440587.5;
+
+  /* compute Greenwich apparent sidereal time in radians */
+  GAST = julian2GAST(jd);
+
+  cs = cos(GAST);
+  sn = sin(GAST);
+
+  /* rotate ECI position vector to ECEF */
+  r_ECEF[0] = r_ECI[0] * cs + r_ECI[1] * sn;
+  r_ECEF[1] = -r_ECI[0] * sn + r_ECI[1] * cs;
+  r_ECEF[2] = r_ECI[2];
+
+  /* compute ECEF velocity vector */
+
+  v_ECEF[0] = v_ECI[0] * cs + v_ECI[1] * sn;
+  v_ECEF[1] = -v_ECI[0] * sn + v_ECI[1] * cs;
+  v_ECEF[2] = v_ECI[2];
+
+  v_ECEF[0] += -omega_e * sn * r_ECI[0] + omega_e * cs * r_ECI[1];
+  v_ECEF[1] += -omega_e * cs * r_ECI[0] - omega_e * sn * r_ECI[1];
+
+  return s;
+}
+
+/*
 ecef2eci_pos()
   Transform position vector in ECEF coordinates to ECI
 

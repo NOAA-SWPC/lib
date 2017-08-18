@@ -33,7 +33,7 @@
 #include "track.h"
 
 /* define this to allow only 1 camera for data selection */
-#define POLTOR_ONE_CAMERA          0
+#define PRINT_ONE_CAMERA           1
 
 /* number of seconds for computing along-track differences */
 #define POLTOR_GRAD_DT             (40.0)
@@ -324,7 +324,7 @@ main(int argc, char *argv[])
               size_t nflag;
               size_t champ_flags = 0;
 
-#if POLTOR_ONE_CAMERA
+#if PRINT_ONE_CAMERA
               /* allow only 1 camera in data selection */
               champ_flags = SATDATA_FLG_ONESC;
 #endif

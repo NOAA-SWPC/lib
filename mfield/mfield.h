@@ -22,38 +22,35 @@
 #include "green.h"
 #include "track_weight.h"
 
-#define MFIELD_SYNTH_DATA      0
-
-/* define to fit secular variation coefficients */
-#define MFIELD_FIT_SECVAR      1
-
-/* define to fit secular acceleration coefficients */
-#define MFIELD_FIT_SECACC      1
-
-#if !MFIELD_FIT_SECVAR
-#define MFIELD_FIT_SECACC      0
-#endif
-
-/* fit Euler angles to data */
-#define MFIELD_FIT_EULER       1
+#define MFIELD_SYNTH_HIGH_LAT_ONLY 1
 
 /* fit external field model to data */
-#define MFIELD_FIT_EXTFIELD    1
+#define MFIELD_FIT_EXTFIELD    0
 
-/* epoch to define SV and SA terms in fit */
-#define MFIELD_EPOCH          (2016.0)
-
-#define MFIELD_RE_KM          (6371.2)
-
-/* number of observations to accumulate at once in LS system;
- * this includes the (X,Y,Z,F) 4-plet */
-#define MFIELD_BLOCK_SIZE     10000
+/*
+ * approximate matrix size in bytes for precomputing J^T J; each
+ * thread gets its own matrix (1 GB)
+ */
+#define MFIELD_MATRIX_SIZE    (1e9)
 
 /* define if fitting to the EMAG2 grid */
 #define MFIELD_EMAG2          0
 
-/* define for no weighting in fit */
-#define MFIELD_NOWEIGHTS      0
+/* indices for each residual type */
+#define MFIELD_IDX_X              0
+#define MFIELD_IDX_Y              1
+#define MFIELD_IDX_Z              2
+#define MFIELD_IDX_F              3
+#define MFIELD_IDX_DX_NS          4
+#define MFIELD_IDX_DY_NS          5
+#define MFIELD_IDX_DZ_NS          6
+#define MFIELD_IDX_DF_NS          7
+#define MFIELD_IDX_DX_EW          8
+#define MFIELD_IDX_DY_EW          9
+#define MFIELD_IDX_DZ_EW          10
+#define MFIELD_IDX_DF_EW          11
+#define MFIELD_IDX_B_EULER        12
+#define MFIELD_IDX_END            13
 
 typedef struct
 {
@@ -64,6 +61,35 @@ typedef struct
   size_t nmax_sa;                       /* SA nmax */
   size_t nsat;                          /* number of satellites */
   double euler_period;                  /* time period for Euler angles (decimal days) */
+
+  size_t max_iter;                      /* number of robust iterations */
+  int fit_sv;                           /* fit SV coefficients */
+  int fit_sa;                           /* fit SA coefficients */
+  int fit_euler;                        /* fit Euler angles */
+  int fit_ext;                          /* fit external field correction */
+
+  int scale_time;                       /* scale time into dimensionless units */
+  int use_weights;                      /* use weights in the fitting */
+
+  int regularize;                       /* regularize the solution vector */
+  double lambda_sv;                     /* secular variation damping factor */
+  double lambda_sa;                     /* secular acceleration damping factor */
+
+  double weight_X;                      /* relative weighting for X component */
+  double weight_Y;                      /* relative weighting for Y component */
+  double weight_Z;                      /* relative weighting for Z component */
+  double weight_F;                      /* relative weighting for F component */
+  double weight_DX;                     /* relative weighting for DX component */
+  double weight_DY;                     /* relative weighting for DY component */
+  double weight_DZ;                     /* relative weighting for DZ component */
+
+  double qdlat_fit_cutoff;              /* QD latitude separating high and mid-latitudes for fitting components (degrees) */
+
+  /* synthetic data parameters */
+  int synth_data;                       /* replace real data with synthetic for testing */
+  int synth_noise;                      /* add gaussian noise to synthetic model */
+  size_t synth_nmin;                    /* minimum spherical harmonic degree for synthetic model */
+
   mfield_data_workspace *mfield_data_p; /* satellite data */
 } mfield_parameters;
 
@@ -136,16 +162,15 @@ typedef struct
 
   /* nonlinear least squares parameters */
   gsl_vector *wts_spatial; /* spatial weights, nres-by-1 */
+  gsl_vector *wts_robust;  /* robust weights, nres-by-1 */
   gsl_vector *wts_final;   /* final weights (robust x spatial), nres-by-1 */
   gsl_multifit_nlinear_workspace *multifit_nlinear_p;
   gsl_multilarge_nlinear_workspace *nlinear_workspace_p;
-  gsl_matrix *block_J;     /* Jacobian matrix block, 4*data_block-by-p */
-  gsl_vector *block_f;     /* residual vector block, 4*data_block-by-1 */
-  gsl_vector *wts;         /* weights vector, 4*data_block-by-1 */
   size_t ndata;            /* number of unique data points in LS system */
-  size_t nres;             /* number of residuals to minimize */
+  size_t nres_tot;         /* total number of residuals to minimize, including regularization terms */
+  size_t nres;             /* number of residuals to minimize (data only) */
   size_t nres_vec;         /* number of vector residuals to minimize */
-  size_t nres_scal;        /* number of scalar residuals to minimize */
+  size_t nres_vec_grad;    /* number of vector gradient residuals to minimize */
   size_t data_block;       /* maximum observations to accumulate at once in LS system */
   gsl_vector *lambda_diag; /* diag(L) regularization matrix */
   gsl_vector *LTL;         /* L^T L regularization matrix */
@@ -178,22 +203,20 @@ typedef struct
    */
   gsl_matrix *JTJ_vec;     /* J_mf^T J_mf for vector measurements, p_int-by-p_int */
 
-  gsl_matrix *block_dX;    /* dX/dg data_block-by-nnm_mf */
-  gsl_matrix *block_dY;    /* dY/dg data_block-by-nnm_mf */
-  gsl_matrix *block_dZ;    /* dZ/dg data_block-by-nnm_mf */
-  FILE *fp_dX;             /* file containing dX block matrices */
-  FILE *fp_dY;             /* file containing dX block matrices */
-  FILE *fp_dZ;             /* file containing dX block matrices */
-
   size_t max_threads;      /* maximum number of threads/processors available */
   gsl_matrix *omp_dX;      /* dX/dg max_threads-by-nnm_mf */
   gsl_matrix *omp_dY;      /* dY/dg max_threads-by-nnm_mf */
   gsl_matrix *omp_dZ;      /* dZ/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dX_grad; /* gradient dX/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dY_grad; /* gradient dY/dg max_threads-by-nnm_mf */
+  gsl_matrix *omp_dZ_grad; /* gradient dZ/dg max_threads-by-nnm_mf */
   gsl_matrix **omp_J;      /* max_threads matrices, each 4*data_block-by-p_int */
   size_t *omp_rowidx;      /* row indices for omp_J */
   gsl_matrix **omp_GTG;    /* max_threads matrices, each nnm_mf-by-nnm_mf */
   gsl_matrix **omp_JTJ;    /* max_threads matrices, each p_int-by-p_int */
   green_workspace **green_array_p; /* array of green workspaces, size max_threads */
+
+  int lls_solution;        /* 1 if inverse problem is linear (no scalar residuals or Euler angles) */
 
   gsl_vector *fvec;        /* residual vector for robust weights */
   gsl_vector *wfvec;       /* weighted residual vector */
@@ -216,12 +239,12 @@ typedef struct
 
 mfield_workspace *mfield_alloc(const mfield_parameters *params);
 void mfield_free(mfield_workspace *w);
-int mfield_set_damping(const double lambda_sv, const double lambda_sa,
-                       mfield_workspace *w);
+int mfield_init_params(mfield_parameters * params);
 mfield_workspace *mfield_copy(const mfield_workspace *w);
 int mfield_init(mfield_workspace *w);
 int mfield_calc_linear(gsl_vector *c, mfield_workspace *w);
 int mfield_calc_nonlinear(gsl_vector *c, mfield_workspace *w);
+gsl_vector *mfield_residual(const gsl_vector *c, mfield_workspace *w);
 int mfield_reset(mfield_workspace *w);
 int mfield_coeffs(const int dir, const gsl_vector *gin, gsl_vector *gout,
                   const mfield_workspace *w);
@@ -255,15 +278,12 @@ int mfield_write_ascii(const char *filename, const double epoch,
 int mfield_new_epoch(const double new_epoch, mfield_workspace *w);
 size_t mfield_coeff_nmidx(const size_t n, const int m);
 size_t mfield_extidx(const double t, const mfield_workspace *w);
-double mfield_get_mf(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
-double mfield_get_sv(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
-double mfield_get_sa(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
-int mfield_set_mf(gsl_vector *c, const size_t idx, const double x,
-                  const mfield_workspace *w);
-int mfield_set_sv(gsl_vector *c, const size_t idx, const double x,
-                  const mfield_workspace *w);
-int mfield_set_sa(gsl_vector *c, const size_t idx, const double x,
-                  const mfield_workspace *w);
+extern inline double mfield_get_mf(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
+extern inline double mfield_get_sv(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
+extern inline double mfield_get_sa(const gsl_vector *c, const size_t idx, const mfield_workspace *w);
+extern inline int mfield_set_mf(gsl_vector *c, const size_t idx, const double x, const mfield_workspace *w);
+extern inline int mfield_set_sv(gsl_vector *c, const size_t idx, const double x, const mfield_workspace *w);
+extern inline int mfield_set_sa(gsl_vector *c, const size_t idx, const double x, const mfield_workspace *w);
 
 /* mfield_euler.c */
 size_t mfield_euler_idx(const size_t sat_idx, const double t, const mfield_workspace *w);

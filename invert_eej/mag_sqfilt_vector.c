@@ -24,6 +24,7 @@
 
 #include "Gdef.h"
 
+<<<<<<< HEAD
 static int sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_vector_workspace *w);
 static int sqfilt_linear_matrix_row(const double r, const double thetaq,
                                     const double phi, gsl_vector *vx,
@@ -179,6 +180,16 @@ mag_sqfilt_vector_free(mag_sqfilt_vector_workspace *w)
 
   free(w);
 }
+=======
+#include "gauss.c"
+
+static int sqfilt_calc_B2(mag_workspace *w, gauss_state_t * gauss_p);
+
+/* turn on/off different components in fit */
+#define FIT_X                      0
+#define FIT_Y                      0
+#define FIT_Z                      1
+>>>>>>> mfield_grad
 
 /*
 mag_sqfilt_vector()
@@ -194,6 +205,7 @@ mag_p->track.Sq_model contains the (M + K) Sq model
 */
 
 int
+<<<<<<< HEAD
 mag_sqfilt_vector(mag_workspace *mag_p, mag_sqfilt_vector_workspace *w)
 {
   int s;
@@ -327,10 +339,61 @@ sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_vector_workspace *w)
       fprintf(stderr, "sqfilt_linear_init: unable to find linear interpolation points\n");
       return -1;
     }
+=======
+mag_sqfilt_vector(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
+{
+  int s = 0;
+  mag_track *track = &(mag_p->track);
+  const double exclude_qdlat = 12.0; /* exclude points below this QD latitude from fit */
+  const size_t ntot = track->n;
+  size_t i;
+  double qd_min, qd_max;
+  double B1_min[3], B1_max[3];
+  double rnorm, snorm;
+  gauss_state_t *gauss_p;
+  gauss_parameters gauss_params;
+
+  gauss_params.nmax_int = mag_p->params->sq_nmax_int;
+  gauss_params.mmax_int = mag_p->params->sq_mmax_int;
+  gauss_params.nmax_ext = mag_p->params->sq_nmax_ext;
+  gauss_params.mmax_ext = mag_p->params->sq_mmax_ext;
+  gauss_params.flags = 0;
+#if FIT_X
+  gauss_params.flags |= GAUSS_FLG_FIT_X;
+#endif
+#if FIT_Y
+  gauss_params.flags |= GAUSS_FLG_FIT_Y;
+#endif
+#if FIT_Z
+  gauss_params.flags |= GAUSS_FLG_FIT_Z;
+#endif
+
+  gauss_p = gauss_alloc(&gauss_params);
+
+  gauss_reset(gauss_p);
+
+  /* search qdlat array for -exclude_qdlat and store values */
+  i = bsearch_double(track->qdlat, -exclude_qdlat, 0, track->n - 1);
+  qd_min = track->qdlat[i];
+  B1_min[0] = track->X1[i];
+  B1_min[1] = track->Y1[i];
+  B1_min[2] = track->Z1[i];
+
+  /* search qdlat array for exclude_qdlat and store values */
+  i = bsearch_double(track->qdlat, exclude_qdlat, 0, track->n - 1);
+  qd_max = track->qdlat[i];
+  B1_max[0] = track->X1[i];
+  B1_max[1] = track->Y1[i];
+  B1_max[2] = track->Z1[i];
+
+  /* sanity check */
+  assert(fabs(qd_min + exclude_qdlat) < 3.0 && fabs(qd_max - exclude_qdlat) < 3.0);
+>>>>>>> mfield_grad
 
   /* build least squares matrix and RHS */
   for (i = 0; i < ntot; ++i)
     {
+<<<<<<< HEAD
       double r = track->r[i];
       double thetaq = track->thetaq[i]; /* use QD colatitude */
       double phi = track->phi[i];
@@ -341,19 +404,36 @@ sqfilt_linear_init(mag_workspace *mag_p, mag_sqfilt_vector_workspace *w)
 
       /* exclude points in the equatorial electrojet region */
       if (fabs(track->qdlat[i]) < exclude_lat)
+=======
+      double rhs_B[3];
+
+      rhs_B[0] = track->X1[i];
+      rhs_B[1] = track->Y1[i];
+      rhs_B[2] = track->Z1[i];
+
+      /* exclude points in the equatorial electrojet region */
+      if (fabs(track->qdlat[i]) < exclude_qdlat)
+>>>>>>> mfield_grad
         {
           /* keep every 10th point in the equatorial region */
           if (i % 10 == 0)
             {
               /* interpolate linearly across EEJ region */
+<<<<<<< HEAD
               rhs_X = interp1d(qd_min, qd_max, X1_min, X1_max, track->qdlat[i]);
               rhs_Y = interp1d(qd_min, qd_max, Y1_min, Y1_max, track->qdlat[i]);
               rhs_Z = interp1d(qd_min, qd_max, Z1_min, Z1_max, track->qdlat[i]);
+=======
+              rhs_B[0] = interp1d(qd_min, qd_max, B1_min[0], B1_max[0], track->qdlat[i]);
+              rhs_B[1] = interp1d(qd_min, qd_max, B1_min[1], B1_max[1], track->qdlat[i]);
+              rhs_B[2] = interp1d(qd_min, qd_max, B1_min[2], B1_max[2], track->qdlat[i]);
+>>>>>>> mfield_grad
             }
           else
             continue;
         }
 
+<<<<<<< HEAD
       /* set RHS values */
       gsl_vector_set(w->rhs, ndata, rhs_X);
       gsl_vector_set(w->rhs, ndata + 1, rhs_Y);
@@ -462,6 +542,26 @@ sqfilt_linear_matrix_row(const double r, const double thetaq,
 
   return s;
 } /* sqfilt_linear_matrix_row() */
+=======
+      gauss_add_datum(track->t[i], track->r[i], track->theta[i], track->phi[i],
+                      track->qdlat[i], rhs_B, gauss_p);
+    }
+
+  /* fit the Sq model */
+  gauss_fit(&rnorm, &snorm, gauss_p);
+
+  /* calculate B^(2) residuals (eq 9 of paper) */
+  sqfilt_calc_B2(mag_p, gauss_p);
+
+  gauss_free(gauss_p);
+
+  return s;
+} /* mag_sqfilt_vector() */
+
+/****************************************************
+ *       INTERNAL ROUTINES                          *
+ ****************************************************/
+>>>>>>> mfield_grad
 
 /*
 sqfilt_calc_B2()
@@ -476,6 +576,7 @@ Notes:
 */
 
 static int
+<<<<<<< HEAD
 sqfilt_calc_B2(const gsl_vector *c, mag_workspace *w)
 {
 #if 0
@@ -615,3 +716,34 @@ sqfilt_nmidx(const size_t type, const size_t n, const int m, const mag_sqfilt_ve
 
   return nmidx;
 } /* sqfilt_nmidx() */
+=======
+sqfilt_calc_B2(mag_workspace *w, gauss_state_t * gauss_p)
+{
+  size_t i;
+  mag_track *track = &(w->track);
+
+  for (i = 0; i < track->n; ++i)
+    {
+      double B_int[3], B_ext[3];
+
+      gauss_eval_B_int(track->t[i], track->r[i], track->theta[i], track->phi[i],
+                       B_int, gauss_p);
+      gauss_eval_B_ext(track->t[i], track->r[i], track->theta[i], track->phi[i],
+                       B_ext, gauss_p);
+
+      track->X_Sq_int[i] = B_int[0];
+      track->Y_Sq_int[i] = B_int[1];
+      track->Z_Sq_int[i] = B_int[2];
+
+      track->X_Sq_ext[i] = B_ext[0];
+      track->Y_Sq_ext[i] = B_ext[1];
+      track->Z_Sq_ext[i] = B_ext[2];
+
+      track->X2[i] = track->X1[i] - B_int[0] - B_ext[0];
+      track->Y2[i] = track->Y1[i] - B_int[1] - B_ext[1];
+      track->Z2[i] = track->Z1[i] - B_int[2] - B_ext[2];
+    }
+
+  return GSL_SUCCESS;
+}
+>>>>>>> mfield_grad

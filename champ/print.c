@@ -91,6 +91,9 @@ print_data(const int down_sample, const print_parameters *params,
   printf("# Field %zu: X external (nT)\n", i++);
   printf("# Field %zu: Y external (nT)\n", i++);
   printf("# Field %zu: Z external (nT)\n", i++);
+  printf("# Field %zu: X ionosphere (nT)\n", i++);
+  printf("# Field %zu: Y ionosphere (nT)\n", i++);
+  printf("# Field %zu: Z ionosphere (nT)\n", i++);
 
   for (i = 0; i < data->n; i += down_sample)
     {
@@ -98,7 +101,7 @@ print_data(const int down_sample, const print_parameters *params,
       double phi = data->longitude[i] * M_PI / 180.0;
       double lt, ut, euvac;
       double qdlat = data->qdlat[i];
-      double B_obs[3], B_main[3], B_crust[3], B_ext[3], B_res[4], B_model[4];
+      double B_obs[3], B_main[3], B_crust[3], B_ext[3], B_iono[3], B_res[4], B_model[4];
 
       if (data->flags[i])
         continue; /* nan vector components */
@@ -137,9 +140,13 @@ print_data(const int down_sample, const print_parameters *params,
       B_ext[1] = SATDATA_VEC_Y(data->B_ext, i);
       B_ext[2] = SATDATA_VEC_Z(data->B_ext, i);
 
+      B_iono[0] = SATDATA_VEC_X(data->B_iono, i);
+      B_iono[1] = SATDATA_VEC_Y(data->B_iono, i);
+      B_iono[2] = SATDATA_VEC_Z(data->B_iono, i);
+
       for (j = 0; j < 3; ++j)
         {
-          B_model[j] = B_main[j] + B_crust[j] + B_ext[j];
+          B_model[j] = B_main[j] + B_crust[j] + B_ext[j] + B_iono[j];
           B_res[j] = B_obs[j] - B_model[j];
         }
 
@@ -147,7 +154,7 @@ print_data(const int down_sample, const print_parameters *params,
       B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
       B_res[3] = data->F[i] - B_model[3];
 
-      printf("%ld %.8f %.2f %.2f %6.2f %5.1f %10.4f %8.4f %10.4f %10.4f %d %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
+      printf("%ld %.8f %.2f %.2f %6.2f %5.1f %10.4f %8.4f %10.4f %10.4f %d %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f %10.4f\n",
              unix_time,
              satdata_epoch2year(data->t[i]),
              get_ut(unix_time),
@@ -175,7 +182,10 @@ print_data(const int down_sample, const print_parameters *params,
              B_crust[2],
              B_ext[0],
              B_ext[1],
-             B_ext[2]);
+             B_ext[2],
+             B_iono[0],
+             B_iono[1],
+             B_iono[2]);
     }
 
   f107_free(f107_p);
