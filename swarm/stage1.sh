@@ -9,9 +9,6 @@
 #
 # Usage: ./stage1.sh [A|B|C] [year]
 
-# Keep every nth sample
-down_sample="1"
-
 cdfdir="$DATAHOME/SWARM/MAG/Unzipped_Data"
 outdir="$DATAHOME/SWARM/MAG/Stage1"
 lpdir="$DATAHOME/SWARM/EFI/LP_Unzipped"
@@ -20,7 +17,7 @@ lpdir="$DATAHOME/SWARM/EFI/LP_Unzipped"
 #extra_flags="-c"
 extra_flags=""
 
-prog="$MYLIBHOME/swarm/stage1"
+prog="$MYLIBHOME/track/stage1"
 
 sat=""
 if test -n "$1"; then
@@ -51,6 +48,6 @@ for file in $(ls ${cdfdir}/*MAG${sat}*LR_1B_${year}*.cdf); do
   # Check first if we already processed this file
   if [[ ! -f "${outfile}" ]]; then
     echo "Processing: ${file}"
-    ${prog} -d ${down_sample} -i ${file} -o ${outfile} ${lp_arg} ${extra_flags}
+    ${prog} -s ${file} -o ${outfile} ${lp_arg} ${extra_flags}
   fi
 done

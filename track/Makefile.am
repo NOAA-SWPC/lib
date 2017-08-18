@@ -15,6 +15,6 @@ print_sc_LDADD = libtrack.la $(top_builddir)/common/libcommon.la $(top_builddir)
 
 stage1_SOURCES = stage1.c
 stage1_LDFLAGS = -fopenmp
-stage1_LDADD = libtrack.la $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lcdf -lmwmclmcrrt -ldifi -lmldifi -lchaos -lmlchaos -lsatdata -lindices -lgfortran ~/usr/lib/libgsl.a -lgslcblas
+stage1_LDADD = libtrack.la $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la -lm -lcdf -lmwmclmcrrt -ldifi -lmldifi -lchaos -lmlchaos -lsatdata -lindices -lgfortran ~/usr/lib/libgsl.a -lgslcblas
 
-AM_CPPFLAGS = -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/chaos
+AM_CPPFLAGS = -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/chaos -I$(top_builddir)/pomme -I$(top_builddir)/estist

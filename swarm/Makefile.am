@@ -1,9 +1,9 @@
 bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust print_alt print_tracks residuals plotsep swarmcdf2fday
 
-commonlibs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ~/usr/lib/liblapack.a ~/usr/lib/libf77blas.a ~/usr/lib/libatlas.a -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas -lgfortran -lmwmclmcrrt $(abs_top_builddir)/chaos/libchaosext.so
+commonlibs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/track/libtrack.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ~/usr/lib/liblapack.a ~/usr/lib/libf77blas.a ~/usr/lib/libatlas.a -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas -lgfortran
 
 plotsep_SOURCES = plotsep.c
-plotsep_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs}
+plotsep_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs}
 
 #plot_tracks_SOURCES = plot_tracks.c
 #plot_tracks_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/common/libcommon.la -lm ${commonlibs}

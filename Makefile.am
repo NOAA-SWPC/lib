@@ -3,7 +3,6 @@
 SUBDIRS =         \
   common          \
   apex            \
-  chaos           \
   curvefit        \
   efi             \
   ephemeris       \

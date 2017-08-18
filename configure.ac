@@ -21,7 +21,6 @@ AC_CONFIG_FILES([            \
   apex/Makefile              \
   apex/apex.h                \
   champ/Makefile             \
-  chaos/Makefile             \
   common/Makefile            \
   cond/Makefile              \
   curvefit/Makefile          \

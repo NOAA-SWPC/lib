@@ -19,13 +19,10 @@ if test -n "$2"; then
   year="$2"
 fi
 
-# Keep every nth sample
-down_sample="1"
-
 indir="$DATAHOME/DMSP/MAG/Stage0"
 outdir="$DATAHOME/DMSP/MAG/Stage1"
 
-prog="$MYLIBHOME/dmsp/stage1"
+prog="$MYLIBHOME/track/stage1"
 
 # Extra flags (such as use CHAOS)
 extra_flags="-c"
@@ -41,6 +38,6 @@ for file in $(ls ${indir}/${year}/DMSP_${dmsp_sat}_*.cdf); do
   # Check first if we already processed this file
   if [[ ! -f "${outfile}" ]]; then
     echo "Processing: ${file}"
-    ${prog} -d ${down_sample} -i ${file} -o ${outfile} ${extra_flags}
+    ${prog} -d ${file} -o ${outfile} ${extra_flags}
   fi
 done

@@ -9,7 +9,7 @@ stage0_LDADD = $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/
 
 stage2a_SOURCES = magcal.c stage2a.c
 stage2a_LDFLAGS = -fopenmp
-stage2a_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/libcommon.la $(top_builddir)/euler/libeuler.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lz
+stage2a_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/libcommon.la $(top_builddir)/euler/libeuler.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lz
 
 stage2b_SOURCES = stage2b.c magcal.c
 stage2b_LDADD = $(top_builddir)/common/libcommon.la -lm ${commonlibs}
@@ -18,4 +18,4 @@ print_SOURCES = print.c
 print_LDADD = $(top_builddir)/common/libcommon.la -lm -lcdf ${commonlibs}
 
 print_LTAN_SOURCES = print_LTAN.c
-print_LTAN_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/libcommon.la $(top_builddir)/euler/libeuler.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lz
+print_LTAN_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/libcommon.la $(top_builddir)/euler/libeuler.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lz
