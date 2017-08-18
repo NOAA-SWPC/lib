@@ -125,6 +125,7 @@ size_t track_flag_n(const size_t nmin, satdata_mag *data, track_workspace *w);
 int track_fix_offsets(const satdata_mag *data, track_workspace *w);
 
 /* track_synth.c */
+int track_synth_int(satdata_mag *data, msynth_workspace *msynth_core_p, msynth_workspace *msynth_crust_p);
 int track_synth(const int down_sample, const satdata_mag *data_in,
                 satdata_mag *data_out, msynth_workspace *msynth_core);
 int track_synth_chaos(const int down_sample, satdata_mag *data_in,

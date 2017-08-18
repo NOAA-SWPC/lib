@@ -1,11 +1,14 @@
 lib_LTLIBRARIES = libmsynth.la
 
-libmsynth_la_SOURCES = msynth.c msynth_green.c msynth_arnaud.c msynth_bggm.c msynth_swarm.c msynth_crust.c msynth_emm.c msynth_igrf.c msynth_ipgp.c msynth_pomme.c msynth_tgcm.c msynth_wmm.c
+libmsynth_la_SOURCES = msynth.c msynth_green.c msynth_grid.c msynth_arnaud.c msynth_bggm.c msynth_swarm.c msynth_crust.c msynth_emm.c msynth_igrf.c msynth_ipgp.c msynth_pomme.c msynth_tgcm.c msynth_wmm.c
 
-check_PROGRAMS = test calc_point extrapolate_epoch model_avg print_map print_smatrix print_spectrum print_test_values write_wmm write_chris
+check_PROGRAMS = test grid calc_point extrapolate_epoch model_avg print_map print_smatrix print_spectrum print_test_values write_wmm write_chris
 
 calc_point_SOURCES = calc_point.c
 calc_point_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas
+
+grid_SOURCES = grid.c
+grid_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas -lfftw3
 
 extrapolate_epoch_SOURCES = extrapolate_epoch.c
 extrapolate_epoch_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas

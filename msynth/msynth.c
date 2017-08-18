@@ -17,10 +17,6 @@
 
 #include "msynth.h"
 
-static int msynth_eval_g(const double t, const double r, const double theta,
-                         const double phi, const double epoch, const double *g,
-                         const double *dg, const double *ddg, double B[4],
-                         msynth_workspace *w);
 static int msynth_eval_dgdt(const double t, const double r, const double theta,
                             const double phi, const double epoch,
                             const double *dg, const double *ddg,
@@ -217,7 +213,15 @@ msynth_eval(const double t, const double r, const double theta,
   const double *dg = g + w->sv_offset;
   const double *ddg = g + w->sa_offset;
 
-  s = msynth_eval_g(t, r, theta, phi, epoch, g, dg, ddg, B, w);
+  /* compute Green's functions */
+  s = msynth_green(r, theta, phi, w);
+  if (s)
+    return s;
+
+  /* evaluate sum of Gauss coefficients times Green's functions */
+  s = msynth_eval_sum(t, epoch, g, dg, ddg, B, w);
+  if (s)
+    return s;
 
   return s;
 } /* msynth_eval() */
@@ -771,18 +775,12 @@ msynth_calc_sv(msynth_workspace *w)
   return s;
 } /* msynth_calc_sv() */
 
-/*******************************************************
- *             INTERNAL ROUTINES                       *
- *******************************************************/
-
 /*
-msynth_eval_g()
-  Evaluate magnetic field model for given g,dg,ddg coefficients
+msynth_eval_sum()
+  Evaluate magnetic field model by summing Gauss coefficients
+times Green's functions
 
 Inputs: t     - timestamp (decimal years)
-        r     - radius (km)
-        theta - colatitude (radians)
-        phi   - longitude (radians)
         epoch - epoch of closest snapshot model
         g     - main field coefficients (nT)
         dg    - secular variation coefficients (nT/year)
@@ -793,13 +791,16 @@ Inputs: t     - timestamp (decimal years)
                 B[2] = B_z
                 B[3] = |B|
         w     - workspace
+
+Notes:
+1) The arrays w->dX, w->dY, w->dZ must be initialized prior
+to calling this functions (see msynth_green())
 */
 
-static int
-msynth_eval_g(const double t, const double r, const double theta,
-              const double phi, const double epoch, const double *g,
-              const double *dg, const double *ddg, double B[4],
-              msynth_workspace *w)
+int
+msynth_eval_sum(const double t, const double epoch, const double *g,
+                const double *dg, const double *ddg, double B[4],
+                msynth_workspace *w)
 {
   int s = 0;
   size_t n;
@@ -810,13 +811,6 @@ msynth_eval_g(const double t, const double r, const double theta,
   const double t1 = t - t0;        /* SV term (years) */
   const double t2 = 0.5 * t1 * t1; /* SA term (years^2) */
 
-  /* after this date, use a linear model for gnm */
-  const double tend = 5013.5; /* XXX */
-  const double t3 = tend - t0;
-  const double t4 = 0.5 * t3 * t3;
-
-  s += msynth_green(r, theta, phi, w);
-
   B[0] = B[1] = B[2] = 0.0;
 
   for (n = w->eval_nmin; n <= w->eval_nmax; ++n)
@@ -826,24 +820,7 @@ msynth_eval_g(const double t, const double r, const double theta,
       for (m = -ni; m <= ni; ++m)
         {
           size_t cidx = msynth_nmidx(n, m, w);
-          double gnm;
-
-          /*
-           * use the parabola taylor series for the period when
-           * data was available, and after that use the tangent
-           * line to the parabola at the point tend
-           */
-          if (t <= tend)
-            {
-              gnm = g[cidx] + dg[cidx] * t1 + ddg[cidx] * t2;
-            }
-          else
-            {
-              fprintf(stderr, "ACK\n");
-              /* set gnm to the tangent line to the parabola at tend */
-              gnm = g[cidx] + dg[cidx] * t3 + ddg[cidx] * t4 +
-                    (dg[cidx] + ddg[cidx] * t3) * (t - tend);
-            }
+          double gnm = g[cidx] + dg[cidx] * t1 + ddg[cidx] * t2;
 
           B[0] += gnm * w->dX[cidx];
           B[1] += gnm * w->dY[cidx];
@@ -854,7 +831,11 @@ msynth_eval_g(const double t, const double r, const double theta,
   B[3] = sqrt(B[0]*B[0] + B[1]*B[1] + B[2]*B[2]);
 
   return s;
-} /* msynth_eval_g() */
+}
+
+/*******************************************************
+ *             INTERNAL ROUTINES                       *
+ *******************************************************/
 
 /*
 msynth_eval_dgdt()

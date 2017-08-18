@@ -76,6 +76,9 @@ int msynth_eval(const double t, const double r, const double theta,
 int msynth_eval2(const double t, const double r, const double theta,
                  const double phi, double B_mf[3], double B_sv[3], double B_sa[3],
                  msynth_workspace *w);
+int msynth_eval_sum(const double t, const double epoch, const double *g,
+                    const double *dg, const double *ddg, double B[4],
+                    msynth_workspace *w);
 int msynth_eval_dBdt(const double t, const double r, const double theta,
                      const double phi, double dBdt[4],
                      msynth_workspace *w);
@@ -115,6 +118,9 @@ int msynth_green(const double r, const double theta, const double phi,
                  msynth_workspace *w);
 int msynth_green_ext(const double r, const double theta, const double phi,
                      msynth_workspace *w);
+int msynth_green_init_ALF(const double theta, msynth_workspace * w);
+int msynth_green_init_phi(const double phi, msynth_workspace * w);
+int msynth_green_calc_int(const double r, const double theta, msynth_workspace * w);
 
 /* msynth_arnaud.c */
 msynth_workspace *msynth_arnaud_read(const char *filename);
