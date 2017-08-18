@@ -664,6 +664,10 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
 
 #endif
 
+#if 0
+  print_unflagged_data("data.dat.1", data);
+#endif
+
   /* downsample data */
   {
     size_t i;
@@ -677,34 +681,6 @@ preprocess_data(const preprocess_parameters *params, const size_t magdata_flags,
       }
 
     fprintf(stderr, "done\n");
-  }
-
-#if 0
-  print_unflagged_data("data_ts/data_ts.3", data);
-#endif
-
-  {
-    size_t i;
-    size_t nflag = 0;
-
-    fprintf(stderr, "preprocess_data: flagging points due to modeling criteria...");
-    for (i = 0; i < data->n; ++i)
-      {
-        double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
-        double phi = data->longitude[i] * M_PI / 180.0;
-        size_t fitting_flags = model_flags(magdata_flags,
-                                           data->t[i], theta,
-                                           phi, data->qdlat[i]);
-
-        /* flag point if it will not be used in any modeling */
-        if (fitting_flags == 0)
-          {
-            data->flags[i] |= SATDATA_FLG_OUTLIER;
-            ++nflag;
-          }
-      }
-    fprintf(stderr, "done (%zu/%zu (%.1f%%) points flagged)\n",
-            nflag, data->n, (double)nflag / (double)data->n * 100.0);
   }
 
 #if 0
@@ -1140,38 +1116,6 @@ parse_config_file(const char *filename, preprocess_parameters *params)
     params->pb_thresh[3] = fval;
 
   config_destroy(&cfg);
-
-  return 0;
-}
-
-int
-calc_main(satdata_mag *data)
-{
-  /*msynth_workspace *msynth_p = msynth_chaos_read(MSYNTH_CHAOS_FILE);*/
-  msynth_workspace *msynth_p = msynth_read(MSYNTH_BOUMME_FILE);
-  size_t i;
-
-  msynth_set(1, 15, msynth_p);
-
-  for (i = 0; i < data->n; ++i)
-    {
-      double tyr = satdata_epoch2year(data->t[i]);
-      double r = data->r[i];
-      double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
-      double phi = data->longitude[i] * M_PI / 180.0;
-      double B_core[4];
-
-      if (!SATDATA_AvailableData(data->flags[i]))
-        continue;
-
-      msynth_eval(tyr, r, theta, phi, B_core, msynth_p);
-
-      SATDATA_VEC_X(data->B_main, i) = B_core[0];
-      SATDATA_VEC_Y(data->B_main, i) = B_core[1];
-      SATDATA_VEC_Z(data->B_main, i) = B_core[2];
-    }
-
-  msynth_free(msynth_p);
 
   return 0;
 }

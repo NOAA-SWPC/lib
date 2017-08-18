@@ -1,4 +1,4 @@
-bin_PROGRAMS = print print_LTAN stage0 stage1 stage2a stage2b
+bin_PROGRAMS = print print_LTAN stage0 stage2a stage2b
 
 commonlibs = -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas ~/usr/lib/libgsldsp.a -lm -lcdf
 
@@ -6,10 +6,6 @@ AM_CPPFLAGS = -I$(top_builddir)/common -I$(top_builddir)/ephemeris -I$(top_build
 
 stage0_SOURCES = stage0.c
 stage0_LDADD = $(top_builddir)/ephemeris/libephemeris.la $(top_builddir)/common/libcommon.la -lm -lcdf ${commonlibs} -lz
-
-stage1_SOURCES = stage1.c
-stage1_LDFLAGS = -fopenmp
-stage1_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/chaos/libchaos.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs} -lmwmclmcrrt $(abs_top_builddir)/chaos/libchaosext.so
 
 stage2a_SOURCES = magcal.c stage2a.c
 stage2a_LDFLAGS = -fopenmp

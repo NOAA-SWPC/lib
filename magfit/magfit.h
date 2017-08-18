@@ -92,7 +92,7 @@ magfit_parameters magfit_default_parameters(void);
 int magfit_reset(magfit_workspace *w);
 int magfit_add_datum(const double t, const double r, const double theta, const double phi,
                      const double qdlat, double B[3], magfit_workspace *w);
-size_t magfit_add_track(const track_data *tptr, const satdata_mag *data, magfit_workspace *w);
+size_t magfit_add_track(track_data *tptr, const satdata_mag *data, magfit_workspace *w);
 int magfit_fit(double * rnorm, double * snorm, magfit_workspace *w);
 int magfit_apply_track(track_data *tptr, satdata_mag *data, magfit_workspace *w);
 int magfit_eval_B(const double t, const double r, const double theta, const double phi, double B[3], magfit_workspace *w);
