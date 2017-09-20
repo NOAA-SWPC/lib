@@ -3,8 +3,12 @@ Spherical Harmonic Notes
 ************************
 
 Here are some notes on spherical harmonic manipulations to avoid
-needing to work them out each time they are needed. First,
-we will show the relationship between the complex and real
+needing to work them out each time they are needed.
+
+Real and Complex Expansions
+===========================
+
+First, we will show the relationship between the complex and real
 spherical harmonic representation of a real-valued function.
 Consider the complex spherical harmonic decomposition of a
 real-valued function:
@@ -110,3 +114,134 @@ To summarize,
                   \frac{1}{2} \left( g_n^{|m|} + i h_n^{|m|} \right) & m < 0
                 \end{array}
               \right.
+
+.. _sec_internal:
+
+Internal Field
+==============
+
+Real case
+---------
+
+The internal field potential is given by
+
+.. math::
+
+   V_{int}(r,\theta,\phi) = a \sum_{n=1}^N \sum_{m=0}^n \left( \frac{a}{r} \right)^{n+1} \left( g_n^m \cos{m \phi} + h_n^m \sin{m \phi} \right)
+   P_n^m(\cos{\theta})
+
+If we define
+
+.. math::
+
+   \tilde{g}_n^m =
+     \left\{
+       \begin{array}{cc}
+         g_n^m & m \ge 0 \\
+         h_n^{|m|} & m < 0
+       \end{array}
+     \right.
+
+and
+
+.. math::
+
+   S_n^m(\theta,\phi) =
+     \left\{
+       \begin{array}{cc}
+         \cos{(m\phi)} P_n^m(\cos{\theta}) & m \ge 0 \\
+         \sin{(|m|\phi)} P_n^{|m|}(\cos{\theta}) & m < 0
+       \end{array}
+     \right.
+
+then we can write :math:`V_{int}(r,\theta,\phi)` more compactly as
+
+.. math::
+
+   V_{int}(r,\theta,\phi) = a \sum_{n=1}^N \sum_{m=-n}^n \left( \frac{a}{r} \right)^{n+1} \tilde{g}_n^m S_n^m(\theta,\phi)
+
+Defining :math:`\mathbf{B} = - \nabla V` gives
+
+.. math::
+
+   \begin{pmatrix}
+     B_r \\
+     B_{\theta} \\
+     B_{\phi}
+   \end{pmatrix} =
+   \sum_{n=1}^N \sum_{m=-n}^n \tilde{g}_n^m \left( \frac{a}{r} \right)^{n+2}
+   \begin{pmatrix}
+     (n+1) S_n^m \\
+     -\partial_{\theta} S_n^m \\
+     -\partial_{\phi} S_n^m
+   \end{pmatrix}
+
+or
+
+.. math::
+
+   \begin{pmatrix}
+     B_x \\
+     B_y \\
+     B_z
+   \end{pmatrix} =
+   \sum_{n=1}^N \sum_{m=-n}^n \tilde{g}_n^m \left( \frac{a}{r} \right)^{n+2}
+   \begin{pmatrix}
+     \partial_{\theta} S_n^m \\
+     -\partial_{\phi} S_n^m \\
+     -(n+1) S_n^m
+   \end{pmatrix}
+
+Writing this out explicitly in terms of :math:`g_n^m,h_n^m` gives
+
+.. math::
+
+   B_x &= \sum_{n=1}^N \sum_{m=0}^n \left( \frac{a}{r} \right)^{n+2}
+   \left( g_n^m \cos{m \phi} + h_n^m\sin{m \phi} \right) \frac{\partial}{\partial \theta} P_n^m(\cos{\theta}) \\
+   B_y &= \frac{1}{\sin{\theta}} \sum_{n=1}^N \sum_{m=0}^n
+   \left( \frac{a}{r} \right)^{n+2} m \left( g_n^m \sin{m \phi} - h_n^m \cos{m \phi} \right) P_n^m(\cos{\theta}) \\
+   B_z &= -\sum_{n=1}^N \sum_{m=0}^n (n + 1) \left( \frac{a}{r} \right)^{n+2}
+   \left( g_n^m \cos{m \phi} + h_n^m\sin{m \phi} \right) P_n^m(\cos{\theta})
+
+Complex case
+------------
+
+The complex internal scalar potential is given in geocentric spherical coordinates by
+
+.. math:: V_{int}(r,\theta,\phi) = a \sum_{n=1}^N \sum_{m=-n}^n \left( \frac{a}{r} \right)^{n+1} f_n^m Y_n^m(\theta,\phi)
+
+where the coefficients :math:`f_n^m` are complex and
+
+.. math:: Y_n^m = P_n^{|m|}(\cos{\theta}) e^{im\phi}
+
+Defining :math:`\mathbf{B} = - \nabla V` gives
+
+.. math::
+
+   \begin{pmatrix}
+     B_r \\
+     B_{\theta} \\
+     B_{\phi}
+   \end{pmatrix} =
+   \sum_{nm} f_n^m \left( \frac{a}{r} \right)^{n+2}
+   \begin{pmatrix}
+     (n+1) Y_n^m \\
+     -\partial_{\theta} Y_n^m \\
+     -\frac{im}{\sin{\theta}} Y_n^m
+   \end{pmatrix}
+
+or,
+
+.. math::
+
+   \begin{pmatrix}
+     B_x \\
+     B_y \\
+     B_z
+   \end{pmatrix} =
+   \sum_{nm} f_n^m \left( \frac{a}{r} \right)^{n+2}
+   \begin{pmatrix}
+     \partial_{\theta} Y_n^m \\
+     -\frac{im}{\sin{\theta}} Y_n^m \\
+     -(n+1) Y_n^m
+   \end{pmatrix}

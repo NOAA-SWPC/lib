@@ -172,6 +172,71 @@ print_residuals(const char *filename, const size_t tidx,
   return rnorm;
 }
 
+/*
+print_matlab()
+  Print J_t, J_p components at given timestamp
+
+Inputs: outdir   - where to store output
+        tidx     - time index
+        c        - model coefficients (knm)
+        data     - TIEGCM data
+        green_ext - green workspace for external source
+*/
+
+int
+print_matlab(const char *outdir, const size_t tidx,
+             const gsl_vector *c, green_workspace *green_ext)
+{
+  char buf[2048];
+  const size_t nphi = 360;
+  const size_t ntheta = 180;
+  const double b = green_ext->R + 110.0;
+  gsl_matrix *Jt = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *Jp = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *chi = gsl_matrix_alloc(nphi, ntheta);
+  gsl_vector *g = gsl_vector_alloc(c->size);
+  size_t i, j;
+
+  /* convert knm to gnm */
+  green_k2g(green_ext->R + 110.0, c, g, green_ext);
+
+  for (i = 0; i < nphi; ++i)
+    {
+      double phi = (i + 0.5) * M_PI / 180.0;
+
+      for (j = 0; j < ntheta; ++j)
+        {
+          double theta = (j + 0.5) * M_PI / 180.0;
+          double K[3], chi1;
+
+#if 0
+          green_eval_sheet_int(b, theta, phi, g, K, green_ext);
+          gsl_matrix_set(Jt, i, j, -K[0]);
+          gsl_matrix_set(Jp, i, j, K[1]);
+#endif
+
+          chi1 = green_eval_chi_ext(b, theta, phi, c, green_ext);
+          gsl_matrix_set(chi, i, j, chi1);
+        }
+    }
+
+  sprintf(buf, "%s/Jt_%04zu.txt", outdir, tidx);
+  print_octave(Jt, buf);
+
+  sprintf(buf, "%s/Jp_%04zu.txt", outdir, tidx);
+  print_octave(Jp, buf);
+
+  sprintf(buf, "%s/chi_%04zu.txt", outdir, tidx);
+  print_octave(chi, buf);
+
+  gsl_matrix_free(Jt);
+  gsl_matrix_free(Jp);
+  gsl_matrix_free(chi);
+  gsl_vector_free(g);
+
+  return 0;
+}
+
 magdata *
 tiegcm_magdata(const size_t tidx, tiegcm_data *data)
 {
@@ -416,7 +481,7 @@ convert_qnm(const double b, gsl_vector * v, const green_workspace * green_p)
 }
 
 int
-main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
+main_proc(const char *filename, const char *outfile_mat, const char *outdir_mat, tiegcm_data *data)
 {
   int status;
   const char *res_file = "res.dat";
@@ -649,6 +714,28 @@ main_proc(const char *filename, const char *outfile_mat, tiegcm_data *data)
   pca_write_data(PCA_STAGE1_DATA, nmax_ext, mmax_ext, data);
   fprintf(stderr, "done\n");
 
+  if (outdir_mat)
+    {
+      char buf[2048];
+      FILE *fp;
+
+      sprintf(buf, "%s/ts", outdir_mat);
+      fp = fopen(buf, "w");
+
+      for (k = 0; k < data->nt; ++k)
+        {
+          gsl_vector_view x = gsl_matrix_column(X_taper, k);
+
+          fprintf(stderr, "main_proc: writing matlab output %zu/%zu...", k, data->nt);
+          print_matlab(outdir_mat, k, &x.vector, green_ext);
+          fprintf(stderr, "done\n");
+
+          fprintf(fp, "%ld\n", data->t[k]);
+        }
+
+      fclose(fp);
+    }
+
   green_free(green_ext);
   gsl_matrix_free(A);
   gsl_matrix_free(B);
@@ -668,6 +755,7 @@ main(int argc, char *argv[])
   tiegcm_data *data = NULL;
   struct timeval tv0, tv1;
   char *outfile = "knm.txt";
+  char *outdir_mat = NULL;
   char *outfile_mat = PCA_STAGE1_KNM;
 
   while (1)
@@ -679,7 +767,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "o:", long_options, &option_index);
+      c = getopt_long(argc, argv, "o:m:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -687,6 +775,10 @@ main(int argc, char *argv[])
         {
           case 'o':
             outfile_mat = optarg;
+            break;
+
+          case 'm':
+            outdir_mat = optarg;
             break;
 
           default:
@@ -720,7 +812,7 @@ main(int argc, char *argv[])
       ++optind;
     }
 
-  main_proc(outfile, outfile_mat, data);
+  main_proc(outfile, outfile_mat, outdir_mat, data);
 
   tiegcm_free(data);
 

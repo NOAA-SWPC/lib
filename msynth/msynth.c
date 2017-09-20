@@ -833,6 +833,47 @@ msynth_eval_sum(const double t, const double epoch, const double *g,
   return s;
 }
 
+/*
+msynth_gnm()
+  Compute array of gnm(t) for a given time t, including SV
+and SA terms:
+
+gnm(t) = gnm(t0) + (t - t0) * d/dt gnm(t0) + 1/2 (t - t0)^2 (d/dt)^2 gnm(t0)
+
+Inputs: t   - time (decimal years)
+        gnm - output array, size nnm
+        w   - workspace
+
+Return: success/error
+*/
+
+int
+msynth_gnm(const double t, double * gnm, const msynth_workspace * w)
+{
+  const size_t epoch_idx = msynth_epoch_idx(t, w);
+  const double epoch = w->epochs[epoch_idx];
+  const double *g = w->c + epoch_idx * w->p;
+  const double *dg = g + w->sv_offset;
+  const double *ddg = g + w->sa_offset;
+  const double t1 = t - epoch;     /* SV term (years) */
+  const double t2 = 0.5 * t1 * t1; /* SA term (years^2) */
+  size_t n;
+
+  for (n = 1; n <= w->nmax; ++n)
+    {
+      int ni = (int) n;
+      int m;
+
+      for (m = -ni; m <= ni; ++m)
+        {
+          size_t cidx = msynth_nmidx(n, m, w);
+          gnm[cidx] = g[cidx] + dg[cidx] * t1 + ddg[cidx] * t2;
+        }
+    }
+
+  return 0;
+}
+
 /*******************************************************
  *             INTERNAL ROUTINES                       *
  *******************************************************/

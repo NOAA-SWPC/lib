@@ -4,16 +4,10 @@
  * Compute grid of field model
  *
  * Usage: ./grid [args]
- * [-c coef_file]            - ASCII coefficient file
  * [-m mf7_file]
- * [-w wmm_file]
- * [-a arnaud_file]
  * [-b NGDC720_file]
  * [-f EMM_crust_file]
  * [-h swarm_file]
- * [-p pomme_file]
- * [-i igrf12_mf_candidate]
- * [-g ipgp_file]
  * [-l bggm_file]
  * [-n nmax]
  */
@@ -24,6 +18,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <getopt.h>
+#include <omp.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_matrix.h>
@@ -38,16 +33,16 @@
 /*
 build_grid()
 
-Inputs: naive    - 1 = use naive approach, 0 = use fft approach
-        nr       - number of radial grid points
-        ntheta   - number of theta grid points
-        nphi     - number of phi grid points
-        t        - (output) time elapsed
-        grid_X   - (output) if not NULL, store computed X grid here
-        grid_Y   - (output) if not NULL, store computed Y grid here
-        grid_Z   - (output) if not NULL, store computed Z grid here
-        msynth_p - msynth workspace
-        grid_p   - msynth grid workspace
+Inputs: naive   - 1 = use naive approach, 0 = use fft approach
+        nr      - number of radial grid points
+        ntheta  - number of theta grid points
+        nphi    - number of phi grid points
+        t       - (output) time elapsed
+        grid_X  - (output) if not NULL, store computed X grid here
+        grid_Y  - (output) if not NULL, store computed Y grid here
+        grid_Z  - (output) if not NULL, store computed Z grid here
+        w       - msynth workspace
+        grid_p  - msynth grid workspace
 
 Return: success/error
 */
@@ -55,18 +50,29 @@ Return: success/error
 int
 build_grid(const int naive, const size_t nr, const size_t ntheta, const size_t nphi,
            double *t, double *grid_X, double *grid_Y, double *grid_Z,
-           msynth_workspace *msynth_p, msynth_grid_workspace *grid_p)
+           msynth_workspace *w)
 {
-  gsl_matrix *B = gsl_matrix_alloc(nphi, 3);
+  const int max_threads = omp_get_max_threads();
   const double rmin = R_EARTH_KM - 10.0;
   const double rmax = R_EARTH_KM + 10.0;
   const double rstep = (rmax - rmin) / nr;
   const double theta_min = 0.01;
   const double theta_max = M_PI - 0.01;
   const double theta_step = (theta_max - theta_min) / (ntheta - 1.0);
-  size_t i, j, k;
+  gsl_matrix **B = malloc(max_threads * sizeof(gsl_matrix *));
+  msynth_workspace **msynth_p = malloc(max_threads * sizeof(msynth_workspace *));
+  msynth_grid_workspace **grid_p = malloc(max_threads * sizeof(msynth_grid_workspace *));
+  size_t j;
   struct timeval tv0, tv1;
   double *theta_array = malloc(ntheta * sizeof(double));
+  size_t *omp_ntheta = calloc(max_threads, sizeof(size_t));
+
+  for (j = 0; j < (size_t) max_threads; ++j)
+    {
+      B[j] = gsl_matrix_alloc(nphi, 3);
+      msynth_p[j] = msynth_copy(w);
+      grid_p[j] = msynth_grid_alloc(nphi, w->eval_nmin, w->eval_nmax, w->c);
+    }
 
   for (j = 0; j < ntheta; ++j)
     theta_array[j] = theta_min + j * theta_step;
@@ -75,29 +81,29 @@ build_grid(const int naive, const size_t nr, const size_t ntheta, const size_t n
 
   if (naive)
     {
-      double *g = msynth_p->c;
-      double *dg = g + msynth_p->sv_offset;
-      double *ddg = g + msynth_p->sa_offset;
+      double *g = w->c;
+      double *dg = g + w->sv_offset;
+      double *ddg = g + w->sa_offset;
 
       gettimeofday(&tv0, NULL);
 
+#pragma omp parallel for private(j)
       for (j = 0; j < ntheta; ++j)
         {
+          int thread_id = omp_get_thread_num();
           double progress = (double)j / (double)ntheta;
           double theta = theta_array[j];
-
-          /* print progress bar */
-          progress_bar(stderr, progress, 80);
+          size_t i, k;
 
           /* compute Legendre functions for this theta */
-          msynth_green_init_ALF(theta, msynth_p);
+          msynth_green_init_ALF(theta, msynth_p[thread_id]);
 
           for (k = 0; k < nphi; ++k)
             {
               double phi = 2.0 * M_PI * k / (double) nphi;
 
               /* compute phi arrays */
-              msynth_green_init_phi(phi, msynth_p);
+              msynth_green_init_phi(phi, msynth_p[thread_id]);
 
               for (i = 0; i < nr; ++i)
                 {
@@ -105,9 +111,9 @@ build_grid(const int naive, const size_t nr, const size_t ntheta, const size_t n
                   double B_naive[4];
 
                   /* compute internal Green's functions */
-                  msynth_green_calc_int(r, theta, msynth_p);
+                  msynth_green_calc_int(r, theta, msynth_p[thread_id]);
 
-                  msynth_eval_sum(2017.0, 2017.0, g, dg, ddg, B_naive, msynth_p);
+                  msynth_eval_sum(2017.0, 2017.0, g, dg, ddg, B_naive, msynth_p[thread_id]);
 
                   if (grid_X)
                     {
@@ -117,41 +123,62 @@ build_grid(const int naive, const size_t nr, const size_t ntheta, const size_t n
                     }
                 }
             }
+
+          if (thread_id == 0)
+            {
+              double progress = 0.0;
+              size_t l;
+
+              for (l = 0; l < (size_t) max_threads; ++l)
+                progress += omp_ntheta[l];
+
+              progress /= (double) ntheta;
+
+              /* print progress bar */
+              progress_bar(stderr, progress, 80);
+            }
+
+          omp_ntheta[thread_id]++;
         }
 
       gettimeofday(&tv1, NULL);
       *t = time_diff(tv0, tv1);
+
+      progress_bar(stderr, 1.0, 80);
+      fprintf(stderr, "\n");
     }
   else /* fast method */
     {
       gettimeofday(&tv0, NULL);
 
+#pragma omp parallel for private(j)
       for (j = 0; j < ntheta / 2; ++j)
         {
+          int thread_id = omp_get_thread_num();
           double progress = 2.0 * (double)j / (double)ntheta;
           double theta = theta_array[j];
-          double cost = cos(theta);
-
-          /* print progress bar */
-          progress_bar(stderr, progress, 80);
+          size_t i, k;
 
           /* compute associated Legendre functions */
-          gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, grid_p->nmax, cost,
-                                          msynth_p->Plm, msynth_p->dPlm);
+          msynth_grid_init_theta(theta, grid_p[thread_id]);
 
           for (i = 0; i < nr; ++i)
             {
               double r = rmin + i * rstep;
 
-              msynth_grid_calc(r, theta, B, grid_p);
+              /* precompute radial terms */
+              msynth_grid_init_r(r, grid_p[thread_id]);
+
+              /* calculate grid */
+              msynth_grid_calc(0, r, theta, B[thread_id], grid_p[thread_id]);
 
               if (grid_X)
                 {
                   for (k = 0; k < nphi; ++k)
                     {
-                      grid_X[CIDX3(i,nr,j,ntheta,k,nphi)] = gsl_matrix_get(B, k, 0);
-                      grid_Y[CIDX3(i,nr,j,ntheta,k,nphi)] = gsl_matrix_get(B, k, 1);
-                      grid_Z[CIDX3(i,nr,j,ntheta,k,nphi)] = gsl_matrix_get(B, k, 2);
+                      grid_X[CIDX3(i,nr,j,ntheta,k,nphi)] = gsl_matrix_get(B[thread_id], k, 0);
+                      grid_Y[CIDX3(i,nr,j,ntheta,k,nphi)] = gsl_matrix_get(B[thread_id], k, 1);
+                      grid_Z[CIDX3(i,nr,j,ntheta,k,nphi)] = gsl_matrix_get(B[thread_id], k, 2);
                     }
                 }
 
@@ -159,25 +186,53 @@ build_grid(const int naive, const size_t nr, const size_t ntheta, const size_t n
                * now, using the same Plm/dPlm arrays, calculate the mirror point about
                * the equator (r, pi - theta, phi_k)
                */
-              msynth_grid_calc2(r, theta, B, grid_p);
+              msynth_grid_calc(1, r, theta, B[thread_id], grid_p[thread_id]);
 
               if (grid_X)
                 {
                   for (k = 0; k < nphi; ++k)
                     {
-                      grid_X[CIDX3(i,nr,ntheta - j - 1,ntheta,k,nphi)] = gsl_matrix_get(B, k, 0);
-                      grid_Y[CIDX3(i,nr,ntheta - j - 1,ntheta,k,nphi)] = gsl_matrix_get(B, k, 1);
-                      grid_Z[CIDX3(i,nr,ntheta - j - 1,ntheta,k,nphi)] = gsl_matrix_get(B, k, 2);
+                      grid_X[CIDX3(i,nr,ntheta - j - 1,ntheta,k,nphi)] = gsl_matrix_get(B[thread_id], k, 0);
+                      grid_Y[CIDX3(i,nr,ntheta - j - 1,ntheta,k,nphi)] = gsl_matrix_get(B[thread_id], k, 1);
+                      grid_Z[CIDX3(i,nr,ntheta - j - 1,ntheta,k,nphi)] = gsl_matrix_get(B[thread_id], k, 2);
                     }
                 }
             }
+
+          if (thread_id == 0)
+            {
+              double progress = 0.0;
+              size_t l;
+
+              for (l = 0; l < (size_t) max_threads; ++l)
+                progress += omp_ntheta[l];
+
+              progress *= 2.0 / (double) ntheta;
+
+              /* print progress bar */
+              progress_bar(stderr, progress, 80);
+            }
+
+          omp_ntheta[thread_id]++;
         }
 
       gettimeofday(&tv1, NULL);
       *t = time_diff(tv0, tv1);
+
+      progress_bar(stderr, 1.0, 80);
+      fprintf(stderr, "\n");
     }
 
-  gsl_matrix_free(B);
+  for (j = 0; j < (size_t) max_threads; ++j)
+    {
+      gsl_matrix_free(B[j]);
+      msynth_free(msynth_p[j]);
+      msynth_grid_free(grid_p[j]);
+    }
+
+  free(B);
+  free(msynth_p);
+  free(grid_p);
   free(theta_array);
 
   return 0;
@@ -187,7 +242,6 @@ int
 main(int argc, char *argv[])
 {
   msynth_workspace *w = NULL;
-  msynth_grid_workspace *grid_p;
   char *outfile = NULL;
   FILE *fp_out = NULL;
   int c;
@@ -195,21 +249,12 @@ main(int argc, char *argv[])
   size_t nphi = 2048;
   size_t nr = 7;
   size_t ntheta = 2;
-  double epoch = -1.0;
   size_t i;
 
-  while ((c = getopt(argc, argv, "a:b:c:e:f:g:l:m:w:o:h:p:n:")) != (-1))
+  while ((c = getopt(argc, argv, "b:f:l:m:o:n:")) != (-1))
     {
       switch (c)
         {
-          case 'c':
-            w = msynth_read(optarg);
-            break;
-
-          case 'a':
-            w = msynth_arnaud_read(optarg);
-            break;
-
           case 'b':
             w = msynth_ngdc720_read(optarg);
             break;
@@ -226,28 +271,8 @@ main(int argc, char *argv[])
             w = msynth_mf7_read(optarg);
             break;
 
-          case 'w':
-            w = msynth_wmm_read(optarg);
-            break;
-
-          case 'h':
-            w = msynth_swarm_read(optarg);
-            break;
-
-          case 'p':
-            w = msynth_pomme_read(optarg);
-            break;
-
-          case 'g':
-            w = msynth_ipgp_read(optarg);
-            break;
-
           case 'n':
             nmax = (size_t) atoi(optarg);
-            break;
-
-          case 'e':
-            epoch = atof(optarg);
             break;
 
           case 'o':
@@ -258,12 +283,9 @@ main(int argc, char *argv[])
 
   if (!w)
     {
-      fprintf(stderr, "Usage: %s [-c coef_file] [-m mf7_file] [-l bggm_file] [-w wmm_file] [-a arnaud_file] [-b NGDC720_file] [-f EMM_crust_file] [-h swarm_shc_file] [-p pomme_file] [-g ipgp_file] [-n nmax] [-e epoch] [-o output_file]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-m mf7_file] [-l bggm_file] [-b NGDC720_file] [-f EMM_crust_file] [-n nmax] [-o output_file]\n", argv[0]);
       exit(1);
     }
-
-  if (epoch < 0.0)
-    epoch = w->epochs[0];
 
   if (nmax != 0)
     msynth_set(1, nmax, w);
@@ -288,22 +310,20 @@ main(int argc, char *argv[])
       fprintf(fp_out, "# Field %zu: Z residual between FFT and naive grids (nT)\n", i++);
     }
 
-#if 0
+#if 1
 
   {
     double t_fft;
-    int naive = 0;
+    int naive = 1;
 
     nr = 100;
     ntheta = 8192;
     nphi = 16384;
 
-    grid_p = msynth_grid_alloc(nphi, w);
-
     fprintf(stderr, "main: building %zu-by-%zu-by-%zu grid [%s method]...",
             nr, ntheta, nphi,
             (naive == 1) ? "naive" : "FFT");
-    build_grid(naive, nr, ntheta, nphi, &t_fft, NULL, NULL, NULL, w, grid_p);
+    build_grid(naive, nr, ntheta, nphi, &t_fft, NULL, NULL, NULL, w);
     fprintf(stderr, "done (%g seconds)\n", t_fft);
   }
 
@@ -317,7 +337,6 @@ main(int argc, char *argv[])
       double t_fft, t_naive;
 
       nphi = 1 << i;
-      grid_p = msynth_grid_alloc(nphi, w);
 
       for (ntheta = 10; ntheta <= 100; ntheta += 10)
         {
@@ -330,11 +349,11 @@ main(int argc, char *argv[])
           double *grid_naive_Z = malloc(ntot * sizeof(double));
 
           fprintf(stderr, "main: building %zu-by-%zu-by-%zu grid [FFT method]...", nr, ntheta, nphi);
-          build_grid(0, nr, ntheta, nphi, &t_fft, grid_fft_X, grid_fft_Y, grid_fft_Z, w, grid_p);
+          build_grid(0, nr, ntheta, nphi, &t_fft, grid_fft_X, grid_fft_Y, grid_fft_Z, w );
           fprintf(stderr, "done (%g seconds)\n", t_fft);
 
           fprintf(stderr, "main: building %zu-by-%zu-by-%zu grid [naive method]...", nr, ntheta, nphi);
-          build_grid(1, nr, ntheta, nphi, &t_naive, grid_naive_X, grid_naive_Y, grid_naive_Z, w, grid_p);
+          build_grid(1, nr, ntheta, nphi, &t_naive, grid_naive_X, grid_naive_Y, grid_naive_Z, w);
           fprintf(stderr, "done (%g seconds)\n", t_naive);
 
           if (fp_out)
@@ -379,8 +398,6 @@ main(int argc, char *argv[])
           free(grid_naive_Y);
           free(grid_naive_Z);
         }
-
-      msynth_grid_free(grid_p);
     }
 
 #endif

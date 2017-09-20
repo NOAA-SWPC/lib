@@ -2,11 +2,12 @@
  * stage2a.c
  *
  * 1. Read DMSP file(s)
- * 2. Select quiet-time tracks (stage2_filter)
- * 3. Calculate scalar calibration parameters (scale factors, offsets, non-orthogonality angles)
+ * 2. Correct single point spikes with median filter
+ * 3. Correct jumps
+ * 4. Select quiet-time tracks (stage2_filter)
+ * 5. Calculate scalar calibration parameters (scale factors, offsets, non-orthogonality angles)
  *
- * Usage: ./stage2a <-i residual_index_file> <-o residual_output_file>
- *                  [-f] [-p parameter_file]
+ * Usage: ./stage2a <-i dmsp_index_file> <-o dmsp_output_file> [-p parameter_file]
  */
 
 #include <stdio.h>
@@ -285,7 +286,7 @@ static int
 print_data2(const char *filename, const satdata_mag *data, const track_workspace *w)
 {
   int s = 0;
-  const size_t downsample = 120;
+  const size_t downsample = 10;
   FILE *fp;
   size_t i, j;
   gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
@@ -605,14 +606,11 @@ main(int argc, char *argv[])
           /* calibrate points inside the time window [tmin,tmax] */
           stage2_scalar_calibrate(scal_file, data, track_p, coef, &rms);
 
+          /* apply calibration to data inside time window */
+          magcal_apply(coef, data);
+
           /* remove time flag */
           stage2_unflag_time(data);
-
-#if 0
-          fprintf(stderr, "main: applying calibration parameters to data...");
-          magcal_apply(coef, data);
-          fprintf(stderr, "done\n");
-#endif
 
           if (fp_param)
             {
@@ -622,7 +620,7 @@ main(int argc, char *argv[])
         }
     }
 
-#if 0
+#if 1
   fprintf(stderr, "main: correcting quaternions for satellite drift...");
   stage2_correct_quaternions(quat_file, data, track_p);
   fprintf(stderr, "done (data written to %s)\n", quat_file);

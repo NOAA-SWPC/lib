@@ -25,7 +25,7 @@ outdir="$DATAHOME/DMSP/MAG/Stage1"
 prog="$MYLIBHOME/track/stage1"
 
 # Extra flags (such as use CHAOS)
-extra_flags="-c"
+extra_flags="-h"
 
 echo "==== PROCESSING YEAR ${year} ===="
 

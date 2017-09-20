@@ -79,6 +79,7 @@ int msynth_eval2(const double t, const double r, const double theta,
 int msynth_eval_sum(const double t, const double epoch, const double *g,
                     const double *dg, const double *ddg, double B[4],
                     msynth_workspace *w);
+int msynth_gnm(const double t, double * gnm, const msynth_workspace * w);
 int msynth_eval_dBdt(const double t, const double r, const double theta,
                      const double phi, double dBdt[4],
                      msynth_workspace *w);

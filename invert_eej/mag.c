@@ -533,7 +533,16 @@ mag_proc(const mag_params *params, track_workspace *track_p,
         s = mag_sqfilt_scalar(w, w->sqfilt_scalar_workspace_p);
 
       if (s)
-        return s;
+        {
+          /*
+           * While the above call to mag_track_datagap() searches for data gaps
+           * in the latitude variable, its possible there is a data gap in
+           * the available vector measurements, which is detected by
+           * mag_sqfilt_vector()
+           */
+          ++nrejgap;
+          continue;
+        }
 
       /* invert for EEJ height-integrated current density */
       if (params->use_vector)
@@ -786,6 +795,9 @@ mag_compute_F1(const double t_eq, const double phi_eq, const double theta_eq, co
       /* if using vector data, make sure NEC measurement exists */
       if (params->use_vector && (data->flags[i] & SATDATA_FLG_NOVEC_NEC))
         continue;
+
+      if (i == sidx + 800)
+        printf("here\n");
 
       B_int[0] = SATDATA_VEC_X(data->B_main, i);
       B_int[1] = SATDATA_VEC_Y(data->B_main, i);

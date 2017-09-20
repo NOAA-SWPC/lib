@@ -8,13 +8,15 @@ calc_point_SOURCES = calc_point.c
 calc_point_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas
 
 grid_SOURCES = grid.c
+grid_CFLAGS = -fopenmp
+grid_LDFLAGS = -fopenmp
 grid_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas -lfftw3
 
 extrapolate_epoch_SOURCES = extrapolate_epoch.c
 extrapolate_epoch_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas
 
 print_map_SOURCES = print_map.c
-print_map_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas
+print_map_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas -lfftw3
 
 print_smatrix_SOURCES = print_smatrix.c
 print_smatrix_LDADD = libmsynth.la $(top_builddir)/common/libcommon.la -lm ~/usr/lib/libgsl.a -lgslcblas

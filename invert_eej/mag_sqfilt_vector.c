@@ -44,6 +44,8 @@ residual norm and solution norm
 
 2) On output, mag_p->track.{X,Y,Z}2 contains the B^(2) residuals and
 mag_p->track.Sq_model contains the (M + K) Sq model
+
+3) If a datagap is detected, this function returns -1
 */
 
 int
@@ -93,8 +95,13 @@ mag_sqfilt_vector(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
   B1_max[1] = track->Y1[i];
   B1_max[2] = track->Z1[i];
 
-  /* sanity check */
-  assert(fabs(qd_min + exclude_qdlat) < 3.0 && fabs(qd_max - exclude_qdlat) < 3.0);
+  /* check for data gap */
+  if ((fabs(qd_min + exclude_qdlat) > 3.0) ||
+      (fabs(qd_max - exclude_qdlat) > 3.0))
+    {
+      fprintf(stderr, "mag_sqfilt_vector: large data gap found, rejecting track\n");
+      return -1;
+    }
 
   /* build least squares matrix and RHS */
   for (i = 0; i < ntot; ++i)

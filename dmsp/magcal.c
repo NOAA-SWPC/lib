@@ -233,7 +233,9 @@ magcal_apply()
 Inputs: m    - calibration parameters
         data - satellite data
 
-Notes: data->B_VFM and data->F are updated with new values
+Notes:
+1) data->B_VFM and data->F are updated with new values
+2) Only data not flagged with SATDATA_FLG_TIME are processed
 */
 
 int
@@ -244,6 +246,10 @@ magcal_apply(const gsl_vector *m, satdata_mag *data)
   for (i = 0; i < data->n; ++i)
     {
       double E[3], B[4];
+
+      /* ignore flagged data */
+      if (data->flags[i] & SATDATA_FLG_TIME)
+        continue;
 
       E[0] = SATDATA_VEC_X(data->B_VFM, i);
       E[1] = SATDATA_VEC_Y(data->B_VFM, i);
