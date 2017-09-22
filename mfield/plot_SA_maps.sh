@@ -2,13 +2,13 @@
 
 set term pngcairo enh col size 1000,1000
 
-coefdir="coef"
+coefdir="coef_F17"
 mapprog="../msynth/print_map"
 plotprog="../msynth/plots/plotmap.py"
-outfile="F15.mp4"
+outfile="F17.mp4"
 
-#plot_args="-c "uT/yr^2" --cbmin -2 --cbmax 2 --cblev 9"
-plot_args="-c "uT/yr^2""
+plot_args="-c "uT/yr^2" --cbmin -1.5 --cbmax 1.5 --cblev 7"
+#plot_args="-c "uT/yr^2""
 
 # maximum SH degree for SA maps
 nmax="6"

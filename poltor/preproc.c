@@ -33,8 +33,9 @@
 #include <gsl/gsl_test.h>
 #include <gsl/gsl_statistics.h>
 
-#include "bin3d.h"
-#include "common.h"
+#include <common/bin3d.h>
+#include <common/common.h>
+
 #include "euler.h"
 #include "magdata.h"
 #include "track.h"

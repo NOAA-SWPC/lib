@@ -16,7 +16,7 @@
 
 #include <satdata/satdata.h>
 
-#include "common.h"
+#include <common/common.h>
 #include "track.h"
 
 #include "green.h"

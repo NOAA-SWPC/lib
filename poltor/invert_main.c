@@ -26,8 +26,9 @@
 #include <gsl/gsl_complex_math.h>
 #include <gsl/gsl_blas.h>
 
-#include "common.h"
-#include "oct.h"
+#include <common/common.h>
+#include <common/oct.h>
+
 #include "track.h"
 
 #include "poltor.h"

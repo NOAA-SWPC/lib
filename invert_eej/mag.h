@@ -12,6 +12,8 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_multifit.h>
 
+#include <msynth/msynth.h>
+
 #include "apex.h"
 #include "estist_calc.h"
 #include "green.h"
@@ -19,7 +21,6 @@
 #include "inverteef.h"
 #include "mageq.h"
 #include "magfit.h"
-#include "msynth.h"
 #include "pde.h"
 #include "pomme.h"
 #include "track.h"

@@ -12,7 +12,7 @@
 #include <gsl/gsl_blas.h>
 #include <gsl/gsl_multifit.h>
 
-#include "oct.h"
+#include <common/oct.h>
 
 static void
 random_matrix(gsl_matrix *m, const gsl_rng *r,

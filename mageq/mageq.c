@@ -20,8 +20,9 @@
 #include <gsl/gsl_min.h>
 #include <gsl/gsl_deriv.h>
 
+#include <msynth/msynth.h>
+
 #include "mageq.h"
-#include "msynth.h"
 
 static double mageq_func_Br(double x, void *params);
 static double mageq_func_lat(double phi, void *params);

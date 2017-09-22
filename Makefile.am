@@ -1,7 +1,6 @@
 # The order of these directories is important, as some
 # directories need to be built before others
 SUBDIRS =         \
-  common          \
   apex            \
   curvefit        \
   efi             \
@@ -15,7 +14,6 @@ SUBDIRS =         \
   lis             \
   lls             \
   msis            \
-  msynth          \
   mageq           \
   magfit          \
   peak            \

@@ -15,7 +15,8 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_blas.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "green.h"
 
 int

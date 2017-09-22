@@ -31,13 +31,14 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_blas.h>
 
+#include <common/bsearch.h>
+#include <common/common.h>
+#include <common/geo.h>
+#include <common/oct.h>
+
 #include "apex.h"
-#include "bsearch.h"
-#include "common.h"
-#include "geo.h"
 #include "green.h"
 #include "lapack_wrapper.h"
-#include "oct.h"
 #include "magdata.h"
 #include "poltor.h"
 

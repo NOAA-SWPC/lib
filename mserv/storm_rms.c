@@ -13,7 +13,8 @@
 
 #include <gsl/gsl_math.h>
 
-#include "bsearch.h"
+#include <common/bsearch.h>
+
 #include "grobs.h"
 
 /* IAGA data has bad baselines for DED in 2015, so compute mean

@@ -23,9 +23,10 @@
 #include <gsl/gsl_permutation.h>
 #include <gsl/gsl_linalg.h>
 
-#include "common.h"
-#include "interp.h"
-#include "oct.h"
+#include <common/common.h>
+#include <common/interp.h>
+#include <common/oct.h>
+
 #include "pca.h"
 #include "track.h"
 

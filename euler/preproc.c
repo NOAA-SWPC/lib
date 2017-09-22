@@ -36,7 +36,8 @@
 #include <gsl/gsl_test.h>
 #include <gsl/gsl_statistics.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "euler.h"
 #include "magdata.h"
 #include "track.h"

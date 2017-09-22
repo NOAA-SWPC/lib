@@ -12,8 +12,9 @@
 
 #include <gsl/gsl_math.h>
 
-#include "common.h"
-#include "interp.h"
+#include <common/common.h>
+#include <common/interp.h>
+
 #include "mag.h"
 #include "pde.h"
 

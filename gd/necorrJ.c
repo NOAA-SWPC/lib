@@ -27,12 +27,13 @@
 #include <gsl/gsl_sort_vector.h>
 
 #include "apex.h"
-#include "bin.h"
-#include "bin2d.h"
-#include "bsearch.h"
-#include "common.h"
+#include <common/bin.h>
+#include <common/bin2d.h>
+#include <common/bsearch.h>
+#include <common/common.h>
+#include <common/interp.h>
+
 #include "curvefit.h"
-#include "interp.h"
 #include "peak.h"
 #include "track.h"
 

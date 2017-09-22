@@ -1,60 +1,39 @@
-bin_PROGRAMS = compare print print_all print_efi print_lp print_lt print_crust print_alt print_tracks residuals plotsep swarmcdf2fday
+bin_PROGRAMS = print print_all print_efi print_lp print_lt print_crust print_alt print_tracks residuals plotsep swarmcdf2fday
 
-commonlibs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/track/libtrack.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ~/usr/lib/liblapack.a ~/usr/lib/libf77blas.a ~/usr/lib/libatlas.a -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas -lgfortran
+commonlibs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/track/libtrack.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la $(top_builddir)/apex/libapex.la -lm ~/usr/lib/liblapack.a ~/usr/lib/libf77blas.a ~/usr/lib/libatlas.a -lcommon -lmsynth -lcdf -lsatdata -lindices ~/usr/lib/libgsl.a -lgslcblas -lgfortran
 
 plotsep_SOURCES = plotsep.c
-plotsep_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm -lgfortran ${commonlibs}
-
-#plot_tracks_SOURCES = plot_tracks.c
-#plot_tracks_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/common/libcommon.la -lm ${commonlibs}
-
-#calc_crf2s_SOURCES = calc_crf2s.c
-#calc_crf2s_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/common/libcommon.la ${commonlibs}
-
-#calc_euler_SOURCES = calc_euler.c
-#calc_euler_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/common/libcommon.la ${commonlibs}
-
-#dynamo_SOURCES = dynamo.c
-#dynamo_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm -lgfortran ${commonlibs}
-
-#crust_SOURCES = crust.c
-#crust_LDADD = $(top_builddir)/euler/libeuler.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/track/libtrack.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
-
-compare_SOURCES = compare.c
-compare_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la $(top_builddir)/euler/libeuler.la -lm ${commonlibs}
+plotsep_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/apex/libapex.la -lcommon -lmsynth -lm -lgfortran ${commonlibs}
 
 print_SOURCES = print.c
-print_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
+print_LDADD = -lm ${commonlibs}
 
 print_tracks_SOURCES = print_tracks.c
-print_tracks_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
+print_tracks_LDADD = $(top_builddir)/track/libtrack.la -lm ${commonlibs}
 
 print_lt_SOURCES = print_lt.c
-print_lt_LDADD = $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
+print_lt_LDADD = -lm ${commonlibs}
 
 print_all_SOURCES = print_all.c
-print_all_LDADD = $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la $(top_builddir)/euler/libeuler.la -lm ${commonlibs}
+print_all_LDADD = $(top_builddir)/apex/libapex.la $(top_builddir)/euler/libeuler.la -lm ${commonlibs}
 
 print_alt_SOURCES = print_alt.c
-print_alt_LDADD = $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm ${commonlibs}
+print_alt_LDADD = $(top_builddir)/apex/libapex.la -lm ${commonlibs}
 
 print_efi_SOURCES = print_efi.c
-print_efi_LDADD = $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm ${commonlibs} -lgfortran
+print_efi_LDADD = $(top_builddir)/apex/libapex.la -lm ${commonlibs} -lgfortran
 
 print_lp_SOURCES = print_lp.c
-print_lp_LDADD = $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm ${commonlibs} -lgfortran
+print_lp_LDADD = $(top_builddir)/apex/libapex.la -lm ${commonlibs} -lgfortran
 
 print_crust_SOURCES = print_crust.c
-print_crust_LDADD = $(top_builddir)/apex/libapex.la $(top_builddir)/common/libcommon.la -lm ${commonlibs}
+print_crust_LDADD = $(top_builddir)/apex/libapex.la -lm ${commonlibs}
 
 residuals_SOURCES = residuals.c
 residuals_LDFLAGS = -fopenmp
-residuals_LDADD = $(top_builddir)/pomme/libpomme.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la ${commonlibs}
-
-#testcal_SOURCES = testcal.c magcal.c
-#testcal_LDADD = $(top_builddir)/track/libtrack.la $(top_builddir)/common/libcommon.la $(top_builddir)/msynth/libmsynth.la -lm ${commonlibs}
+residuals_LDADD = $(top_builddir)/pomme/libpomme.la ${commonlibs}
 
 swarmcdf2fday_SOURCES = swarmcdf2fday.c
-swarmcdf2fday_LDADD = $(top_builddir)/common/libcommon.la -lm ${commonlibs}
+swarmcdf2fday_LDADD = -lm ${commonlibs}
 
-AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/common -I$(top_builddir)/msynth -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos -I$(top_builddir)/magdata -I$(top_builddir)/pca -I$(top_builddir)/green -I$(top_builddir)/estist
+AM_CPPFLAGS = -I$(top_builddir)/pomme -I$(top_builddir)/apex -I$(top_builddir)/curvefit -I$(top_builddir)/track -I$(top_builddir)/euler -I$(top_builddir)/chaos -I$(top_builddir)/magdata -I$(top_builddir)/pca -I$(top_builddir)/green -I$(top_builddir)/estist

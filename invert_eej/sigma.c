@@ -20,7 +20,8 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_permutation.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "cond.h"
 #include "mageq.h"
 

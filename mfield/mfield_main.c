@@ -39,13 +39,14 @@
 
 #include <satdata/satdata.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <common/oct.h>
+#include <msynth/msynth.h>
+
 #include "euler.h"
-#include "oct.h"
 #include "magdata.h"
 #include "mfield.h"
 #include "mfield_synth.h"
-#include "msynth.h"
 #include "track.h"
 
 #define MAX_BUFFER           2048

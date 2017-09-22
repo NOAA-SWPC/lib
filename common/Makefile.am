@@ -1,10 +1,11 @@
-check_PROGRAMS = test test_zenith test_sunrise time2fday test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_ut1 doy2md test_sph
+check_PROGRAMS = test test_zenith test_sunrise time2fday time2year test_lunar test_lunar2 test_lunar_m2 test_doy test_interp test_omni time2str time2str2 time2str3 fday2str epoch2str test_geo test_julian test_ut1 doy2md test_sph
 
 doy2md_SOURCES = doy2md.c
 test_SOURCES = test.c
 test_zenith_SOURCES = test_zenith.c
 test_sunrise_SOURCES = test_sunrise.c
 time2fday_SOURCES = time2fday.c
+time2year_SOURCES = time2year.c
 time2str_SOURCES = time2str.c
 time2str2_SOURCES = time2str2.c
 time2str3_SOURCES = time2str3.c
@@ -63,6 +64,7 @@ test_LDADD = libcommon.la ${test_common_libs}
 test_zenith_LDADD = libcommon.la ${test_common_libs}
 test_sunrise_LDADD = libcommon.la ${test_common_libs}
 time2fday_LDADD = libcommon.la ${test_common_libs}
+time2year_LDADD = libcommon.la ${test_common_libs}
 time2str_LDADD = libcommon.la ${test_common_libs}
 time2str2_LDADD = libcommon.la ${test_common_libs}
 time2str3_LDADD = libcommon.la ${test_common_libs}

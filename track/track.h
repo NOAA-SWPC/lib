@@ -7,7 +7,7 @@
 
 #include <satdata/satdata.h>
 
-#include "msynth.h"
+#include <msynth/msynth.h>
 
 /* maximum number of tracks to store */
 #define TRACK_MAX            150000

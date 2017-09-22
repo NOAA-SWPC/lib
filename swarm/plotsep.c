@@ -25,8 +25,8 @@
 
 #include <satdata/satdata.h>
 
-#include "common.h"
-#include "msynth.h"
+#include <common/common.h>
+#include <msynth/msynth.h>
 #include "track.h"
 
 /* find track closest in time to t */

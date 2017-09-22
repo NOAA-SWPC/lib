@@ -20,7 +20,7 @@
 #include <gsl/gsl_sf_legendre.h>
 #include <gsl/gsl_vector.h>
 
-#include "common.h"
+#include <common/common.h>
 
 #include "poltor.h"
 #include "poltor_test.h"

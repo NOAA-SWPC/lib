@@ -10,8 +10,9 @@
 
 #include <gsl/gsl_math.h>
 
-#include "common.h"
-#include "msynth.h"
+#include <common/common.h>
+#include <msynth/msynth.h>
+
 #include "pomme.h"
 
 int

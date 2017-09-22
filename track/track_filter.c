@@ -16,9 +16,10 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_blas.h>
 
-#include "coord.h"
-#include "common.h"
-#include "interp.h"
+#include <common/coord.h>
+#include <common/common.h>
+#include <common/interp.h>
+
 #include "track.h"
 
 #define TRACK_FILTER_EXCLUDE_LAT        (20.0)

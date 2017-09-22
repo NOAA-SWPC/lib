@@ -24,10 +24,11 @@
 #include <satdata/satdata.h>
 #include <indices/indices.h>
 
-#include "bsearch.h"
-#include "common.h"
+#include <common/bsearch.h>
+#include <common/common.h>
+#include <msynth/msynth.h>
+
 #include "euler.h"
-#include "msynth.h"
 #include "pomme.h"
 
 typedef struct

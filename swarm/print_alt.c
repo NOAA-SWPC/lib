@@ -24,7 +24,7 @@
 #include <satdata/satdata.h>
 #include <indices/indices.h>
 
-#include "common.h"
+#include <common/common.h>
 
 int
 main(int argc, char *argv[])

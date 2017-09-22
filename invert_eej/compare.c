@@ -27,15 +27,15 @@
 #include <indices/indices.h>
 #include <satdata/eef.h>
 #include <satdata/satdata.h>
+#include <common/common.h>
+#include <common/interp.h>
+#include <msynth/msynth.h>
 
 #include "jicmag.h"
 #include "julia.h"
 
-#include "common.h"
 #include "curvefit.h"
 #include "efi.h"
-#include "interp.h"
-#include "msynth.h"
 
 /* allowed difference in measurement times (minutes) */
 #define TIME_WINDOW       (5.0)

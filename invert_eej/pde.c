@@ -27,10 +27,11 @@
 #include <gsl/gsl_spblas.h>
 #include <gsl/gsl_splinalg.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <common/oct.h>
+
 #include "mageq.h"
 #include "lisw.h"
-#include "oct.h"
 #include "superlu.h"
 
 #include "pde.h"

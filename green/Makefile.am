@@ -2,9 +2,9 @@ lib_LTLIBRARIES = libgreen.la
 
 libgreen_la_SOURCES = current.c green.c
 
-AM_CPPFLAGS = -I$(top_builddir)/common
+AM_CPPFLAGS =
 
 check_PROGRAMS = test
 
 test_SOURCES = test.c
-test_LDADD = libgreen.la $(top_builddir)/common/libcommon.la -lm -lgsl -lgslcblas
+test_LDADD = libgreen.la -lcommon -lm -lgsl -lgslcblas

@@ -14,7 +14,8 @@
 
 #include <gsl/gsl_math.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "grobs.h"
 
 static int iaga_read_HDZF(FILE *fp, grobs_data *data);

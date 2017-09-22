@@ -27,9 +27,8 @@
 #include <gsl/gsl_spline.h>
 
 #include <indices/indices.h>
-
-#include "common.h"
-#include "lse.h"
+#include <common/common.h>
+#include <common/lse.h>
 
 #include "inverteef.h"
 

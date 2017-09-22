@@ -19,9 +19,10 @@
 #include <gsl/gsl_interp.h>
 #include <gsl/gsl_spline.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <common/quat.h>
+
 #include "magdata.h"
-#include "quat.h"
 
 #include "euler.h"
 

@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "common.h"
-#include "geo.h"
+#include <common/common.h>
+#include <common/geo.h>
 
 #include "julia.h"
 

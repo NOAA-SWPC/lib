@@ -15,9 +15,10 @@
 #include <gsl/gsl_sf_legendre.h>
 #include <gsl/gsl_errno.h>
 
+#include <common/common.h>
+
 #include "green.h"
 
-#include "common.h"
 #include "io.h"
 #include "pca.h"
 

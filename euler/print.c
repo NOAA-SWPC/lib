@@ -15,7 +15,8 @@
 
 #include <gsl/gsl_math.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "magdata.h"
 
 #include "euler.h"

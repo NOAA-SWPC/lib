@@ -15,8 +15,8 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_rng.h>
 
-#include "geo.h"
-#include "msynth.h"
+#include <common/geo.h>
+#include <msynth/msynth.h>
 
 /* output lots of points for all years for general testing */
 #define TEST_ALL       1

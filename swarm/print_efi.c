@@ -23,8 +23,9 @@
 #include <satdata/satdata.h>
 #include <indices/indices.h>
 
+#include <common/common.h>
+
 #include "apex.h"
-#include "common.h"
 
 typedef struct
 {

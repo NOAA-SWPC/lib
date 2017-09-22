@@ -4,6 +4,6 @@ libefi_la_SOURCES = efi.c
 check_PROGRAMS = test
 
 test_SOURCES = test.c
-test_LDADD = libefi.la $(top_builddir)/common/libcommon.la -lm -lcdf -lgsl -lgslcblas -lsatdata -lindices
+test_LDADD = libefi.la -lcommon -lm -lcdf -lgsl -lgslcblas -lsatdata -lindices
 
-AM_CPPFLAGS = -I$(top_builddir)/common
+AM_CPPFLAGS =

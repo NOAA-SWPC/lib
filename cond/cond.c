@@ -21,11 +21,12 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_const_mksa.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <msynth/msynth.h>
+
 #include "cond.h"
 #include "iri.h"
 #include "msis.h"
-#include "msynth.h"
 
 static int cond_error_scaling(iri_result *iri, msis_result *msis,
                               cond_workspace *w);

@@ -23,15 +23,15 @@
 #include <gsl/gsl_errno.h>
 #include <gsl/gsl_eigen.h>
 
+#include <common/bsearch.h>
+#include <common/coord.h>
+#include <common/common.h>
+#include <common/geo.h>
+
 #include "apex.h"
-#include "bsearch.h"
-#include "coord.h"
-#include "common.h"
-#include "geo.h"
 #include "geod2geoc.h"
 #include "mag.h"
 #include "mageq.h"
-#include "oct.h"
 
 static int mag_eej_matrix_row(const double r, const double theta, const double phi,
                               const double b[3], gsl_vector *v, const mag_eej_workspace *w);

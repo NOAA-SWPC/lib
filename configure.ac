@@ -1,5 +1,5 @@
-AC_INIT([lib], [0.0.1])
-AC_CONFIG_SRCDIR([common/common.c])
+AC_INIT([lib], [0.0.2])
+AC_CONFIG_SRCDIR([swarm/print.c])
 
 AM_INIT_AUTOMAKE
 AM_MAINTAINER_MODE
@@ -21,7 +21,6 @@ AC_CONFIG_FILES([            \
   apex/Makefile              \
   apex/apex.h                \
   champ/Makefile             \
-  common/Makefile            \
   cond/Makefile              \
   curvefit/Makefile          \
   dmsp/Makefile              \
@@ -48,8 +47,6 @@ AC_CONFIG_FILES([            \
   mfield/Makefile            \
   mserv/Makefile             \
   msis/Makefile              \
-  msynth/Makefile            \
-  msynth/msynth.h            \
   peak/Makefile              \
   poltor/Makefile            \
   pomme/Makefile             \

@@ -21,10 +21,11 @@
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_multifit.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <common/oct.h>
+#include <msynth/msynth.h>
+
 #include "mageq.h"
-#include "msynth.h"
-#include "oct.h"
 #include "track.h"
 
 #include "magfit.h"

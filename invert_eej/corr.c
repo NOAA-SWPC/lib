@@ -26,8 +26,8 @@
 #include <satdata/eef.h>
 #include <satdata/satdata.h>
 
-#include "bin2d.h"
-#include "common.h"
+#include <common/bin2d.h>
+#include <common/common.h>
 
 static satdata_eef *
 profile_read(const char *filename)

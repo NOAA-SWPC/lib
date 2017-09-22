@@ -24,8 +24,8 @@
 #include <satdata/satdata.h>
 #include <indices/indices.h>
 
-#include "common.h"
-#include "msynth.h"
+#include <common/common.h>
+#include <msynth/msynth.h>
 #include "pomme.h"
 
 typedef struct

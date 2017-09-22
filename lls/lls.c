@@ -39,7 +39,8 @@
 #include <gsl/gsl_eigen.h>
 #include <gsl/gsl_multifit.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "lls.h"
 
 /*

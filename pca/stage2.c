@@ -26,7 +26,8 @@
 #include <fftw3.h>
 #include <lapacke/lapacke.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "green.h"
 #include "lapack_wrapper.h"
 

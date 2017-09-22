@@ -34,9 +34,10 @@
 #include <gsl/gsl_complex.h>
 #include <gsl/gsl_complex_math.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <common/oct.h>
+
 #include "lls.h"
-#include "oct.h"
 #include "magdata.h"
 #include "poltor.h"
 

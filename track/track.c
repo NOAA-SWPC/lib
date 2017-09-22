@@ -27,10 +27,11 @@
 
 #include <satdata/satdata.h>
 
-#include "common.h"
-#include "ema.h"
-#include "interp.h"
-#include "msynth.h"
+#include <common/common.h>
+#include <common/ema.h>
+#include <common/interp.h>
+#include <msynth/msynth.h>
+
 #include "track.h"
 
 static int track_calc_mf(const size_t start_idx, const size_t end_idx,

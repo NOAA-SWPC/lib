@@ -19,9 +19,9 @@
 #include <gsl/gsl_errno.h>
 
 #include <satdata/satdata.h>
+#include <common/oct.h>
 
 #include "magcal.h"
-#include "oct.h"
 
 static int magcal_f(const gsl_vector *m, void *params, gsl_vector *f);
 static int magcal_df(const gsl_vector *m, void *params, gsl_matrix *J);

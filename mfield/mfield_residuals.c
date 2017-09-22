@@ -13,9 +13,10 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_rstat.h>
 
+#include <msynth/msynth.h>
+
 #include "euler.h"
 #include "magdata.h"
-#include "msynth.h"
 
 #define QDLAT_CUTOFF       (55.0)
 

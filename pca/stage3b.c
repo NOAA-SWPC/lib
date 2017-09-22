@@ -29,7 +29,8 @@
 #include <gsl/gsl_eigen.h>
 #include <gsl/gsl_sf_legendre.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "green.h"
 #include "lapack_wrapper.h"
 

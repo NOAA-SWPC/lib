@@ -16,9 +16,10 @@
 #include <satdata/satdata.h>
 #include <gsl/gsl_math.h>
 
+#include <common/common.h>
+#include <msynth/msynth.h>
+
 #include "apex.h"
-#include "common.h"
-#include "msynth.h"
 #include "pomme.h"
 
 #include "track.h"

@@ -32,10 +32,11 @@
 
 #include <gsl/gsl_test.h>
 
+#include <common/oct.h>
+#include <common/quat.h>
+#include <common/ellipsoid.h>
+
 #include "euler.h"
-#include "oct.h"
-#include "quat.h"
-#include "ellipsoid.h"
 
 #if 1
 struct quat_data

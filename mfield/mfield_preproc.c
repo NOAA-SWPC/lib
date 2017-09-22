@@ -39,14 +39,15 @@
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_rng.h>
 
+#include <common/common.h>
+#include <common/solarpos.h>
+#include <msynth/msynth.h>
+
 #include "apex.h"
-#include "common.h"
 #include "euler.h"
 #include "magdata.h"
 #include "magfit.h"
-#include "msynth.h"
 #include "track.h"
-#include "solarpos.h"
 
 #include "mfield.h"
 #include "mfield_data.h"

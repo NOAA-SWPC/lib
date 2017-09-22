@@ -14,7 +14,7 @@
 #include <string.h>
 #include <math.h>
 
-#include "bin2d.h"
+#include <common/bin2d.h>
 
 #define MAX_BUFFER  2048
 

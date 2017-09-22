@@ -31,13 +31,14 @@
 #include <indices/indices.h>
 #include <satdata/satdata.h>
 
-#include "common.h"
-#include "eci.h"
+#include <common/common.h>
+#include <common/ellipsoid.h>
+#include <common/quat.h>
+#include <common/eci.h>
+
 #include "eph.h"
 #include "eph_data.h"
-#include "ellipsoid.h"
 #include "hermite.h"
-#include "quat.h"
 
 /* read DMSP SSM Fred Rich ASCII data file */
 size_t

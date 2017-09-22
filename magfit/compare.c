@@ -26,9 +26,10 @@
 
 #include <indices/indices.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <common/interp.h>
+
 #include "grobs.h"
-#include "interp.h"
 
 /* allowed difference in measurement times (minutes) */
 #define TIME_WINDOW       (5.0)

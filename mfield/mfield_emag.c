@@ -19,8 +19,9 @@
 
 #include <gsl/gsl_math.h>
 
-#include "common.h"
-#include "geo.h"
+#include <common/common.h>
+#include <common/geo.h>
+
 #include "magdata.h"
 
 /* from: zcat EMAG2_V2.xyz.gz | wc -l */

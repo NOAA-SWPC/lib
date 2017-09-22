@@ -25,10 +25,11 @@
 #include <gsl/gsl_multilarge.h>
 #include <gsl/gsl_blas.h>
 
-#include "common.h"
-#include "interp.h"
+#include <common/common.h>
+#include <common/interp.h>
+#include <common/oct.h>
+
 #include "green.h"
-#include "oct.h"
 #include "track.h"
 
 #include "magfit.h"

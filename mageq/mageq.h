@@ -10,7 +10,7 @@
 #ifndef INCLUDED_mageq_h
 #define INCLUDED_mageq_h
 
-#include "msynth.h"
+#include <msynth/msynth.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_min.h>

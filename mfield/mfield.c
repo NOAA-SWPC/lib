@@ -47,12 +47,13 @@
 
 #include "mfield_green.h"
 
-#include "common.h"
+#include <common/common.h>
+#include <common/oct.h>
+
 #include "euler.h"
 #include "lls.h"
 #include "lapack_wrapper.h"
 #include "mfield.h"
-#include "oct.h"
 #include "track_weight.h"
 
 static int mfield_green(const double r, const double theta, const double phi,

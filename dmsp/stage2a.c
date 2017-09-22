@@ -32,13 +32,13 @@
 
 #include <satdata/satdata.h>
 #include <indices/indices.h>
+#include <common/common.h>
+#include <common/quat.h>
+#include <msynth/msynth.h>
 
-#include "common.h"
 #include "eph.h"
 #include "magcal.h"
-#include "msynth.h"
 #include "track.h"
-#include "quat.h"
 
 #include "stage2_filter.c"
 #include "stage2_jumps.c"

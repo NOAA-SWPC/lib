@@ -24,8 +24,9 @@
 #include <satdata/satdata.h>
 #include <indices/indices.h>
 
-#include "common.h"
-#include "ellipsoid.h"
+#include <common/common.h>
+#include <common/ellipsoid.h>
+
 #include "pomme.h"
 
 /* given B in NEC, find component along geodetic vertical */

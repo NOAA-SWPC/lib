@@ -18,9 +18,10 @@
 #include <assert.h>
 #include <errno.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <msynth/msynth.h>
+
 #include "magdata.h"
-#include "msynth.h"
 
 /*
 magdata_print2()

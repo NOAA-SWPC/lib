@@ -15,9 +15,9 @@
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_rstat.h>
 
-#include "mfield_data.h"
+#include <common/common.h>
 
-#include "common.h"
+#include "mfield_data.h"
 
 /*
 mfield_data_alloc()

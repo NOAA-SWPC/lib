@@ -10,9 +10,10 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <msynth/msynth.h>
+
 #include "mfield.h"
-#include "msynth.h"
 
 int
 plot_field(msynth_workspace *w)

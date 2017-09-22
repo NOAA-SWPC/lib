@@ -12,9 +12,10 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_spmatrix.h>
 
+#include <msynth/msynth.h>
+
 #include "hwm.h"
 #include "mageq.h"
-#include "msynth.h"
 
 #include "sigma.h"
 

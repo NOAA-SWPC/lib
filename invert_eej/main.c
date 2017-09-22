@@ -10,9 +10,9 @@
 #include <libconfig.h>
 
 #include <satdata/satdata.h>
+#include <common/common.h>
 
 #include "cfg.h"
-#include "common.h"
 #include "mag.h"
 #include "mag_grad.h"
 #include "track.h"

@@ -19,12 +19,13 @@
 
 #include <satdata/satdata.h>
 
-#include "msynth.h"
+#include <msynth/msynth.h>
+#include <common/common.h>
+#include <common/solarpos.h>
+
 #include "track.h"
 
-#include "common.h"
 #include "pomme.h"
-#include "solarpos.h"
 
 #define SUBTRACT_MF7              1
 #define DOWNSAMPLE                20

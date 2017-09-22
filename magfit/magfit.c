@@ -32,8 +32,9 @@
 #include <gsl/gsl_multifit.h>
 #include <gsl/gsl_blas.h>
 
-#include "common.h"
-#include "interp.h"
+#include <common/common.h>
+#include <common/interp.h>
+
 #include "magfit.h"
 #include "track.h"
 

@@ -15,7 +15,7 @@
 
 #include <gsl/gsl_math.h>
 
-#include "msynth.h"
+#include <msynth/msynth.h>
 
 #define EMM_NMAX      15
 

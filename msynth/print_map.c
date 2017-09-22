@@ -58,6 +58,10 @@ print_map(const char *filename, const double epoch, msynth_workspace *w)
   msynth_grid_workspace *grid_sa_p;
   gsl_matrix *B_main = gsl_matrix_alloc(nphi, 3);
   gsl_matrix *B_sa = gsl_matrix_alloc(nphi, 3);
+  gsl_matrix *X_main = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *Y_main = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *Z_main = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *Z_sa = gsl_matrix_alloc(nphi, ntheta);
   double *coef = malloc(w->nnm * sizeof(double));
   double lon, lat;
   FILE *fp;
@@ -93,40 +97,60 @@ print_map(const char *filename, const double epoch, msynth_workspace *w)
       msynth_grid_calc(0, r, theta, B_main, grid_main_p);
       msynth_grid_calc(0, c, theta, B_sa, grid_sa_p);
 
-      /* print values for phi \in [-180:0] */
-      for (i = nphi / 2 + 1; i < nphi; ++i)
+      /* store values for later printing */
+      for (i = 0; i < nphi; ++i)
         {
           double Bx_main = gsl_matrix_get(B_main, i, 0);
           double By_main = gsl_matrix_get(B_main, i, 1);
           double Bz_main = gsl_matrix_get(B_main, i, 2);
           double Bz_sa = gsl_matrix_get(B_sa, i, 2);
-          double phi = 2.0 * M_PI * i / (double) nphi;
+
+          gsl_matrix_set(X_main, i, j, Bx_main);
+          gsl_matrix_set(Y_main, i, j, By_main);
+          gsl_matrix_set(Z_main, i, j, Bz_main);
+          gsl_matrix_set(Z_sa, i, j, Bz_sa);
+        }
+    }
+
+  /* now print data file */
+
+  /* print values for phi \in [-180:0] */
+  for (i = nphi / 2 + 1; i < nphi; ++i)
+    {
+      double phi = 2.0 * M_PI * i / (double) nphi;
+
+      for (j = 0; j < ntheta; ++j)
+        {
+          double theta = theta_min + j * theta_step;
 
           fprintf(fp, "%f %f %f %f %f %f\n",
                   wrap180(phi * 180.0 / M_PI),
                   90.0 - theta * 180.0 / M_PI,
-                  Bx_main,
-                  By_main,
-                  Bz_main,
-                  -Bz_sa * 1.0e-3);
+                  gsl_matrix_get(X_main, i, j),
+                  gsl_matrix_get(Y_main, i, j),
+                  gsl_matrix_get(Z_main, i, j),
+                  -gsl_matrix_get(Z_sa, i, j) * 1.0e-3);
         }
 
-      /* print values for phi \in [0:180] */
-      for (i = 0; i < nphi / 2; ++i)
+      fprintf(fp, "\n");
+    }
+
+  /* print values for phi \in [0:180] */
+  for (i = 0; i < nphi / 2; ++i)
+    {
+      double phi = 2.0 * M_PI * i / (double) nphi;
+
+      for (j = 0; j < ntheta; ++j)
         {
-          double Bx_main = gsl_matrix_get(B_main, i, 0);
-          double By_main = gsl_matrix_get(B_main, i, 1);
-          double Bz_main = gsl_matrix_get(B_main, i, 2);
-          double Bz_sa = gsl_matrix_get(B_sa, i, 2);
-          double phi = 2.0 * M_PI * i / (double) nphi;
+          double theta = theta_min + j * theta_step;
 
           fprintf(fp, "%f %f %f %f %f %f\n",
                   wrap180(phi * 180.0 / M_PI),
                   90.0 - theta * 180.0 / M_PI,
-                  Bx_main,
-                  By_main,
-                  Bz_main,
-                  -Bz_sa * 1.0e-3);
+                  gsl_matrix_get(X_main, i, j),
+                  gsl_matrix_get(Y_main, i, j),
+                  gsl_matrix_get(Z_main, i, j),
+                  -gsl_matrix_get(Z_sa, i, j) * 1.0e-3);
         }
 
       fprintf(fp, "\n");
@@ -137,6 +161,10 @@ print_map(const char *filename, const double epoch, msynth_workspace *w)
   free(coef);
   gsl_matrix_free(B_main);
   gsl_matrix_free(B_sa);
+  gsl_matrix_free(X_main);
+  gsl_matrix_free(Y_main);
+  gsl_matrix_free(Z_main);
+  gsl_matrix_free(Z_sa);
   msynth_grid_free(grid_main_p);
   msynth_grid_free(grid_sa_p);
 

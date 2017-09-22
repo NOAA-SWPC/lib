@@ -12,7 +12,8 @@
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_blas.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "euler.h"
 #include "magdata.h"
 

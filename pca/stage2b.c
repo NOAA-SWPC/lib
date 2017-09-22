@@ -24,10 +24,11 @@
 #include <fftw3.h>
 #include <lapacke/lapacke.h>
 
-#include "common.h"
+#include <common/common.h>
+#include <common/oct.h>
+
 #include "green.h"
 #include "lapack_wrapper.h"
-#include "oct.h"
 
 #include "io.h"
 #include "pca.h"

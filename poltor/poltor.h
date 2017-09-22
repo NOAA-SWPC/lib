@@ -11,7 +11,8 @@
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_integration.h>
 
-#include "bin2d.h"
+#include <common/bin2d.h>
+
 #include "lls.h"
 #include "magdata.h"
 #include "track_weight.h"

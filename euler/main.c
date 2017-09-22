@@ -22,8 +22,9 @@
 
 #include <satdata/satdata.h>
 
-#include "common.h"
-#include "oct.h"
+#include <common/common.h>
+#include <common/oct.h>
+
 #include "magdata.h"
 
 #include "euler_calc.h"

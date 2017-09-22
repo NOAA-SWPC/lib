@@ -14,9 +14,10 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 
+#include <msynth/msynth.h>
+#include <common/oct.h>
+
 #include "euler.h"
-#include "msynth.h"
-#include "oct.h"
 
 #include "mfield.h"
 #include "mfield_synth.h"

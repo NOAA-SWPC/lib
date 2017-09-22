@@ -18,7 +18,8 @@
 
 #include <satdata/satdata.h>
 
-#include "common.h"
+#include <common/common.h>
+
 #include "track_weight.h"
 
 static double matrix_sum(const gsl_matrix *A);

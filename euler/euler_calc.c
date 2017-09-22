@@ -33,9 +33,10 @@
 #include <gsl/gsl_multifit_nlin.h>
 #include <gsl/gsl_blas.h>
 
-#include "common.h"
-#include "eci.h"
-#include "ellipsoid.h"
+#include <common/common.h>
+#include <common/eci.h>
+#include <common/ellipsoid.h>
+
 #include "magdata.h"
 
 #include "euler.h"

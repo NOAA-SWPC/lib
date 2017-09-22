@@ -18,8 +18,8 @@
 
 #include <satdata/satdata.h>
 
-#include "common.h"
-#include "eci.h"
+#include <common/common.h>
+#include <common/eci.h>
 
 #include "eph.h"
 #include "eph_data.h"
