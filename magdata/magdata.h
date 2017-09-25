@@ -194,6 +194,41 @@ typedef struct
   int model_ext;        /* include external field in B_model */
 } magdata_params;
 
+/* parameters for preprocessing data */
+typedef struct
+{
+  size_t downsample;      /* downsampling factor */
+  double min_LT;          /* minimum local time for field modeling */
+  double max_LT;          /* maximum local time for field modeling */
+  double euler_min_LT;    /* minimum local time for Euler angles */
+  double euler_max_LT;    /* maximum local time for Euler angles */
+  double rms_thresh[4];   /* rms thresholds (X,Y,Z,F) (nT) */
+  double qdlat_preproc_cutoff; /* QD latitude cutoff for high-latitudes */
+  double min_zenith;      /* minimum zenith angle for high-latitude data selection */
+  size_t gradient_ns;     /* number of seconds between N/S gradient samples */
+  int fit_track_RC;       /* fit track-by-track RC field */
+
+  double season_min;      /* season minimum [0,366] */
+  double season_max;      /* season maximum [0,366] */
+  double season_min2;     /* season minimum [0,366] */
+  double season_max2;     /* season maximum [0,366] */
+
+  double gradew_dphi_max; /* maximum longitude distance for east-west gradients (degrees) */
+  double gradew_dlat_max; /* maximum latitude distance for east-west gradients (degrees) */
+  double gradew_dt_max;   /* maximum time difference for east-west gradients (seconds) */
+
+  int subtract_B_main;    /* subtract a-priori main field from data */
+  int subtract_B_crust;   /* subtract a-priori crustal field from data */
+  int subtract_B_ext;     /* subtract a-priori external field from data */
+
+  double max_kp;          /* maximum kp */
+  double max_dRC;         /* maximum dRC/dt (nT/hour) */
+
+  int pb_flag;            /* flag tracks with plasma bubble signatures */
+  double pb_qdmax;        /* QD latitude range for PB search */
+  double pb_thresh[4];    /* threshold values for N/S gradients (X,Y,Z,F) (nT) */
+} magdata_preprocess_parameters;
+
 /*
  * Prototypes
  */
@@ -228,5 +263,15 @@ int magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
                           const satdata_mag *data2, const track_workspace *track_p2,
                           magdata *mdata, size_t ntype[6]);
 satdata_mag *magdata_mag2sat(const magdata *mdata);
+
+/* preproc.c */
+magdata_preprocess_parameters magdata_preprocess_default_parameters(void);
+int magdata_preprocess_parse(const char *filename, magdata_preprocess_parameters *params);
+int magdata_preprocess_check(magdata_preprocess_parameters * params);
+track_workspace *magdata_preprocess(const magdata_preprocess_parameters *params, const size_t magdata_flags,
+                                    satdata_mag *data);
+magdata *magdata_preprocess_fill(const size_t magdata_flags, const satdata_mag *data, const track_workspace *track_p,
+                                 const size_t magdata_flags2, const satdata_mag *data2, const track_workspace *track_p2,
+                                 magdata_preprocess_parameters * preproc_params);
 
 #endif /* INCLUDED_magdata_h */
