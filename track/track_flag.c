@@ -383,8 +383,7 @@ track_flag_lt(const double lt_min, const double lt_max, size_t *ndata_flagged,
 
 /*
 track_flag_season()
-  Flag any tracks outside of [lt_min,lt_max]. The UT for
-comparison is the UT at the time of the equator crossing
+  Flag any tracks due to season.
 
 Inputs: callback - callback function to check whether a given
                    doy argument is acceptable; return values:
@@ -393,7 +392,7 @@ Inputs: callback - callback function to check whether a given
         data     - satellite data
         w        - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
@@ -421,11 +420,8 @@ track_flag_season(int (*callback)(const double doy, const void *params),
         }
     }
 
-  fprintf(stderr, "track_flag_season: flagged %zu/%zu (%.1f%%) tracks due to season\n",
-          ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
-
-  return nflagged;
-} /* track_flag_season() */
+  return ntrack_flagged;
+}
 
 /*
 track_flag_lon()

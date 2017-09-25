@@ -3,7 +3,7 @@
 # Run magnetic field model on all epochs
 
 start_epoch="2010.5"
-end_epoch="2014.5"
+end_epoch="2015.5"
 numit="5"
 
 input_files="data/F17.dat"

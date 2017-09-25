@@ -10,9 +10,9 @@
 #include <assert.h>
 
 #include <gsl/gsl_math.h>
+#include <common/geo.h>
 
 #include "apex.h"
-#include "geo.h"
 
 void makeapxsh_(char *datafilein, float *epochgridin, int *nepochin,
                 int *lmaxin, int *mmaxin, int *nmaxin);
