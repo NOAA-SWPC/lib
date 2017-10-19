@@ -567,113 +567,165 @@ magdata_calc(magdata *data)
 magdata_print()
   Output data points in ASCII format
 
-Inputs: filename - where to store data
-        data     - data
+Inputs: prefix - where to store data
+        data   - data
 
 Return: success/error
 */
 
 int
-magdata_print(const char *filename, const magdata *data)
+magdata_print(const char *prefix, const magdata *data)
 {
   int s = 0;
-  size_t i;
-  FILE *fp;
+  size_t i, j;
+  FILE *fp[11];
+  size_t n = 11; /* number of files to write */
+  char buf[2048];
 
-  fp = fopen(filename, "w");
-  if (!fp)
+  sprintf(buf, "%s_X.dat", prefix);
+  fp[0] = fopen(buf, "w");
+
+  sprintf(buf, "%s_Y.dat", prefix);
+  fp[1] = fopen(buf, "w");
+
+  sprintf(buf, "%s_Z.dat", prefix);
+  fp[2] = fopen(buf, "w");
+
+  sprintf(buf, "%s_F.dat", prefix);
+  fp[3] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DX_NS.dat", prefix);
+  fp[4] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DY_NS.dat", prefix);
+  fp[5] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DZ_NS.dat", prefix);
+  fp[6] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DF_NS.dat", prefix);
+  fp[7] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DX_EW.dat", prefix);
+  fp[8] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DY_EW.dat", prefix);
+  fp[9] = fopen(buf, "w");
+
+  sprintf(buf, "%s_DZ_EW.dat", prefix);
+  fp[10] = fopen(buf, "w");
+
+  for (i = 0; i < n; ++i)
     {
-      fprintf(stderr, "magdata_print: unable to open %s: %s\n",
-              filename, strerror(errno));
-      return -1;
+      if (!fp[i])
+        {
+          fprintf(stderr, "magdata_print: unable to open file %zu: %s\n",
+                  i, strerror(errno));
+          return -1;
+        }
     }
 
-  i = 1;
-  fprintf(fp, "# Field %zu: timestamp\n", i++);
-  fprintf(fp, "# Field %zu: time (decimal years)\n", i++);
-  fprintf(fp, "# Field %zu: UT (hours)\n", i++);
-  fprintf(fp, "# Field %zu: local time (hours)\n", i++);
-  fprintf(fp, "# Field %zu: season (doy)\n", i++);
-  fprintf(fp, "# Field %zu: geocentric radius (km)\n", i++);
-  fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: geocentric latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: QD latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: spatial weight\n", i++);
-  fprintf(fp, "# Field %zu: NEC X residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC Y residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC Z residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: F residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC DX residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC DY residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: NEC DZ residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: DF residual (nT)\n", i++);
-  fprintf(fp, "# Field %zu: electron density data (cm^{-3})\n", i++);
-  fprintf(fp, "# Field %zu: X diamagnetic correction (nT)\n", i++);
-  fprintf(fp, "# Field %zu: satellite direction (+/-1)\n", i++);
-  fprintf(fp, "# Field %zu: scalar data used in MF fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: vector data used in MF fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: vector data used in Euler angle fitting (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: vector measurement available (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: scalar along-track gradient available (1 or 0)\n", i++);
-  fprintf(fp, "# Field %zu: vector along-track gradient available (1 or 0)\n", i++);
+  for (i = 0; i < n; ++i)
+    {
+      j = 1;
+      fprintf(fp[i], "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", j++);
+      fprintf(fp[i], "# Field %zu: time (decimal year)\n", j++);
+      fprintf(fp[i], "# Field %zu: local time (hours)\n", j++);
+      fprintf(fp[i], "# Field %zu: season (day of year)\n", j++);
+      fprintf(fp[i], "# Field %zu: longitude (degrees)\n", j++);
+      fprintf(fp[i], "# Field %zu: geocentric latitude (degrees)\n", j++);
+      fprintf(fp[i], "# Field %zu: QD latitude (degrees)\n", j++);
+      fprintf(fp[i], "# Field %zu: geocentric radius (km)\n", j++);
+      fprintf(fp[i], "# Field %zu: satellite direction (+/- 1)\n", j++);
+    }
+
+  fprintf(fp[0], "# Field %zu: X residual (nT)\n", j);
+  fprintf(fp[1], "# Field %zu: Y residual (nT)\n", j);
+  fprintf(fp[2], "# Field %zu: Z residual (nT)\n", j);
+  fprintf(fp[3], "# Field %zu: F residual (nT)\n", j);
+  fprintf(fp[4], "# Field %zu: DX N/S residual (nT)\n", j);
+  fprintf(fp[5], "# Field %zu: DY N/S residual (nT)\n", j);
+  fprintf(fp[6], "# Field %zu: DZ N/S residual (nT)\n", j);
+  fprintf(fp[7], "# Field %zu: DF N/S residual (nT)\n", j);
+  fprintf(fp[8], "# Field %zu: DX E/W residual (nT)\n", j);
+  fprintf(fp[9], "# Field %zu: DY E/W residual (nT)\n", j);
+  fprintf(fp[10], "# Field %zu: DZ E/W residual (nT)\n", j);
 
   for (i = 0; i < data->n; ++i)
     {
       time_t unix_time = satdata_epoch2timet(data->t[i]);
       double lt = get_localtime(unix_time, data->phi[i]);
       double ut = get_ut(unix_time);
-      double b_luhr[4], Te, Ti, B_nec[4];
+      double t = satdata_epoch2year(data->t[i]);
+      double doy = get_season(unix_time);
+      double phi = wrap180(data->phi[i] * 180.0 / M_PI);
+      double lat = 90.0 - data->theta[i] * 180.0 / M_PI;
       double B[4], dB[4];
 
-      if (data->flags[i] & MAGDATA_FLG_DISCARD)
+      if (MAGDATA_Discarded(data->flags[i]))
         continue;
-
-      Te = 1500.0;
-      Ti = 1000.0;
-      B_nec[0] = data->Bx_nec[i];
-      B_nec[1] = data->By_nec[i];
-      B_nec[2] = data->Bz_nec[i];
-      B_nec[3] = data->F[i];
-      magdata_luhr(data->ne[i], Te, Ti, B_nec, b_luhr);
 
       magdata_residual(i, B, data);
       magdata_residual_dB_ns(i, dB, data);
 
-      fprintf(fp, "%ld %f %.2f %.2f %.1f %.2f %.3f %.3f %.3f %.3f %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %.5e %d %d %d %d %d %d %d\n",
-              unix_time,
-              satdata_epoch2year(data->t[i]),
-              ut,
-              lt,
-              get_season(unix_time),
-              data->r[i],
-              wrap180(data->phi[i] * 180.0 / M_PI),
-              90.0 - data->theta[i] * 180.0 / M_PI,
-              data->qdlat[i],
-              data->weights[i],
-              B[0],
-              B[1],
-              B[2],
-              B[3],
-              data->satdir[i] * dB[0],
-              data->satdir[i] * dB[1],
-              data->satdir[i] * dB[2],
-              data->satdir[i] * dB[3],
-              data->ne[i],
-              b_luhr[0],
-              data->satdir[i],
-              ((data->flags[i] & MAGDATA_FLG_FIT_MF) && (data->flags[i] & MAGDATA_FLG_F)) ? 1 : 0,
-              ((data->flags[i] & MAGDATA_FLG_FIT_MF) && (data->flags[i] & MAGDATA_FLG_Z)) ? 1 : 0,
-              data->flags[i] & MAGDATA_FLG_FIT_EULER ? 1 : 0,
-              MAGDATA_ExistVector(data->flags[i]),
-              data->flags[i] & MAGDATA_FLG_DF_NS ? 1 : 0,
-              data->flags[i] & MAGDATA_FLG_DZ_NS ? 1 : 0);
+      if (MAGDATA_ExistX(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[0], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[0]);
+        }
+
+      if (MAGDATA_ExistY(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[1], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[1]);
+        }
+
+      if (MAGDATA_ExistZ(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[2], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[2]);
+        }
+
+      if (MAGDATA_ExistScalar(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[3], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[3]);
+        }
+
+      if (MAGDATA_ExistDX_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[4], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[0]);
+        }
+
+      if (MAGDATA_ExistDY_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[5], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[1]);
+        }
+
+      if (MAGDATA_ExistDZ_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[6], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[2]);
+        }
+
+      if (MAGDATA_ExistDF_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        {
+          fprintf(fp[7], "%ld %f %6.3f %8.3f %10.4f %10.4f %10.4f %10.4f %2d %.2f\n",
+                  unix_time, t, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[3]);
+        }
 
       /* separate individual tracks with newlines */
       if (i < data->n - 1 && data->flags[i + 1] & MAGDATA_FLG_TRACK_START)
-        fprintf(fp, "\n\n");
+        {
+          for (j = 0; j < n; ++j)
+            fprintf(fp[j], "\n\n");
+        }
     }
 
-  fclose(fp);
+  for (i = 0; i < n; ++i)
+    fclose(fp[i]);
 
   return s;
 } /* magdata_print() */
@@ -830,9 +882,6 @@ magdata_map(const char *prefix, const magdata *data)
           fprintf(fp[9], "%f %.4f %.4f %.4f %.4f\n",
                   t, phi, lat, data->qdlat[i], data->r[i]);
         }
-#if 0
-              MAGDATA_FitEuler(data->flags[i]) ? 1 : 0,
-#endif
     }
 
   for (i = 0; i < n; ++i)

@@ -2,12 +2,14 @@
 
 set term pngcairo enh col size 1000,1000
 
-coefdir="coef_F17"
-mapprog="../msynth/print_map"
-plotprog="../msynth/plots/plotmap.py"
-outfile="F17.mp4"
+mapprog="$DATAHOME/palken/msynth-1.0/src/print_map"
+plotprog="$DATAHOME/palken/msynth-1.0/src/plots/plotmap2.py"
 
-plot_args="-c "uT/yr^2" --cbmin -1.5 --cbmax 1.5 --cblev 7"
+coefdir="coef_F17"
+outfile="F17.mp4"
+title="DMSP F-17"
+
+plot_args="-c "uT/yr^2" --cbmin -1.0 --cbmax 1.0 --cbtics 5 --cblev 1000"
 #plot_args="-c "uT/yr^2""
 
 # maximum SH degree for SA maps
@@ -22,7 +24,7 @@ for f in $(ls ${coefdir}/coef*.txt); do
   echo "generating SA map for $f..."
   tmpfile=$(mktemp)
   ${mapprog} -c $f -n $nmax -o $tmpfile
-  python ${plotprog} -i $tmpfile -o ${outfile} -t "Epoch ${epoch}" ${plot_args}
+  python ${plotprog} -i $tmpfile -o ${outfile} -t "${title}, epoch ${epoch}" ${plot_args}
   rm -f $tmpfile
   idx=$((idx+1))
 done

@@ -120,8 +120,8 @@ int
 main(int argc, char *argv[])
 {
   int status;
-  char *datamap_file = "datamap.dat";
-  char *data_file = "data.dat";
+  char *datamap_prefix = "output/datamap";
+  char *data_prefix = "output/data";
   char *output_file = NULL;
   char *config_file = "PT_preproc.cfg";
   satdata_mag *data = NULL;
@@ -171,7 +171,7 @@ main(int argc, char *argv[])
           /* Swarm ASM-V */
           case 'a':
             data = read_swarm(optarg, 0);
-            magdata_flags = MAGDATA_GLOBFLG_EULER;
+            /*magdata_flags = MAGDATA_GLOBFLG_EULER;*/
             magdata_euler_flags = EULER_FLG_ZYZ | EULER_FLG_RINV;
             flag_vec_rms = 0; /* no NEC data for rms flagging */
             break;
@@ -179,14 +179,14 @@ main(int argc, char *argv[])
           /* Swarm official */
           case 's':
             data = read_swarm(optarg, 0);
-            magdata_flags = MAGDATA_GLOBFLG_EULER;
+            /*magdata_flags = MAGDATA_GLOBFLG_EULER;*/
             magdata_euler_flags = EULER_FLG_ZYX;
             break;
 
           /* For E/W gradients */
           case 't':
             data2 = read_swarm(optarg, 0);
-            magdata_flags2 = MAGDATA_GLOBFLG_EULER;
+            /*magdata_flags2 = MAGDATA_GLOBFLG_EULER;*/
             break;
 
           case 'c':
@@ -316,13 +316,13 @@ main(int argc, char *argv[])
   /* set Euler convention flags */
   magdata_set_euler(magdata_euler_flags, mdata);
 
-#if 0
-  fprintf(stderr, "main: writing data to %s...", data_file);
-  magdata_print(data_file, mdata);
+#if 1
+  fprintf(stderr, "main: writing data to %s...", data_prefix);
+  magdata_print(data_prefix, mdata);
   fprintf(stderr, "done\n");
 
-  fprintf(stderr, "main: writing data map to %s...", datamap_file);
-  magdata_map(datamap_file, mdata);
+  fprintf(stderr, "main: writing data map to %s...", datamap_prefix);
+  magdata_map(datamap_prefix, mdata);
   fprintf(stderr, "done\n");
 #endif
 

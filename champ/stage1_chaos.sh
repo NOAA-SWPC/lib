@@ -7,16 +7,13 @@
 # load environment variables
 . $HOME/.bashrc
 
-# Keep every nth sample
-down_sample="1"
-
 cdfdir="/data/CHAMP/L3"
 outdir="/data/CHAMP/Stage1_CHAOS"
 
-prog="/data/palken/lib/champ/stage1"
+prog="/data/palken/lib/track/stage1"
 
 # Use CHAOS external field model?
-extra_flags="-c"
+extra_flags="-h"
 
 year=""
 if test -n "$1"; then
@@ -43,7 +40,7 @@ for yr in ${yearlist}; do
     # Check first if we already processed this file
     if [[ ! -f "${outfile}" ]]; then
       echo "Processing: ${file}"
-      ${prog} -d ${down_sample} -i ${file} -o ${outfile} ${extra_flags}
+      ${prog} -c ${file} -o ${outfile} ${extra_flags}
     fi
   done
 done

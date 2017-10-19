@@ -14,6 +14,8 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_statistics.h>
 #include <gsl/gsl_rstat.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
 
 #include <common/common.h>
 
@@ -676,4 +678,40 @@ mfield_data_ptr(const size_t idx, const mfield_data_workspace *w)
     }
 
   return w->mdata[idx];
+}
+
+/*
+mfield_data_add_noise()
+  For WMM simulation studies - add random Gaussian noise to vector
+data
+
+Inputs: sigma - standard deviation of noise (nT)
+        w     - workspace
+*/
+
+int
+mfield_data_add_noise(const double sigma, mfield_data_workspace * w)
+{
+  int s = 0;
+  size_t i, j;
+  gsl_rng *r = gsl_rng_alloc(gsl_rng_default);
+
+  for (i = 0; i < w->nsources; ++i)
+    {
+      magdata *mptr = mfield_data_ptr(i, w);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          mptr->Bx_vfm[j] += gsl_ran_gaussian(r, sigma);
+          mptr->By_vfm[j] += gsl_ran_gaussian(r, sigma);
+          mptr->Bz_vfm[j] += gsl_ran_gaussian(r, sigma);
+
+          /* recompute scalar field measurement */
+          mptr->F[j] = gsl_hypot3(mptr->Bx_vfm[j], mptr->By_vfm[j], mptr->Bz_vfm[j]);
+        }
+    }
+
+  gsl_rng_free(r);
+
+  return s;
 }

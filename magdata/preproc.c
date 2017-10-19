@@ -66,6 +66,8 @@ magdata_preprocess_default_parameters(void)
   params.season_max = -1.0;
   params.season_min2 = -1.0;
   params.season_max2 = -1.0;
+  params.rmin = -1.0;
+  params.rmax = -1.0;
   params.rms_thresh[0] = -1.0;
   params.rms_thresh[1] = -1.0;
   params.rms_thresh[2] = -1.0;
@@ -142,6 +144,10 @@ magdata_preprocess_parse(const char *filename, magdata_preprocess_parameters *pa
     params->season_min2 = fval;
   if (config_lookup_float(&cfg, "season_max2", &fval))
     params->season_max2 = fval;
+  if (config_lookup_float(&cfg, "alt_min", &fval))
+    params->rmin = R_EARTH_KM + fval;
+  if (config_lookup_float(&cfg, "alt_max", &fval))
+    params->rmax = R_EARTH_KM + fval;
 
   if (config_lookup_int(&cfg, "downsample", &ival))
     params->downsample = (size_t) ival;
@@ -216,18 +222,6 @@ magdata_preprocess_check(magdata_preprocess_parameters * params)
   if (params->max_dRC <= 0.0)
     {
       fprintf(stderr, "magdata_preprocess_check: max_dRC must be > 0\n");
-      ++s;
-    }
-
-  if (params->euler_min_LT < 0.0)
-    {
-      fprintf(stderr, "magdata_preprocess_check: euler_min_LT must be > 0\n");
-      ++s;
-    }
-
-  if (params->euler_max_LT < 0.0)
-    {
-      fprintf(stderr, "magdata_preprocess_check: euler_max_LT must be > 0\n");
       ++s;
     }
 

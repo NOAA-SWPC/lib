@@ -213,6 +213,9 @@ typedef struct
   double season_min2;     /* season minimum [0,366] */
   double season_max2;     /* season maximum [0,366] */
 
+  double rmin;            /* minimum radius (km) */
+  double rmax;            /* maximum radius (km) */
+
   double gradew_dphi_max; /* maximum longitude distance for east-west gradients (degrees) */
   double gradew_dlat_max; /* maximum latitude distance for east-west gradients (degrees) */
   double gradew_dt_max;   /* maximum time difference for east-west gradients (seconds) */
@@ -242,7 +245,7 @@ int magdata_add(const magdata_datum *datum, magdata *data);
 int magdata_init(magdata *data);
 int magdata_unit_weights(magdata *data);
 int magdata_calc(magdata *data);
-int magdata_print(const char *filename, const magdata *data);
+int magdata_print(const char *prefix, const magdata *data);
 int magdata_map(const char *prefix, const magdata *data);
 int magdata_residual(const size_t idx, double B[4], const magdata *data);
 int magdata_residual_ns(const size_t idx, double B[4], const magdata *data);

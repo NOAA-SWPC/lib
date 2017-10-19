@@ -583,6 +583,7 @@ magdata_preprocess_filter(const size_t magdata_flags, const magdata_preprocess_p
          nflagged_season,
          nflagged_pb,
          nflagged_LT,
+         nflagged_alt,
          nflagged_zenith,
          nflagged_IMF;
 
@@ -600,6 +601,24 @@ magdata_preprocess_filter(const size_t magdata_flags, const magdata_preprocess_p
   fprintf(stderr, "\t magdata_preprocess_filter: flagged %zu/%zu (%.1f%%) tracks due to season [%.1f,%.1f] / [%.1f,%.1f]\n",
           nflagged_season, track_p->n, (double) nflagged_season / (double) track_p->n * 100.0,
           params->season_min, params->season_max, params->season_min2, params->season_max2);
+
+  {
+    double alt_min, alt_max;
+
+    if (params->rmin < 0.0)
+      alt_min = -1.0;
+    else
+      alt_min = params->rmin - R_EARTH_KM;
+
+    if (params->rmax < 0.0)
+      alt_max = -1.0;
+    else
+      alt_max = params->rmax - R_EARTH_KM;
+
+    nflagged_alt = track_flag_meanalt(alt_min, alt_max, data, track_p);
+    fprintf(stderr, "\t magdata_preprocess_filter: flagged %zu/%zu (%.1f%%) tracks due to altitude [%.1f,%.1f] km range\n",
+            nflagged_alt, track_p->n, (double) nflagged_alt / (double) track_p->n * 100.0, alt_min, alt_max);
+  }
 
   nflagged_LT = magdata_flag_LT(magdata_flags, params, track_p, data);
   fprintf(stderr, "\t magdata_preprocess_filter: flagged %zu/%zu (%.1f%%) mid-latitude points due to LT [cutoff: %.1f deg]\n",

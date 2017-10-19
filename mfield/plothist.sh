@@ -12,37 +12,46 @@ dt=$(echo "scale=10; ${binsize} / 365.25" | bc)
 echo "prefix = ${prefix}"
 echo "bin size = ${binsize} [days]"
 
-for sat in $(seq 0 2); do
-  file="${prefix}.${sat}"
-  if [ ! -f ${file} ]; then
-    continue;
-  fi
-
-  echo "processing ${file}..."
+function proc
+{
+  file="$1"
+  outfile="$2"
 
   tmin=$(cat ${file} | datasel | awk '{print $1}' | head -1)
   tmax=$(cat ${file} | datasel | awk '{print $1}' | tail -1)
 
   nbins=$(echo "($tmax - $tmin) / $dt" | bc)
 
-  outfile_scal="hist_scal.sat${sat}"
-  outfile_vec_X="hist_vec_X.sat${sat}"
-  outfile_vec_Y="hist_vec_Y.sat${sat}"
-  outfile_vec_Z="hist_vec_Z.sat${sat}"
-  outfile_euler="hist_euler.sat${sat}"
+  echo "writing ${outfile}..."
+  cat ${file} | datasel | awk '{print $1}' | gsl-histogram $tmin $tmax $nbins > ${outfile}
+}
 
-  echo "writing ${outfile_scal}..."
-  cat ${file} | datasel -c 6 --eq 1 | awk '{print $1}' | gsl-histogram $tmin $tmax $nbins > ${outfile_scal}
+for sat in $(seq 0 2); do
+  fileF="${prefix}${sat}_F.dat"
+  if [ -f ${fileF} ]; then
+    echo "processing ${fileF}..."
+    proc ${fileF} "hist_scal.sat${sat}"
+  fi
 
-  echo "writing ${outfile_vec_X}..."
-  cat ${file} | datasel -c 7 --eq 1 | awk '{print $1}' | gsl-histogram $tmin $tmax $nbins > ${outfile_vec_X}
+  fileX="${prefix}${sat}_X.dat"
+  if [ -f ${fileX} ]; then
+    echo "processing ${fileX}..."
+    proc ${fileX} "hist_vec_X.sat${sat}"
+  fi
 
-  echo "writing ${outfile_vec_Y}..."
-  cat ${file} | datasel -c 8 --eq 1 | awk '{print $1}' | gsl-histogram $tmin $tmax $nbins > ${outfile_vec_Y}
+  fileY="${prefix}${sat}_Y.dat"
+  if [ -f ${fileY} ]; then
+    echo "processing ${fileY}..."
+    proc ${fileY} "hist_vec_Y.sat${sat}"
+  fi
 
-  echo "writing ${outfile_vec_Z}..."
-  cat ${file} | datasel -c 9 --eq 1 | awk '{print $1}' | gsl-histogram $tmin $tmax $nbins > ${outfile_vec_Z}
+  fileZ="${prefix}${sat}_Z.dat"
+  if [ -f ${fileZ} ]; then
+    echo "processing ${fileZ}..."
+    proc ${fileZ} "hist_vec_Z.sat${sat}"
+  fi
 
-  echo "writing ${outfile_euler}..."
-  cat ${file} | datasel -c 10 --eq 1 | awk '{print $1}' | gsl-histogram $tmin $tmax $nbins > ${outfile_euler}
+  #outfile_euler="hist_euler.sat${sat}"
+  #echo "writing ${outfile_euler}..."
+  #cat ${file} | datasel -c 10 --eq 1 | awk '{print $1}' | gsl-histogram $tmin $tmax $nbins > ${outfile_euler}
 done

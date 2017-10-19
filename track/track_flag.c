@@ -537,7 +537,7 @@ Inputs: alt_min - minimum altitude (km)
         data    - satellite data
         w       - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
@@ -554,36 +554,34 @@ track_flag_meanalt(const double alt_min, const double alt_max, satdata_mag *data
     {
       track_data *tptr = &(w->tracks[i]);
 
-      if (tptr->meanalt < alt_min || tptr->meanalt > alt_max)
+      if ((alt_min > 0.0 && tptr->meanalt < alt_min) ||
+          (alt_max > 0.0 && tptr->meanalt > alt_max))
         {
           nflagged += track_flag_track(i, TRACK_FLG_ALTITUDE, data, w);
           ++ntrack_flagged;
         }
     }
 
-  fprintf(stderr, "track_flag_meanalt: flagged %zu/%zu (%.1f%%) tracks due to altitude\n",
-          ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
-
-  return nflagged;
-} /* track_flag_meanalt() */
+  return ntrack_flagged;
+}
 
 /*
 track_flag_incomplete()
   Flag incomplete tracks with missing data. Tracks which do not
-contain data in [qd_min,qd_max] are discarded.
+contain unflagged data in [qd_min,qd_max] are discarded.
 
 Inputs: qd_min - minimum QD latitude (degrees)
         qd_max - maximum QD latitude (degrees)
         data   - satellite data
         w      - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
 track_flag_incomplete(const double qd_min, const double qd_max, satdata_mag *data, track_workspace *w)
 {
-  size_t i;
+  size_t i, j;
   size_t nflagged = 0;        /* number of points flagged */
   size_t ntrack_flagged = 0;  /* number of entire tracks flagged for missing data */
 
@@ -593,20 +591,32 @@ track_flag_incomplete(const double qd_min, const double qd_max, satdata_mag *dat
   for (i = 0; i < w->n; ++i)
     {
       track_data *tptr = &(w->tracks[i]);
-      double qd0 = GSL_MIN(data->qdlat[tptr->start_idx], data->qdlat[tptr->end_idx]);
-      double qd1 = GSL_MAX(data->qdlat[tptr->start_idx], data->qdlat[tptr->end_idx]);
+      size_t ncnt = 0;
 
-      if (qd0 > qd_min || qd1 < qd_max)
+      /* don't count already flagged tracks */
+      if (tptr->flags)
+        continue;
+
+      /* count points in [qd_min,qd_max] */
+      for (j = 0; j < tptr->n; ++j)
+        {
+          /* skip already flagged data */
+          if (!SATDATA_AvailableData(data->flags[tptr->start_idx + j]))
+            continue;
+
+          if ((data->qdlat[tptr->start_idx + j] >= qd_min) &&
+              (data->qdlat[tptr->start_idx + j] <= qd_max))
+            ++ncnt;
+        }
+
+      if (ncnt == 0)
         {
           nflagged += track_flag_track(i, TRACK_FLG_INCOMPLETE, data, w);
           ++ntrack_flagged;
         }
     }
 
-  fprintf(stderr, "track_flag_incomplete: flagged %zu/%zu (%.1f%%) tracks due to missing data\n",
-          ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
-
-  return nflagged;
+  return ntrack_flagged;
 } /* track_flag_incomplete() */
 
 /*
@@ -618,7 +628,7 @@ Inputs: nmin - minimum number of unflagged data points
         data - satellite data
         w    - track workspace
 
-Return: number of data flagged
+Return: number of tracks flagged
 */
 
 size_t
@@ -649,10 +659,7 @@ track_flag_n(const size_t nmin, satdata_mag *data, track_workspace *w)
         }
     }
 
-  fprintf(stderr, "track_flag_n: flagged %zu/%zu (%.1f%%) tracks due to missing data\n",
-          ntrack_flagged, w->n, (double) ntrack_flagged / (double) w->n * 100.0);
-
-  return nflagged;
+  return ntrack_flagged;
 } /* track_flag_n() */
 
 /*****************************************************

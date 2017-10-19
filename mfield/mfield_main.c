@@ -1333,6 +1333,7 @@ main(int argc, char *argv[])
   int print_residuals = 0;    /* print residuals at each iteration */
   double lambda_sv = -1.0;    /* SV damping parameter */
   double lambda_sa = -1.0;    /* SA damping parameter */
+  double sigma = -1.0;        /* sigma for artificial noise */
   struct timeval tv0, tv1;
   char buf[MAX_BUFFER];
 
@@ -1359,10 +1360,11 @@ main(int argc, char *argv[])
           { "config_file", required_argument, NULL, 'C' },
           { "lambda_sa", required_argument, NULL, 'a' },
           { "lambda_sv", required_argument, NULL, 'v' },
+          { "sigma", required_argument, NULL, 'S' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:C:de:l:mn:o:p:rv:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:C:de:l:mn:o:p:rv:S:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -1418,6 +1420,10 @@ main(int argc, char *argv[])
 
           case 'l':
             Lfile = optarg;
+            break;
+
+          case 'S':
+            sigma = atof(optarg);
             break;
 
           default:
@@ -1532,21 +1538,14 @@ main(int argc, char *argv[])
     fprintf(stderr, "main: flagging non-fitted components...");
     nflag = mfield_data_filter_comp(mfield_data_p);
     fprintf(stderr, "done (%zu data flagged)\n", nflag);
-
-#if 0
-    /* XXX: discard most of EMAG grid for testing */
-    {
-      size_t i, j;
-      magdata *mptr = mfield_data_ptr(0, mfield_data_p);
-
-      for (j = 0; j < mptr->n; ++j)
-        {
-          if (j % 5 != 0)
-            mptr->flags[j] |= MAGDATA_FLG_DISCARD;
-        }
-    }
-#endif
   }
+
+  if (sigma > 0.0)
+    {
+      fprintf(stderr, "main: adding noise (sigma = %.1f [nT])...", sigma);
+      mfield_data_add_noise(sigma, mfield_data_p);
+      fprintf(stderr, "done\n");
+    }
 
   fprintf(stderr, "main: data epoch = %.2f\n", mfield_data_epoch(mfield_data_p));
   fprintf(stderr, "main: data tmin  = %.2f\n", satdata_epoch2year(mfield_data_p->t0_data));

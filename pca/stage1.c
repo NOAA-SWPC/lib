@@ -22,6 +22,7 @@
 #include <getopt.h>
 #include <assert.h>
 #include <errno.h>
+#include <omp.h>
 
 #include <lapacke/lapacke.h>
 
@@ -189,38 +190,65 @@ print_matlab(const char *outdir, const size_t tidx,
              const gsl_vector *c, green_workspace *green_ext)
 {
   char buf[2048];
+  const int max_threads = omp_get_max_threads();
   const size_t nphi = 360;
   const size_t ntheta = 180;
   const double b = green_ext->R + 110.0;
+  const double nnm = green_ext->nnm;
+  const double nmax = green_ext->nmax;
+  const double mmax = green_ext->mmax;
   gsl_matrix *Jt = gsl_matrix_alloc(nphi, ntheta);
   gsl_matrix *Jp = gsl_matrix_alloc(nphi, ntheta);
   gsl_matrix *chi = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *Bx = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *By = gsl_matrix_alloc(nphi, ntheta);
+  gsl_matrix *Bz = gsl_matrix_alloc(nphi, ntheta);
   gsl_vector *g = gsl_vector_alloc(c->size);
-  size_t i, j;
+  gsl_vector *X = gsl_vector_alloc(nnm);
+  gsl_vector *Y = gsl_vector_alloc(nnm);
+  gsl_vector *Z = gsl_vector_alloc(nnm);
+  green_workspace **green_p = malloc(max_threads * sizeof(green_workspace *));
+  size_t i;
+
+  for (i = 0; i < max_threads; ++i)
+    green_p[i] = green_alloc(nmax, mmax, green_ext->R);
 
   /* convert knm to gnm */
   green_k2g(green_ext->R + 110.0, c, g, green_ext);
 
+#pragma omp parallel for private(i)
   for (i = 0; i < nphi; ++i)
     {
+      int thread_id = omp_get_thread_num();
       double phi = (i + 0.5) * M_PI / 180.0;
+      size_t j;
 
       for (j = 0; j < ntheta; ++j)
         {
           double theta = (j + 0.5) * M_PI / 180.0;
-          double K[3], chi1;
+          double K[3], B[3], chi1;
 
-#if 0
-          green_eval_sheet_int(b, theta, phi, g, K, green_ext);
+#if 1
+          green_eval_sheet_int(b, theta, phi, g, K, green_p[thread_id]);
           gsl_matrix_set(Jt, i, j, -K[0]);
           gsl_matrix_set(Jp, i, j, K[1]);
-#endif
-
-          chi1 = green_eval_chi_ext(b, theta, phi, c, green_ext);
+#else
+          chi1 = green_eval_chi_ext(b, theta, phi, c, green_p[thread_id]);
           gsl_matrix_set(chi, i, j, chi1);
+
+          green_calc_ext(R_EARTH_KM, theta, phi, X->data, Y->data, Z->data, green_p[thread_id]);
+          gsl_blas_ddot(X, c, &B[0]);
+          gsl_blas_ddot(Y, c, &B[1]);
+          gsl_blas_ddot(Z, c, &B[2]);
+
+          gsl_matrix_set(Bx, i, j, B[0]);
+          gsl_matrix_set(By, i, j, B[1]);
+          gsl_matrix_set(Bz, i, j, B[2]);
+#endif
         }
     }
 
+#if 1
   sprintf(buf, "%s/Jt_%04zu.txt", outdir, tidx);
   print_octave(Jt, buf);
 
@@ -229,11 +257,32 @@ print_matlab(const char *outdir, const size_t tidx,
 
   sprintf(buf, "%s/chi_%04zu.txt", outdir, tidx);
   print_octave(chi, buf);
+#else
 
+  sprintf(buf, "%s/Bx_%04zu.txt", outdir, tidx);
+  print_octave(Bx, buf);
+
+  sprintf(buf, "%s/By_%04zu.txt", outdir, tidx);
+  print_octave(By, buf);
+
+  sprintf(buf, "%s/Bz_%04zu.txt", outdir, tidx);
+  print_octave(Bz, buf);
+#endif
+
+  for (i = 0; i < max_threads; ++i)
+    green_free(green_p[i]);
+
+  free(green_p);
   gsl_matrix_free(Jt);
   gsl_matrix_free(Jp);
   gsl_matrix_free(chi);
+  gsl_matrix_free(Bx);
+  gsl_matrix_free(By);
+  gsl_matrix_free(Bz);
   gsl_vector_free(g);
+  gsl_vector_free(X);
+  gsl_vector_free(Y);
+  gsl_vector_free(Z);
 
   return 0;
 }

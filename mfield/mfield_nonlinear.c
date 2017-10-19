@@ -54,6 +54,7 @@ static void mfield_nonlinear_callback2(const size_t iter, void *params,
 static int mfield_robust_weights(const gsl_vector * f, gsl_vector * wts, mfield_workspace * w);
 static double huber(const double x);
 static double bisquare(const double x);
+static int mfield_nonlinear_alloc_multilarge(const gsl_multilarge_nlinear_trs * trs, mfield_workspace * w);
 
 #include "mfield_multifit.c"
 
@@ -355,6 +356,12 @@ mfield_calc_nonlinear_multilarge(const gsl_vector *c, mfield_workspace *w)
       gettimeofday(&tv1, NULL);
       fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
+      /* store final coefficients in dimensionless units in w->c */
+      {
+        gsl_vector *x_final = gsl_multilarge_nlinear_position(w->nlinear_workspace_p);
+        gsl_vector_memcpy(w->c, x_final);
+      }
+
       if (s == GSL_SUCCESS)
         {
           fprintf(stderr, "mfield_calc_nonlinear: NITER  = %zu\n",
@@ -372,13 +379,10 @@ mfield_calc_nonlinear_multilarge(const gsl_vector *c, mfield_workspace *w)
         {
           fprintf(stderr, "mfield_calc_nonlinear: failed: %s\n",
                   gsl_strerror(s));
-        }
 
-      /* store final coefficients in dimensionless units in w->c */
-      {
-        gsl_vector *x_final = gsl_multilarge_nlinear_position(w->nlinear_workspace_p);
-        gsl_vector_memcpy(w->c, x_final);
-      }
+          /* LM solver stalled or is converging slowly, switch to dogleg for next iteration */
+          mfield_nonlinear_alloc_multilarge(gsl_multilarge_nlinear_trs_ddogleg, w);
+        }
     } /* w->lls_solution == 0 */
 
   return s;
@@ -543,21 +547,8 @@ mfield_init_nonlinear(mfield_workspace *w)
 
 #else
 
-  /* allocate fit workspace */
-  {
-    const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_trust;
-    gsl_multilarge_nlinear_parameters fdf_params =
-      gsl_multilarge_nlinear_default_parameters();
-
-#if 1
-    fdf_params.trs = gsl_multilarge_nlinear_trs_lm;
-    fdf_params.scale = gsl_multilarge_nlinear_scale_more;
-#else
-    fdf_params.trs = gsl_multilarge_nlinear_trs_ddogleg;
-    fdf_params.scale = gsl_multilarge_nlinear_scale_more;
-#endif
-    w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, w->nres_tot, p);
-  }
+  /* allocate fit workspace - start with Levenberg-Marquardt solver */
+  mfield_nonlinear_alloc_multilarge(gsl_multilarge_nlinear_trs_lm, w);
 
 #endif
 
@@ -2433,7 +2424,10 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
   if (iter % 5 != 0 && iter != 1)
     return;
 
-  fprintf(stderr, "iteration %zu:\n", iter);
+  fprintf(stderr, "iteration %zu (method: %s/%s):\n",
+          iter,
+          gsl_multilarge_nlinear_name(multilarge_p),
+          gsl_multilarge_nlinear_trs_name(multilarge_p));
 
   fprintf(stderr, "\t dipole: %12.4f %12.4f %12.4f [nT]\n",
           gsl_vector_get(x, mfield_coeff_nmidx(1, 0)),
@@ -2494,4 +2488,25 @@ mfield_nonlinear_callback2(const size_t iter, void *params,
 
   gsl_multilarge_nlinear_rcond(&rcond, multilarge_p);
   fprintf(stderr, "\t cond(J(x)):  %12g\n", 1.0 / rcond);
+}
+
+/* allocate w->nlinear_workspace_p with given TRS method; this function makes
+ * it easy to switch TRS methods in the middle of an iteration */
+static int
+mfield_nonlinear_alloc_multilarge(const gsl_multilarge_nlinear_trs * trs,
+                                  mfield_workspace * w)
+{
+  const gsl_multilarge_nlinear_type *T = gsl_multilarge_nlinear_trust;
+  gsl_multilarge_nlinear_parameters fdf_params =
+    gsl_multilarge_nlinear_default_parameters();
+
+  if (w->nlinear_workspace_p)
+    gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
+
+  fdf_params.trs = trs;
+  fdf_params.scale = gsl_multilarge_nlinear_scale_more;
+
+  w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, w->nres_tot, w->p);
+
+  return 0;
 }

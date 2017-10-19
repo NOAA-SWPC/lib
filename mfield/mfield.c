@@ -1359,6 +1359,7 @@ mfield_write_ascii(const char *filename, const double epoch,
                    const int write_delta, mfield_workspace *w)
 {
   int s = 0;
+  const mfield_parameters *params = &(w->params);
   FILE *fp;
   size_t n, i;
   gsl_vector_view v = gsl_matrix_diagonal(w->covar);
@@ -1390,6 +1391,8 @@ mfield_write_ascii(const char *filename, const double epoch,
   fprintf(fp, "%% nmax:  %zu\n", w->nmax_mf);
   fprintf(fp, "%% epoch: %.4f\n", epoch);
   fprintf(fp, "%% radius: %.1f\n", w->R);
+  fprintf(fp, "%% lambda_sv: %.2f\n", params->lambda_sv);
+  fprintf(fp, "%% lambda_sa: %.2f\n", params->lambda_sa);
 
   if (write_delta)
     {

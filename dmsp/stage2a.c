@@ -45,7 +45,7 @@
 #include "stage2_quaternions.c"
 #include "stage2_spikes.c"
 
-#define WRITE_JUMP_DATA                   0
+#define WRITE_JUMP_DATA                   1
 
 size_t
 stage2_flag_time(const double tmin, const double tmax, satdata_mag *data)

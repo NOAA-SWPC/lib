@@ -15,6 +15,8 @@ print_SOURCES = print.c
 print_LDADD = libpca.la $(top_builddir)/green/libgreen.la -lcommon -lm -lgsl -lgslcblas -lnetcdf ${common_libs}
 
 stage1_SOURCES = stage1.c
+stage1_CFLAGS = -fopenmp
+stage1_LDFLAGS = -fopenmp
 stage1_LDADD = libpca.la $(top_builddir)/apex/libapex.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/green/libgreen.la  $(top_builddir)/track/libtrack.la $(top_builddir)/lapack_wrapper/liblapack_wrapper.la -lcommon -lmsynth -lm -lsatdata -lindices -lcdf -lgsl -lnetcdf ${common_libs}
 
 stage2_SOURCES = stage2.c
