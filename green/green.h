@@ -38,7 +38,8 @@ int green_potential_calc_ext(const double r, const double theta, const double ph
                              double *V, green_workspace *w);
 int green_Y_calc(const double theta, const double phi,
                  double *Y, green_workspace *w);
-size_t green_nmidx(const size_t n, const int m, const green_workspace *w);
+extern inline size_t green_nmidx(const size_t n, const int m, const green_workspace *w);
+extern inline size_t green_idx(const size_t n, const int m, const size_t mmax);
 size_t green_nnm(const green_workspace *w);
 int green_print_spectrum(const char *filename, const gsl_vector *c,
                          const green_workspace *w);

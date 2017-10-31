@@ -411,20 +411,50 @@ Inputs: n - SH degree in [1,nmax]
 Return: index in [0,nnm-1]
 */
 
-size_t
+inline size_t
 green_nmidx(const size_t n, const int m, const green_workspace *w)
 {
-  const size_t mmax = w->mmax;
+  return green_idx(n, m, w->mmax);
+}
+
+/*
+green_idx()
+  This function returns a unique index in [0,p-1] corresponding
+to a given (n,m) pair. The array will look like:
+
+[(1,-1) (1,0) (1,1) (2,-2) (2,-1) (2,0) (2,1) (2,2) ...]
+
+(the (0,0) coefficient is not solved for)
+
+Things get a little more tricky when mmax != nmax, so the
+base indices of each 'n' block are precomputed in _alloc and
+stored for easy reference here. The offset of (n,m) in a given
+'n' block is:
+
+offset = m + min(n,mmax)
+
+which defaults to the standard m + n for the case mmax = nmax
+
+Inputs: n    - SH degree in [1,nmax]
+        m    - SH order (-mmax <= m <= mmax)
+        mmax - maximum SH order
+
+Return: index in [0,nnm-1]
+*/
+
+inline size_t
+green_idx(const size_t n, const int m, const size_t mmax)
+{
   size_t nmidx;
 
   if (n == 0)
     {
-      fprintf(stderr, "green_nmidx: error: n = 0\n");
+      fprintf(stderr, "green_idx: error: n = 0\n");
       return 0;
     }
   else if (abs(m) > (int) mmax)
     {
-      fprintf(stderr, "green_nmidx: error: m = %d [mmax = %zu]\n", m, mmax);
+      fprintf(stderr, "green_idx: error: m = %d [mmax = %zu]\n", m, mmax);
       return 0;
     }
 

@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libgreen.la
 
-libgreen_la_SOURCES = current.c green.c
+libgreen_la_SOURCES = current.c green.c green_complex.c
 
 AM_CPPFLAGS =
 
