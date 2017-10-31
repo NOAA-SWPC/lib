@@ -25,6 +25,7 @@
 #include <string.h>
 #include <complex.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
@@ -136,65 +137,14 @@ poltor_alloc(const poltor_parameters *params)
       w->n = 6;
     }
 
-  w->base_int = calloc(1, (w->nmax_int + 1) * sizeof(size_t));
-  w->base_ext = calloc(1, (w->nmax_ext + 1) * sizeof(size_t));
-  w->base_sh = calloc(1, (w->nmax_sh + 1) * sizeof(size_t));
-  w->base_tor = calloc(1, (w->nmax_tor + 1) * sizeof(size_t));
-
-  /*
-   * precompute base offsets for internal (n,m) indexing, and count total
-   * internal coefficients
-   */
-  w->p_pint = 0;
-  for (n = 1; n <= w->nmax_int; ++n)
-    {
-      int ns = (int) GSL_MIN(n, w->mmax_int);
-
-      w->base_int[n] = w->p_pint;
-      w->p_pint += 2*ns + 1;
-    }
-
-  /*
-   * precompute base offsets for external (n,m) indexing, and count total
-   * external coefficients
-   */
-  w->p_pext = 0;
-  for (n = 1; n <= w->nmax_ext; ++n)
-    {
-      int ns = (int) GSL_MIN(n, w->mmax_ext);
-
-      w->base_ext[n] = w->p_pext;
-      w->p_pext += 2*ns + 1;
-    }
-
-  /*
-   * precompute base offsets for poloidal shell (n,m) indexing, and count total
-   * internal coefficients
-   */
-  w->nnm_sh = 0;
-  for (n = 1; n <= w->nmax_sh; ++n)
-    {
-      int ns = (int) GSL_MIN(n, w->mmax_sh);
-
-      w->base_sh[n] = w->nnm_sh;
-      w->nnm_sh += 2*ns + 1;
-    }
+  /* count number of spherical harmonic coefficients for each source */
+  w->p_pint = w->mmax_int * (w->mmax_int + 2) + (w->nmax_int - w->mmax_int) * (2*w->mmax_int + 1);
+  w->p_pext = w->mmax_ext * (w->mmax_ext + 2) + (w->nmax_ext - w->mmax_ext) * (2*w->mmax_ext + 1);
+  w->p_tor = w->mmax_tor * (w->mmax_tor + 2) + (w->nmax_tor - w->mmax_tor) * (2*w->mmax_tor + 1);
 
   /* compute total poloidal shell coefficients accouting for Taylor expansion */
+  w->nnm_sh = w->mmax_sh * (w->mmax_sh + 2) + (w->nmax_sh - w->mmax_sh) * (2*w->mmax_sh + 1);
   w->p_psh = w->nnm_sh * (w->shell_J + 1);
-
-  /*
-   * precompute base offsets for B_tor (n,m) indexing, and count total
-   * coefficients
-   */
-  w->p_tor = 0;
-  for (n = 1; n <= w->nmax_tor; ++n)
-    {
-      int ns = (int) GSL_MIN(n, w->mmax_tor);
-
-      w->base_tor[n] = w->p_tor;
-      w->p_tor += 2*ns + 1;
-    }
 
   w->p = w->p_pint + w->p_pext + w->p_psh + w->p_tor;
 
@@ -320,18 +270,6 @@ poltor_alloc(const poltor_parameters *params)
 void
 poltor_free(poltor_workspace *w)
 {
-  if (w->base_int)
-    free(w->base_int);
-
-  if (w->base_ext)
-    free(w->base_ext);
-
-  if (w->base_sh)
-    free(w->base_sh);
-
-  if (w->base_tor)
-    free(w->base_tor);
-
   if (w->A)
     gsl_matrix_complex_free(w->A);
 
@@ -392,6 +330,46 @@ poltor_free(poltor_workspace *w)
   free(w);
 }
 
+/* initialize parameter structure */
+int
+poltor_init_params(poltor_parameters * params)
+{
+  params->R = -1.0;
+  params->nmax_int = 0;
+  params->mmax_int = 0;
+  params->nmax_sh = 0;
+  params->mmax_sh = 0;
+  params->nmax_tor = 0;
+  params->mmax_tor = 0;
+  params->max_iter = 0;
+  params->regularize = 0;
+  params->use_weights = 0;
+  params->alpha_int = 0.0;
+  params->alpha_sh = 0.0;
+  params->alpha_tor = 0.0;
+  params->weight_X = 0.0;
+  params->weight_Y = 0.0;
+  params->weight_Z = 0.0;
+  params->weight_F = 0.0;
+  params->weight_DX_NS = 0.0;
+  params->weight_DY_NS = 0.0;
+  params->weight_DZ_NS = 0.0;
+  params->weight_DF_NS = 0.0;
+  params->fit_X = 1;
+  params->fit_Y = 1;
+  params->fit_Z = 1;
+  params->fit_F = 1;
+  params->fit_DX_NS = 1;
+  params->fit_DY_NS = 1;
+  params->fit_DZ_NS = 1;
+  params->fit_DF_NS = 1;
+  params->synth_data = 0;
+  params->synth_noise = 0;
+  params->synth_nmin = 0;
+
+  return 0;
+}
+
 /*
 poltor_calc()
   Build LS system: A^H W A and A^H W b
@@ -417,21 +395,21 @@ poltor_calc(poltor_workspace *w)
   /* initialize lls module */
   lls_complex_reset(w->lls_workspace_p);
 
-  fprintf(stderr, "poltor_calc: computing regularization matrix...");
-
 #if !POLTOR_SYNTH_DATA
 
   if (w->params.flags & POLTOR_FLG_REGULARIZE)
     {
+      fprintf(stderr, "poltor_calc: computing regularization matrix...");
+
       /* construct L = diag(L) */
       s = poltor_regularize(w->L, w);
       if (s)
         return s;
+
+      fprintf(stderr, "done\n");
     }
 
 #endif
-
-  fprintf(stderr, "done\n");
 
   fprintf(stderr, "poltor_calc: building LS system...");
 
@@ -445,6 +423,9 @@ poltor_calc(poltor_workspace *w)
           lls_file);
   s = lls_complex_save(lls_file, w->lls_workspace_p);
   fprintf(stderr, "done\n");
+
+  printc_octave(w->lls_workspace_p->AHA, "AHA");
+  printcv_octave(w->lls_workspace_p->AHb, "AHb");
 
   return s;
 } /* poltor_calc() */
@@ -1539,6 +1520,9 @@ poltor_build_ls(const int fold, poltor_workspace *w)
           gsl_complex val;
           double B[4], dB[4];
 
+          if (MAGDATA_Discarded(data->flags[i]))
+            continue;
+
           /* compute residual: B_i - B_main - B_crust - B_ext */
           magdata_residual(data_idx, B, data);
 
@@ -1633,6 +1617,17 @@ poltor_build_ls(const int fold, poltor_workspace *w)
           poltor_row(data->r[data_idx], theta, data->phi[data_idx],
                      data->r_ns[data_idx], theta_ns, data->phi_ns[data_idx],
                      x, y, z, dx, dy, dz, w);
+
+          if ((x && !gsl_finite(gsl_blas_dznrm2(x))) ||
+              (y && !gsl_finite(gsl_blas_dznrm2(y))) ||
+              (z && !gsl_finite(gsl_blas_dznrm2(z))) ||
+              (dx && !gsl_finite(gsl_blas_dznrm2(dx))) ||
+              (dy && !gsl_finite(gsl_blas_dznrm2(dy))) ||
+              (dz && !gsl_finite(gsl_blas_dznrm2(dz))))
+            {
+              fprintf(stderr, "UH OH\n");
+              exit(1);
+            }
         }
 
       gettimeofday(&tv1, NULL);
@@ -2310,35 +2305,28 @@ Return: index in [0,nnm-1]
 size_t
 poltor_nmidx(const size_t type, const size_t n, const int m, poltor_workspace *w)
 {
-  int ns;
-  size_t mmax, *baseptr;
-  size_t base; /* index of block for this n */
+  size_t mmax;
   size_t type_offset; /* offset for coefficient type (internal/external) */
-  int offset;  /* offset within block for this m */
   size_t nmidx;
 
   if (type == POLTOR_IDX_PINT)
     {
       mmax = w->mmax_int;
-      baseptr = w->base_int;
       type_offset = w->pint_offset;
     }
   else if (type == POLTOR_IDX_PEXT)
     {
       mmax = w->mmax_ext;
-      baseptr = w->base_ext;
       type_offset = w->pext_offset;
     }
   else if (type == POLTOR_IDX_PSH)
     {
       mmax = w->mmax_sh;
-      baseptr = w->base_sh;
       type_offset = w->psh_offset;
     }
   else if (type == POLTOR_IDX_TOR)
     {
       mmax = w->mmax_tor;
-      baseptr = w->base_tor;
       type_offset = w->tor_offset;
     }
   else
@@ -2347,8 +2335,6 @@ poltor_nmidx(const size_t type, const size_t n, const int m, poltor_workspace *w
       return 0;
     }
 
-  ns = (int) GSL_MIN(n, mmax);
-
   if (n == 0)
     {
       fprintf(stderr, "poltor_nmidx: error: n = 0\n");
@@ -2356,14 +2342,29 @@ poltor_nmidx(const size_t type, const size_t n, const int m, poltor_workspace *w
     }
   else if (abs(m) > (int) mmax)
     {
-      fprintf(stderr, "poltor_nmidx: error: m = %d\n", m);
+      fprintf(stderr, "poltor_nmidx: error: m = %d [mmax = %zu]\n", m, mmax);
       return 0;
     }
 
-  base = baseptr[n]; /* precomputed */
-  offset = m + ns;
+  if (n <= mmax)
+    {
+      size_t base1 = n * n; /* index of block for this n */
+      int offset1 = m + n;  /* offset within block for this m */
 
-  nmidx = base + offset + type_offset;
+      /* subtract 1 to exclude (0,0) coefficient */
+      nmidx = base1 + offset1 - 1;
+    }
+  else
+    {
+      size_t base1 = (mmax + 1) * (mmax + 1);
+      size_t base2 = (n - mmax - 1) * (2 * mmax + 1);
+      int offset1 = m + (int)mmax;
+
+      /* subtract 1 to exclude (0,0) coefficient */
+      nmidx = base1 + base2 + offset1 - 1;
+    }
+
+  nmidx += type_offset;
 
   return nmidx;
 } /* poltor_nmidx() */

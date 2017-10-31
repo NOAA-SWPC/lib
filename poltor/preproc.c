@@ -586,7 +586,7 @@ int
 main(int argc, char *argv[])
 {
   char *datamap_file = "datamap.dat";
-  char *data_file = "data.dat";
+  char *data_prefix = "output";
   char *output_file = NULL;
   satdata_mag *data = NULL;
   magdata *mdata;
@@ -785,8 +785,8 @@ main(int argc, char *argv[])
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-  fprintf(stderr, "main: writing data to %s...", data_file);
-  magdata_print(data_file, mdata);
+  fprintf(stderr, "main: writing data to %s...", data_prefix);
+  magdata_print(data_prefix, mdata);
   fprintf(stderr, "done\n");
 
   fprintf(stderr, "main: writing data map to %s...", datamap_file);

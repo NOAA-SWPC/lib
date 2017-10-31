@@ -99,6 +99,27 @@ read_champ(const char *filename)
   return data;
 } /* read_champ() */
 
+/*
+replace_longitude()
+*/
+
+int
+replace_longitude(const double ut, satdata_mag *data)
+{
+  int s = 0;
+  size_t i;
+
+  for (i = 0; i < data->n; ++i)
+    {
+      time_t unix_time = satdata_epoch2timet(data->t[i]);
+      double lt = get_localtime(unix_time, data->longitude[i] * M_PI / 180.0);
+
+      data->longitude[i] = wrap180(15.0 * (lt - ut));
+    }
+
+  return s;
+}
+
 void
 print_help(char *argv[])
 {
@@ -120,8 +141,8 @@ int
 main(int argc, char *argv[])
 {
   int status;
-  char *datamap_prefix = "output/datamap";
-  char *data_prefix = "output/data";
+  char *datamap_prefix = "output";
+  char *data_prefix = "output";
   char *output_file = NULL;
   char *config_file = "PT_preproc.cfg";
   satdata_mag *data = NULL;
@@ -305,6 +326,12 @@ main(int argc, char *argv[])
   if (data2)
     satdata_mag_free(data2);
 
+#if 1
+  fprintf(stderr, "main: recomputing longitude with LT...");
+  magdata_replace_phi_LT(12.0, mdata);
+  fprintf(stderr, "done\n");
+#endif
+
   magdata_init(mdata);
 
   fprintf(stderr, "main: computing spatial weighting of data...");
@@ -316,7 +343,6 @@ main(int argc, char *argv[])
   /* set Euler convention flags */
   magdata_set_euler(magdata_euler_flags, mdata);
 
-#if 1
   fprintf(stderr, "main: writing data to %s...", data_prefix);
   magdata_print(data_prefix, mdata);
   fprintf(stderr, "done\n");
@@ -324,7 +350,6 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: writing data map to %s...", datamap_prefix);
   magdata_map(datamap_prefix, mdata);
   fprintf(stderr, "done\n");
-#endif
 
   fprintf(stderr, "main: satellite rmin = %.1f (%.1f) [km]\n",
           mdata->rmin, mdata->rmin - mdata->R);

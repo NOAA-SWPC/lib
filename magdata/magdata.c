@@ -108,6 +108,7 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   data->Bz_model = realloc(data->Bz_model, n * sizeof(double));
   data->F = realloc(data->F, n * sizeof(double));
   data->q = realloc(data->q, 4 * n * sizeof(double));
+  data->lt = realloc(data->lt, n * sizeof(double));
   data->lt_eq = realloc(data->lt_eq, n * sizeof(double));
 
   data->satdir = realloc(data->satdir, n * sizeof(int));
@@ -130,6 +131,7 @@ magdata_realloc(const size_t n, const double R, magdata *data)
   data->Bz_model_ns = realloc(data->Bz_model_ns, n * sizeof(double));
   data->F_ns = realloc(data->F_ns, n * sizeof(double));
   data->q_ns = realloc(data->q_ns, 4 * n * sizeof(double));
+  data->lt_ns = realloc(data->lt_ns, n * sizeof(double));
   data->lt_eq_ns = realloc(data->lt_eq_ns, n * sizeof(double));
 
   data->flags = realloc(data->flags, n * sizeof(size_t));
@@ -138,12 +140,13 @@ magdata_realloc(const size_t n, const double R, magdata *data)
 
   if (!data->t || !data->ts || !data->r || !data->theta || !data->phi || !data->qdlat || !data->flags ||
       !data->Bx_nec || !data->By_nec || !data->Bz_nec || !data->Bx_vfm || !data->By_vfm ||
-      !data->Bz_vfm || !data->Bx_model || !data->By_model || !data->Bz_model || !data->lt_eq ||
+      !data->Bz_vfm || !data->Bx_model || !data->By_model || !data->Bz_model || !data->lt_eq || !data->lt ||
       !data->F || !data->q || !data->weights || !data->t_ns || !data->ts_ns || !data->r_ns || !data->index ||
       !data->theta_ns || !data->phi_ns || !data->qdlat_ns || !data->satdir || !data->ne ||
       !data->Bx_nec_ns || !data->By_nec_ns || !data->Bz_nec_ns ||
       !data->Bx_vfm_ns || !data->By_vfm_ns || !data->Bz_vfm_ns ||
-      !data->Bx_model_ns || !data->By_model_ns || !data->Bz_model_ns || !data->F_ns || !data->q_ns || !data->lt_eq_ns)
+      !data->Bx_model_ns || !data->By_model_ns || !data->Bz_model_ns || !data->F_ns || !data->q_ns || !data->lt_eq_ns ||
+      !data->lt_ns)
     {
       magdata_free(data);
       fprintf(stderr, "magdata_realloc: error reallocating variables\n");
@@ -257,6 +260,9 @@ magdata_free(magdata *data)
   if (data->q_ns)
     free(data->q_ns);
 
+  if (data->lt_ns)
+    free(data->lt_ns);
+
   if (data->lt_eq_ns)
     free(data->lt_eq_ns);
 
@@ -265,6 +271,9 @@ magdata_free(magdata *data)
 
   if (data->q)
     free(data->q);
+
+  if (data->lt)
+    free(data->lt);
 
   if (data->lt_eq)
     free(data->lt_eq);
@@ -383,6 +392,7 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->ne[n] = datum->ne;
   data->satdir[n] = datum->satdir;
   data->weights[n] = 1.0; /* computed in magdata_calc() */
+  data->lt[n] = datum->lt;
   data->lt_eq[n] = datum->lt_eq;
 
   for (i = 0; i < 4; ++i)
@@ -411,6 +421,7 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->Bx_model_ns[n] = datum->B_model_ns[0];
   data->By_model_ns[n] = datum->B_model_ns[1];
   data->Bz_model_ns[n] = datum->B_model_ns[2];
+  data->lt_ns[n] = datum->lt_ns;
   data->lt_eq_ns[n] = datum->lt_eq_ns;
 
   ++(data->n);
@@ -567,7 +578,7 @@ magdata_calc(magdata *data)
 magdata_print()
   Output data points in ASCII format
 
-Inputs: prefix - where to store data
+Inputs: prefix - directory where to store data
         data   - data
 
 Return: success/error
@@ -582,37 +593,37 @@ magdata_print(const char *prefix, const magdata *data)
   size_t n = 11; /* number of files to write */
   char buf[2048];
 
-  sprintf(buf, "%s_X.dat", prefix);
+  sprintf(buf, "%s/data_X.dat", prefix);
   fp[0] = fopen(buf, "w");
 
-  sprintf(buf, "%s_Y.dat", prefix);
+  sprintf(buf, "%s/data_Y.dat", prefix);
   fp[1] = fopen(buf, "w");
 
-  sprintf(buf, "%s_Z.dat", prefix);
+  sprintf(buf, "%s/data_Z.dat", prefix);
   fp[2] = fopen(buf, "w");
 
-  sprintf(buf, "%s_F.dat", prefix);
+  sprintf(buf, "%s/data_F.dat", prefix);
   fp[3] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DX_NS.dat", prefix);
+  sprintf(buf, "%s/data_DX_NS.dat", prefix);
   fp[4] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DY_NS.dat", prefix);
+  sprintf(buf, "%s/data_DY_NS.dat", prefix);
   fp[5] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DZ_NS.dat", prefix);
+  sprintf(buf, "%s/data_DZ_NS.dat", prefix);
   fp[6] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DF_NS.dat", prefix);
+  sprintf(buf, "%s/data_DF_NS.dat", prefix);
   fp[7] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DX_EW.dat", prefix);
+  sprintf(buf, "%s/data_DX_EW.dat", prefix);
   fp[8] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DY_EW.dat", prefix);
+  sprintf(buf, "%s/data_DY_EW.dat", prefix);
   fp[9] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DZ_EW.dat", prefix);
+  sprintf(buf, "%s/data_DZ_EW.dat", prefix);
   fp[10] = fopen(buf, "w");
 
   for (i = 0; i < n; ++i)
@@ -654,7 +665,7 @@ magdata_print(const char *prefix, const magdata *data)
   for (i = 0; i < data->n; ++i)
     {
       time_t unix_time = satdata_epoch2timet(data->t[i]);
-      double lt = get_localtime(unix_time, data->phi[i]);
+      double lt = data->lt[i];
       double ut = get_ut(unix_time);
       double t = satdata_epoch2year(data->t[i]);
       double doy = get_season(unix_time);
@@ -734,7 +745,7 @@ magdata_print(const char *prefix, const magdata *data)
 magdata_map()
   Output lat/lon map of data coverage
 
-Inputs: prefix - file prefix for where to store data map
+Inputs: prefix - directory prefix for where to store data map
         data   - lat/lon data
 
 Return: success/error
@@ -745,39 +756,42 @@ magdata_map(const char *prefix, const magdata *data)
 {
   int s = 0;
   size_t i;
-  FILE *fp[10];
-  size_t n = 10; /* number of files to write */
+  FILE *fp[11];
+  size_t n = 11; /* number of files to write */
   char buf[2048];
 
-  sprintf(buf, "%s_X.dat", prefix);
+  sprintf(buf, "%s/map_X.dat", prefix);
   fp[0] = fopen(buf, "w");
 
-  sprintf(buf, "%s_Y.dat", prefix);
+  sprintf(buf, "%s/map_Y.dat", prefix);
   fp[1] = fopen(buf, "w");
 
-  sprintf(buf, "%s_Z.dat", prefix);
+  sprintf(buf, "%s/map_Z.dat", prefix);
   fp[2] = fopen(buf, "w");
 
-  sprintf(buf, "%s_F.dat", prefix);
+  sprintf(buf, "%s/map_F.dat", prefix);
   fp[3] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DX_NS.dat", prefix);
+  sprintf(buf, "%s/map_DX_NS.dat", prefix);
   fp[4] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DY_NS.dat", prefix);
+  sprintf(buf, "%s/map_DY_NS.dat", prefix);
   fp[5] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DZ_NS.dat", prefix);
+  sprintf(buf, "%s/map_DZ_NS.dat", prefix);
   fp[6] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DX_EW.dat", prefix);
+  sprintf(buf, "%s/map_DF_NS.dat", prefix);
   fp[7] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DY_EW.dat", prefix);
+  sprintf(buf, "%s/map_DX_EW.dat", prefix);
   fp[8] = fopen(buf, "w");
 
-  sprintf(buf, "%s_DZ_EW.dat", prefix);
+  sprintf(buf, "%s/map_DY_EW.dat", prefix);
   fp[9] = fopen(buf, "w");
+
+  sprintf(buf, "%s/map_DZ_EW.dat", prefix);
+  fp[10] = fopen(buf, "w");
 
   for (i = 0; i < n; ++i)
     {
@@ -796,9 +810,10 @@ magdata_map(const char *prefix, const magdata *data)
   fprintf(fp[4], "# Spatial distribution of N/S gradient DX vector data\n");
   fprintf(fp[5], "# Spatial distribution of N/S gradient DY vector data\n");
   fprintf(fp[6], "# Spatial distribution of N/S gradient DZ vector data\n");
-  fprintf(fp[7], "# Spatial distribution of E/W gradient DX vector data\n");
-  fprintf(fp[8], "# Spatial distribution of E/W gradient DY vector data\n");
-  fprintf(fp[9], "# Spatial distribution of E/W gradient DZ vector data\n");
+  fprintf(fp[7], "# Spatial distribution of N/S scalar DF vector data\n");
+  fprintf(fp[8], "# Spatial distribution of E/W gradient DX vector data\n");
+  fprintf(fp[9], "# Spatial distribution of E/W gradient DY vector data\n");
+  fprintf(fp[10], "# Spatial distribution of E/W gradient DZ vector data\n");
 
   for (i = 0; i < n; ++i)
     {
@@ -824,64 +839,37 @@ magdata_map(const char *prefix, const magdata *data)
         continue;
 
       if (MAGDATA_ExistX(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[0], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[0], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistY(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[1], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[1], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistZ(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[2], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[2], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistScalar(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[3], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[3], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistDX_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[4], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[4], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistDY_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[5], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[5], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistDZ_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[6], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[6], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
+
+      if (MAGDATA_ExistDF_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
+        fprintf(fp[7], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistDX_EW(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[7], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[8], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistDY_EW(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[8], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[9], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
 
       if (MAGDATA_ExistDZ_EW(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
-        {
-          fprintf(fp[9], "%f %.4f %.4f %.4f %.4f\n",
-                  t, phi, lat, data->qdlat[i], data->r[i]);
-        }
+        fprintf(fp[10], "%f %.4f %.4f %.4f %.4f\n", t, phi, lat, data->qdlat[i], data->r[i]);
     }
 
   for (i = 0; i < n; ++i)
@@ -1094,6 +1082,7 @@ magdata_write(const char *filename, magdata *data)
       fwrite(data->Bz_model, sizeof(double), data->n, fp);
       fwrite(data->q, sizeof(double), 4 * data->n, fp);
       fwrite(data->satdir, sizeof(int), data->n, fp);
+      fwrite(data->lt, sizeof(double), data->n, fp);
       fwrite(data->lt_eq, sizeof(double), data->n, fp);
 
       fwrite(data->t_ns, sizeof(double), data->n, fp);
@@ -1111,6 +1100,7 @@ magdata_write(const char *filename, magdata *data)
       fwrite(data->By_model_ns, sizeof(double), data->n, fp);
       fwrite(data->Bz_model_ns, sizeof(double), data->n, fp);
       fwrite(data->q_ns, sizeof(double), 4 * data->n, fp);
+      fwrite(data->lt_ns, sizeof(double), data->n, fp);
       fwrite(data->lt_eq_ns, sizeof(double), data->n, fp);
     }
 
@@ -1190,6 +1180,7 @@ magdata_read(const char *filename, magdata *data)
       fread(&(data->Bz_model[data->n]), sizeof(double), n, fp);
       fread(&(data->q[4 * data->n]), sizeof(double), 4 * n, fp);
       fread(&(data->satdir[data->n]), sizeof(int), n, fp);
+      fread(&(data->lt[data->n]), sizeof(double), n, fp);
       fread(&(data->lt_eq[data->n]), sizeof(double), n, fp);
 
       fread(&(data->t_ns[data->n]), sizeof(double), n, fp);
@@ -1207,6 +1198,7 @@ magdata_read(const char *filename, magdata *data)
       fread(&(data->By_model_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->Bz_model_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->q_ns[4 * data->n]), sizeof(double), 4 * n, fp);
+      fread(&(data->lt_ns[data->n]), sizeof(double), n, fp);
       fread(&(data->lt_eq_ns[data->n]), sizeof(double), n, fp);
     }
 
@@ -1476,6 +1468,7 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
             datum.theta_ns = M_PI / 2.0 - data->latitude[j] * M_PI / 180.0;
             datum.phi_ns = data->longitude[j] * M_PI / 180.0;
             datum.qdlat_ns = data->qdlat[j];
+            datum.lt_ns = satdata_localtime(datum.t_ns, datum.phi_ns);
             datum.lt_eq_ns = tptr->lt_eq;
           }
       }
@@ -1488,6 +1481,7 @@ magdata_copy_track(const magdata_params *params, const size_t track_idx,
       datum.ne = 0.0; /* filled in later */
       datum.satdir = satdata_mag_satdir(i, data);
       datum.flags = flags;
+      datum.lt = satdata_localtime(datum.t, datum.phi);
       datum.lt_eq = tptr->lt_eq;
 
       s = magdata_add(&datum, mdata);
@@ -1717,6 +1711,7 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       datum.theta_ns = M_PI / 2.0 - data2->latitude[j] * M_PI / 180.0;
       datum.phi_ns = data2->longitude[j] * M_PI / 180.0;
       datum.qdlat_ns = data2->qdlat[j];
+      datum.lt_ns = satdata_localtime(datum.t_ns, datum.phi_ns);
       datum.lt_eq_ns = tptr2->lt_eq;
 
       datum.t = data->t[i];
@@ -1727,6 +1722,7 @@ magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
       datum.ne = 0.0; /* filled in later */
       datum.satdir = satdata_mag_satdir(i, data);
       datum.flags = flags;
+      datum.lt = satdata_localtime(datum.t, datum.phi);
       datum.lt_eq = tptr->lt_eq;
 
 #if 0
@@ -1816,6 +1812,36 @@ magdata_mag2sat(const magdata *mdata)
   data->n = idx;
 
   return data;
+}
+
+/*
+magdata_replace_phi_LT()
+  Replace longitude with corresponding LT angle:
+
+phi_new = pi / 12 * (LT - LT0)
+
+Inputs: lt0  - local time corresponding to 0 longitude (hours)
+        data - magdata structure
+*/
+
+int
+magdata_replace_phi_LT(const double lt0, magdata *data)
+{
+  int s = 0;
+  size_t i;
+
+  for (i = 0; i < data->n; ++i)
+    {
+      double lt;
+      
+      lt = data->lt[i];
+      data->phi[i] = wrappi(M_PI / 12.0 * (lt - lt0));
+
+      lt = data->lt_ns[i];
+      data->phi_ns[i] = wrappi(M_PI / 12.0 * (lt - lt0));
+    }
+
+  return s;
 }
 
 /*

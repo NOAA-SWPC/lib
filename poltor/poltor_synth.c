@@ -75,7 +75,7 @@ poltor_synth_init(gsl_vector_complex *g, poltor_workspace *w)
       size_t cidx;
       gsl_complex val;
 
-      if (n > w->nmax_int)
+      if (n > w->nmax_int || abs(m) > (int) w->mmax_int)
         continue;
 
       cidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
@@ -99,7 +99,7 @@ poltor_synth_init(gsl_vector_complex *g, poltor_workspace *w)
       size_t cidx;
       gsl_complex val;
 
-      if (n > w->nmax_ext)
+      if (n > w->nmax_ext || abs(m) > (int) w->mmax_ext)
         continue;
 
       cidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, w);
@@ -130,7 +130,7 @@ poltor_synth_init(gsl_vector_complex *g, poltor_workspace *w)
             size_t cidx;
             gsl_complex val;
 
-            if (n > w->nmax_sh)
+            if (n > w->nmax_sh || abs(m) > (int) w->mmax_sh)
               continue;
 
             cidx = poltor_jnmidx(j, n, m, w);
@@ -156,7 +156,7 @@ poltor_synth_init(gsl_vector_complex *g, poltor_workspace *w)
       size_t cidx;
       gsl_complex val;
 
-      if (n > w->nmax_tor)
+      if (n > w->nmax_tor || abs(m) > (int) w->mmax_tor)
         continue;
 
       cidx = poltor_nmidx(POLTOR_IDX_TOR, n, m, w);

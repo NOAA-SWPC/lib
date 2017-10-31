@@ -25,9 +25,6 @@
 #include "pomme.h"
 #include "track.h"
 
-/* maximum QD latitude for track processing */
-#define MAG_MAX_QD_LATITUDE    (65.0)
-
 /* maximum data in one track */
 #define MAG_MAX_TRACK          4000
 
@@ -45,10 +42,13 @@ typedef struct
   double season_max;              /* maximum season (doy) */
   double season_min2;             /* minimum season 2 (doy) */
   double season_max2;             /* maximum season 2 (doy) */
+  double track_qdmax;             /* maximum QD latitude for processing */
   size_t sq_nmax_int;             /* Sq filter internal nmax */
   size_t sq_mmax_int;             /* Sq filter internal mmax */
   size_t sq_nmax_ext;             /* Sq filter external nmax */
   size_t sq_mmax_ext;             /* Sq filter external mmax */
+  double sq_qdmin;                /* minimum QD latitude for Sq fitting */
+  double sq_qdmax;                /* maximum QD latitude for Sq fitting */
   double curr_altitude;           /* altitude of line currents (km) */
   size_t ncurr;                   /* number of line currents */
   double qdlat_max;               /* maximum QD latitude for line currents (deg) */

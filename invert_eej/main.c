@@ -56,6 +56,8 @@ fill_parameters(mag_params *params)
     params->lon_max = cfg_params.lon_max;
   if (cfg_params.ncurr >= 0)
     params->ncurr = (size_t) cfg_params.ncurr;
+  if (cfg_params.track_qdmax >= 0.0)
+    params->track_qdmax = cfg_params.track_qdmax;
   if (cfg_params.sq_nmax_int >= 0)
     params->sq_nmax_int = (size_t) cfg_params.sq_nmax_int;
   if (cfg_params.sq_mmax_int >= 0)
@@ -64,6 +66,10 @@ fill_parameters(mag_params *params)
     params->sq_nmax_ext = (size_t) cfg_params.sq_nmax_ext;
   if (cfg_params.sq_mmax_ext >= 0)
     params->sq_mmax_ext = (size_t) cfg_params.sq_mmax_ext;
+  if (cfg_params.sq_qdmin >= 0.0)
+    params->sq_qdmin = cfg_params.sq_qdmin;
+  if (cfg_params.sq_qdmax >= 0.0)
+    params->sq_qdmax = cfg_params.sq_qdmax;
   if (cfg_params.calc_field_models >= 0)
     params->calc_field_models = cfg_params.calc_field_models;
   if (cfg_params.main_nmax_int >= 0)
@@ -116,14 +122,6 @@ print_help(char *argv[])
   fprintf(stderr, "\t --lt_max | -b lt_max                - maximum local time (hours)\n");
   fprintf(stderr, "\t --lon_min | -d lon_min              - minimum longitude (degrees)\n");
   fprintf(stderr, "\t --lon_max | -e lon_max              - maximum longitude (degrees)\n");
-  fprintf(stderr, "\t --season_min | -f season_min        - minimum season (doy)\n");
-  fprintf(stderr, "\t --season_max | -g season_max        - maximum season (doy)\n");
-  fprintf(stderr, "\t --season_min2 | -h season_min2      - minimum season 2 (doy)\n");
-  fprintf(stderr, "\t --season_max2 | -j season_max2      - maximum season 2 (doy)\n");
-  fprintf(stderr, "\t --sq_nmax_int | -t nmax             - nmax for Sq internal\n");
-  fprintf(stderr, "\t --sq_mmax_int | -u mmax             - mmax for Sq internal\n");
-  fprintf(stderr, "\t --sq_nmax_ext | -v nmax             - nmax for Sq external\n");
-  fprintf(stderr, "\t --sq_mmax_ext | -w mmax             - mmax for Sq external\n");
   fprintf(stderr, "\t --curr_alt | -k curr_alt            - altitude of line current shell (km)\n");
   fprintf(stderr, "\t --qdmax | -q qdmax                  - maximum QD latitude for line currents (deg)\n");
   fprintf(stderr, "\t --profiles_only | -p                - compute magnetic/current profiles only (no EEF)\n");
@@ -139,6 +137,10 @@ main(int argc, char *argv[])
   mag_workspace *mag_workspace_p;
   track_workspace *track_workspace_p;
   cfg_workspace *config_workspace_p = NULL;
+  char *config_file = "eej.cfg";
+  char *log_dir = NULL;
+  double lt_min = -1.0;
+  double lt_max = -1.0;
   mag_params params;
 
   params.kp_max = 20.0;
@@ -191,36 +193,25 @@ main(int argc, char *argv[])
           { "log_dir", required_argument, NULL, 'l' },
           { "lt_min", required_argument, NULL, 'a' },
           { "lt_max", required_argument, NULL, 'b' },
-          { "lon_min", required_argument, NULL, 'd' },
-          { "lon_max", required_argument, NULL, 'e' },
-          { "season_min", required_argument, NULL, 'f' },
-          { "season_max", required_argument, NULL, 'g' },
-          { "season_min2", required_argument, NULL, 'h' },
-          { "season_max2", required_argument, NULL, 'j' },
           { "curr_alt", required_argument, NULL, 'k' },
           { "ncurr", required_argument, NULL, 'm' },
           { "qdmax", required_argument, NULL, 'q' },
-          { "sq_nmax_int", required_argument, NULL, 't' },
-          { "sq_mmax_int", required_argument, NULL, 'u' },
-          { "sq_nmax_ext", required_argument, NULL, 'v' },
-          { "sq_mmax_ext", required_argument, NULL, 'w' },
           { "vector", required_argument, NULL, 'z' },
-          { "kp_max", required_argument, NULL, 'A' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:o:pq:r:s:t:u:v:w:zA:C:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:c:k:l:m:o:pq:r:s:zC:", long_options, &option_index);
       if (c == -1)
         break;
 
       switch (c)
         {
           case 'a':
-            params.lt_min = atof(optarg);
+            lt_min = atof(optarg);
             break;
 
           case 'b':
-            params.lt_max = atof(optarg);
+            lt_max = atof(optarg);
             break;
 
           case 'c':
@@ -243,30 +234,6 @@ main(int argc, char *argv[])
                       nflag, data->n, (double)nflag / (double)data->n * 100.0);
             }
 
-            break;
-
-          case 'd':
-            params.lon_min = atof(optarg);
-            break;
-
-          case 'e':
-            params.lon_max = atof(optarg);
-            break;
-
-          case 'f':
-            params.season_min = atof(optarg);
-            break;
-
-          case 'g':
-            params.season_max = atof(optarg);
-            break;
-
-          case 'h':
-            params.season_min2 = atof(optarg);
-            break;
-
-          case 'j':
-            params.season_max2 = atof(optarg);
             break;
 
           case 'k':
@@ -318,7 +285,7 @@ main(int argc, char *argv[])
             break;
 
           case 'l':
-            params.log_dir = optarg;
+            log_dir = optarg;
             break;
 
           case 'm':
@@ -333,34 +300,12 @@ main(int argc, char *argv[])
             params.qdlat_max = atof(optarg);
             break;
 
-          case 't':
-            params.sq_nmax_int = (size_t) atoi(optarg);
-            break;
-
-          case 'u':
-            params.sq_mmax_int = (size_t) atoi(optarg);
-            break;
-
-          case 'v':
-            params.sq_nmax_ext = (size_t) atoi(optarg);
-            break;
-
-          case 'w':
-            params.sq_mmax_ext = (size_t) atoi(optarg);
-            break;
-
           case 'z':
             params.use_vector = 1;
             break;
 
-          case 'A':
-            params.kp_max = atof(optarg);
-            break;
-
           case 'C':
-            fprintf(stderr, "main: reading config file %s...", optarg);
-            config_workspace_p = cfg_alloc(optarg);
-            fprintf(stderr, "done\n");
+            config_file = optarg;
             break;
 
           default:
@@ -370,8 +315,20 @@ main(int argc, char *argv[])
         }
     }
 
+  fprintf(stderr, "main: reading config file %s...", config_file);
+  config_workspace_p = cfg_alloc(config_file);
+  fprintf(stderr, "done\n");
+
   if (config_workspace_p)
     fill_parameters(&params);
+
+  /* check if command line arguments override any parameters */
+  if (lt_min > 0.0)
+    params.lt_min = lt_min;
+  if (lt_max > 0.0)
+    params.lt_max = lt_max;
+  if (log_dir != NULL)
+    params.log_dir = log_dir;
 
   if (!data)
     {
@@ -414,21 +371,24 @@ main(int argc, char *argv[])
         }
     }
 
-  fprintf(stderr, "main: maximum allowed kp:      %.1f\n", params.kp_max);
-  fprintf(stderr, "main: line current shell:      %.1f [km]\n", params.curr_altitude);
-  fprintf(stderr, "main: number of line currents: %zu\n", params.ncurr);
-  fprintf(stderr, "main: LT min:                  %.1f [h]\n", params.lt_min);
-  fprintf(stderr, "main: LT max:                  %.1f [h]\n", params.lt_max);
-  fprintf(stderr, "main: longitude min:           %.1f [deg]\n", params.lon_min);
-  fprintf(stderr, "main: longitude max:           %.1f [deg]\n", params.lon_max);
-  fprintf(stderr, "main: season min:              %.1f [deg]\n", params.season_min);
-  fprintf(stderr, "main: season max:              %.1f [deg]\n", params.season_max);
-  fprintf(stderr, "main: season min 2:            %.1f [deg]\n", params.season_min2);
-  fprintf(stderr, "main: season max 2:            %.1f [deg]\n", params.season_max2);
-  fprintf(stderr, "main: Sq internal nmax         %zu\n", params.sq_nmax_int);
-  fprintf(stderr, "main: Sq internal mmax         %zu\n", params.sq_mmax_int);
-  fprintf(stderr, "main: Sq external nmax         %zu\n", params.sq_nmax_ext);
-  fprintf(stderr, "main: Sq external mmax         %zu\n", params.sq_mmax_ext);
+  fprintf(stderr, "main: maximum allowed kp:        %.1f\n", params.kp_max);
+  fprintf(stderr, "main: line current shell:        %.1f [km]\n", params.curr_altitude);
+  fprintf(stderr, "main: number of line currents:   %zu\n", params.ncurr);
+  fprintf(stderr, "main: LT min:                    %.1f [h]\n", params.lt_min);
+  fprintf(stderr, "main: LT max:                    %.1f [h]\n", params.lt_max);
+  fprintf(stderr, "main: longitude min:             %.1f [deg]\n", params.lon_min);
+  fprintf(stderr, "main: longitude max:             %.1f [deg]\n", params.lon_max);
+  fprintf(stderr, "main: season min:                %.1f [deg]\n", params.season_min);
+  fprintf(stderr, "main: season max:                %.1f [deg]\n", params.season_max);
+  fprintf(stderr, "main: season min 2:              %.1f [deg]\n", params.season_min2);
+  fprintf(stderr, "main: season max 2:              %.1f [deg]\n", params.season_max2);
+  fprintf(stderr, "main: track QD maximum latitude: %.1f [deg]\n", params.track_qdmax);
+  fprintf(stderr, "main: Sq internal nmax:          %zu\n", params.sq_nmax_int);
+  fprintf(stderr, "main: Sq internal mmax:          %zu\n", params.sq_mmax_int);
+  fprintf(stderr, "main: Sq external nmax:          %zu\n", params.sq_nmax_ext);
+  fprintf(stderr, "main: Sq external mmax:          %zu\n", params.sq_mmax_ext);
+  fprintf(stderr, "main: Sq QD minimum latitude:    %.1f [deg]\n", params.sq_qdmin);
+  fprintf(stderr, "main: Sq QD maximum latitude:    %.1f [deg]\n", params.sq_qdmax);
 
   track_workspace_p = track_alloc();
   track_init(data, NULL, track_workspace_p);

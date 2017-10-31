@@ -54,7 +54,8 @@ mag_sqfilt_vector(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
 {
   int s = 0;
   mag_track *track = &(mag_p->track);
-  const double exclude_qdlat = 12.0; /* exclude points below this QD latitude from fit */
+  mag_params *params = mag_p->params;
+  const double exclude_qdlat = params->sq_qdmin; /* exclude points below this QD latitude from fit */
   const size_t ntot = track->n;
   size_t i;
   double qd_min, qd_max;
@@ -108,6 +109,9 @@ mag_sqfilt_vector(mag_workspace *mag_p, mag_sqfilt_scalar_workspace *w)
   for (i = 0; i < ntot; ++i)
     {
       double rhs_B[3];
+
+      if (fabs(track->qdlat[i]) > params->sq_qdmax)
+        continue;
 
       rhs_B[0] = track->X1[i];
       rhs_B[1] = track->Y1[i];

@@ -94,6 +94,7 @@ typedef struct
   double q[4];           /* quaternions */
   double ne;             /* electron density cm^{-3} */
   int satdir;            /* +1 north, -1 south */
+  double lt;             /* local time in [0,24] */
   double lt_eq;          /* local time of equator crossing */
 
   double t_ns;           /* timestamp for along-track point (CDF_EPOCH) */
@@ -106,6 +107,7 @@ typedef struct
   double B_model_ns[3];  /* along-track main/crustal/external field model in NEC frame (nT) */
   double F_ns;           /* along-track magnetic field scalar measurement (nT) */
   double q_ns[4];        /* along-track quaternions */
+  double lt_ns;          /* local time of gradient point in [0,24] */
   double lt_eq_ns;       /* local time of equator crossing for gradient point */
 
   size_t flags;          /* MAGDATA_FLG_xxx flags */
@@ -132,6 +134,7 @@ typedef struct
   double *q;           /* quaternions */
   double *weights;     /* spatial weights */
   int *satdir;         /* +1 north, -1 south */
+  double *lt;          /* local time in [0,24] */
   double *lt_eq;       /* local time of equator crossing */
 
   double *ne;          /* electron density cm^{-3} */
@@ -153,6 +156,7 @@ typedef struct
   double *Bz_model_ns; /* NEC along-track Z main/crustal/external field (nT) */
   double *F_ns;        /* along-track scalar measurement (nT) */
   double *q_ns;        /* along-track quaternions */
+  double *lt_ns;       /* local time of gradient point in [0,24] */
   double *lt_eq_ns;    /* along-track local time of equator crossing */
 
   size_t *flags;       /* MAGDATA_FLG_xxx flags */
@@ -266,6 +270,7 @@ int magdata_copy_track_EW(const magdata_params *params, const size_t track_idx,
                           const satdata_mag *data2, const track_workspace *track_p2,
                           magdata *mdata, size_t ntype[6]);
 satdata_mag *magdata_mag2sat(const magdata *mdata);
+int magdata_replace_phi_LT(const double lt0, magdata *data);
 
 /* preproc.c */
 magdata_preprocess_parameters magdata_preprocess_default_parameters(void);

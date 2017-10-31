@@ -41,10 +41,10 @@
 #if !POLTOR_SYNTH_DATA
 #define POLTOR_WEIGHT_X              (1.0)
 #define POLTOR_WEIGHT_Y              (1.0)
-#define POLTOR_WEIGHT_Z              (8.0)
-#define POLTOR_WEIGHT_DX             (8.0)
-#define POLTOR_WEIGHT_DY             (8.0)
-#define POLTOR_WEIGHT_DZ             (8.0)
+#define POLTOR_WEIGHT_Z              (1.0)
+#define POLTOR_WEIGHT_DX             (1.0)
+#define POLTOR_WEIGHT_DY             (1.0)
+#define POLTOR_WEIGHT_DZ             (1.0)
 #else
 #define POLTOR_WEIGHT_X              (1.0)
 #define POLTOR_WEIGHT_Y              (1.0)
@@ -73,13 +73,40 @@ typedef struct
   size_t nmax_tor;   /* maximum spherical harmonic degree for B_tor */
   size_t mmax_tor;   /* maximum spherical harmonic order for B_tor */
 
+  size_t max_iter;   /* number of robust iterations */
+  int use_weights;   /* use weights in fitting */
+
   size_t shell_J;    /* order of Taylor series expansion of q_{nm}(r) for shell B_pol */
 
+  int fit_X;         /* fit X component */
+  int fit_Y;         /* fit Y component */
+  int fit_Z;         /* fit Z component */
+  int fit_F;         /* fit F component */
+  int fit_DX_NS;     /* fit DX_NS component */
+  int fit_DY_NS;     /* fit DY_NS component */
+  int fit_DZ_NS;     /* fit DZ_NS component */
+  int fit_DF_NS;     /* fit DF_NS component */
+
+  double weight_X;     /* relative weighting for X component */
+  double weight_Y;     /* relative weighting for Y component */
+  double weight_Z;     /* relative weighting for Z component */
+  double weight_F;     /* relative weighting for F component */
+  double weight_DX_NS; /* relative weighting for DX_NS component */
+  double weight_DY_NS; /* relative weighting for DY_NS component */
+  double weight_DZ_NS; /* relative weighting for DZ_NS component */
+  double weight_DF_NS; /* relative weighting for DF_NS component */
+
+  int regularize;    /* regularize solution */
   double alpha_int;  /* damping parameter for internal coefficients */
   double alpha_sh;   /* damping parameter for poloidal shell coefficients */
   double alpha_tor;  /* damping parameter for toroidal shell coefficients */
 
   size_t flags;      /* POLTOR_FLG_xxx */
+
+  /* synthetic data parameters */
+  int synth_data;    /* replace real data with synthetic for testing */
+  int synth_noise;   /* add gaussian noise to synthetic model */
+  size_t synth_nmin; /* minimum spherical harmonic degree for synthetic model */
 
   magdata *data;     /* satellite data */
 } poltor_parameters;
@@ -157,15 +184,6 @@ typedef struct
   size_t psh_offset;  /* offset in 'c' of B_pol^{sh} coefficients */
   size_t tor_offset;  /* offset in 'c' of B_tor coefficients */
 
-  /*
-   * Indexing for coefficients, base[n] gives the offset in the coef
-   * vector for all the coefficients of degree n
-   */
-  size_t *base_int;
-  size_t *base_ext;
-  size_t *base_sh;
-  size_t *base_tor;
-
   /* L-curve parameters */
   gsl_vector *reg_param;  /* regularization parameters */
   gsl_vector *rho;        /* residual norms */
@@ -185,6 +203,7 @@ typedef struct
 
 poltor_workspace *poltor_alloc(const poltor_parameters *params);
 void poltor_free(poltor_workspace *w);
+int poltor_init_params(poltor_parameters * params);
 int poltor_calc(poltor_workspace *w);
 int poltor_solve(poltor_workspace *w);
 int poltor_eval_J_shell(const double r, const double theta, const double phi,

@@ -4,8 +4,8 @@
 #
 # Adjust 'logdir' and 'outdir' below
 
-logdir = 'log2'
-outdir = 'log2/plots'
+logdir = 'mar2015_A'
+outdir = 'mar2015_A/plots'
 
 cmd = sprintf('mkdir -p %s', outdir)
 tstr = system(cmd)
@@ -58,7 +58,7 @@ do for [idx=0:nplot - 1] {
 np = idx + 1
 
 # Retrieve timestamp string
-cmd = sprintf('/data/palken/lib/common/time2str2 %s', word(tarr, np))
+cmd = sprintf('time2str -t %s -z', word(tarr, np))
 tstr = system(cmd)
 
 # Retrieve longitude of equator crossing
@@ -79,7 +79,7 @@ if (dir > 0) {
   dirstr="downleg"
 }
 
-cmd = sprintf('/data/palken/lib/common/time2str3 %s', word(tarr, np))
+cmd = sprintf('time2str -t %s -a -z', word(tarr, np))
 fstr = system(cmd)
 outstr = sprintf('%s/plot_%s.png', outdir, fstr)
 set out outstr

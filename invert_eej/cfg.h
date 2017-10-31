@@ -46,10 +46,13 @@ typedef struct
   double kp_max;               /* maximum allowed kp */
   double lon_min;              /* minimum longitude (degrees) */
   double lon_max;              /* maximum longitude (degrees) */
+  double track_qdmax;          /* maximum QD latitude for track processing */
   int sq_nmax_int;             /* internal spherical harmonic degree for Sq filter */
   int sq_mmax_int;             /* internal spherical harmonic order for Sq filter */
   int sq_nmax_ext;             /* external spherical harmonic degree for Sq filter */
   int sq_mmax_ext;             /* external spherical harmonic order for Sq filter */
+  double sq_qdmin;             /* minimum QD latitude for Sq fitting */
+  double sq_qdmax;             /* maximum QD latitude for Sq fitting */
   int calc_field_models;       /* calculate along-track field models */
   int main_nmax_int;           /* spherical harmonic nmax for core field model */
   int crust_nmax_int;          /* spherical harmonic nmax for crustal field model */

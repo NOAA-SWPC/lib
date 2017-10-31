@@ -13,6 +13,7 @@
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
+#include <libconfig.h>
 
 #include <satdata/satdata.h>
 #include <flow/flow.h>
@@ -43,6 +44,133 @@
 /* define to use QD coordinates in spherical harmonic transforms */
 #define POLTOR_QD_HARMONICS        1
 
+static int
+parse_config_file(const char *filename, poltor_parameters *poltor_params)
+{
+  int s;
+  config_t cfg;
+  double fval;
+  int ival;
+
+  config_init(&cfg);
+
+  s = config_read_file(&cfg, filename);
+  if (s != CONFIG_TRUE)
+    {
+      fprintf(stderr, "parse_config_file: %s:%d - %s\n",
+              config_error_file(&cfg),
+              config_error_line(&cfg),
+              config_error_text(&cfg));
+      config_destroy(&cfg);
+      return -1;
+    }
+
+  if (config_lookup_int(&cfg, "nmax_int", &ival))
+    poltor_params->nmax_int = (size_t) ival;
+  if (config_lookup_int(&cfg, "mmax_int", &ival))
+    poltor_params->mmax_int = (size_t) ival;
+  if (config_lookup_int(&cfg, "nmax_sh", &ival))
+    poltor_params->nmax_sh = (size_t) ival;
+  if (config_lookup_int(&cfg, "mmax_sh", &ival))
+    poltor_params->mmax_sh = (size_t) ival;
+  if (config_lookup_int(&cfg, "nmax_tor", &ival))
+    poltor_params->nmax_tor = (size_t) ival;
+  if (config_lookup_int(&cfg, "mmax_tor", &ival))
+    poltor_params->mmax_tor = (size_t) ival;
+
+  if (config_lookup_float(&cfg, "R", &fval))
+    poltor_params->R = fval;
+  if (config_lookup_float(&cfg, "b", &fval))
+    poltor_params->b = fval;
+
+  if (config_lookup_int(&cfg, "shell_J", &ival))
+    poltor_params->shell_J = (size_t) ival;
+
+  if (config_lookup_int(&cfg, "max_iter", &ival))
+    poltor_params->max_iter = (size_t) ival;
+
+  if (config_lookup_int(&cfg, "use_weights", &ival))
+    poltor_params->use_weights = ival;
+  if (config_lookup_int(&cfg, "regularize", &ival))
+    poltor_params->regularize = ival;
+
+  if (config_lookup_float(&cfg, "alpha_int", &fval))
+    poltor_params->alpha_int = fval;
+  if (config_lookup_float(&cfg, "alpha_sh", &fval))
+    poltor_params->alpha_sh = fval;
+  if (config_lookup_float(&cfg, "alpha_tor", &fval))
+    poltor_params->alpha_tor = fval;
+
+  if (config_lookup_float(&cfg, "weight_X", &fval))
+    poltor_params->weight_X = fval;
+  if (config_lookup_float(&cfg, "weight_Y", &fval))
+    poltor_params->weight_Y = fval;
+  if (config_lookup_float(&cfg, "weight_Z", &fval))
+    poltor_params->weight_Z = fval;
+  if (config_lookup_float(&cfg, "weight_F", &fval))
+    poltor_params->weight_F = fval;
+  if (config_lookup_float(&cfg, "weight_DX_NS", &fval))
+    poltor_params->weight_DX_NS = fval;
+  if (config_lookup_float(&cfg, "weight_DY_NS", &fval))
+    poltor_params->weight_DY_NS = fval;
+  if (config_lookup_float(&cfg, "weight_DZ_NS", &fval))
+    poltor_params->weight_DZ_NS = fval;
+  if (config_lookup_float(&cfg, "weight_DF_NS", &fval))
+    poltor_params->weight_DF_NS = fval;
+
+  if (config_lookup_int(&cfg, "fit_X", &ival))
+    poltor_params->fit_X = ival;
+  if (config_lookup_int(&cfg, "fit_Y", &ival))
+    poltor_params->fit_Y = ival;
+  if (config_lookup_int(&cfg, "fit_Z", &ival))
+    poltor_params->fit_Z = ival;
+  if (config_lookup_int(&cfg, "fit_F", &ival))
+    poltor_params->fit_F = ival;
+  if (config_lookup_int(&cfg, "fit_DX_NS", &ival))
+    poltor_params->fit_DX_NS = ival;
+  if (config_lookup_int(&cfg, "fit_DY_NS", &ival))
+    poltor_params->fit_DY_NS = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_NS", &ival))
+    poltor_params->fit_DZ_NS = ival;
+  if (config_lookup_int(&cfg, "fit_DF_NS", &ival))
+    poltor_params->fit_DF_NS = ival;
+
+#if 0
+  if (config_lookup_int(&cfg, "fit_DX_EW", &ival))
+    data_params->fit_DX_EW = ival;
+  if (config_lookup_int(&cfg, "fit_DY_EW", &ival))
+    data_params->fit_DY_EW = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_EW", &ival))
+    data_params->fit_DZ_EW = ival;
+  if (config_lookup_int(&cfg, "fit_DF_EW", &ival))
+    data_params->fit_DF_EW = ival;
+
+  if (config_lookup_int(&cfg, "fit_Z_highlat", &ival))
+    data_params->fit_Z_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_F_highlat", &ival))
+    data_params->fit_F_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_NS_highlat", &ival))
+    data_params->fit_DZ_NS_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DF_NS_highlat", &ival))
+    data_params->fit_DF_NS_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DZ_EW_highlat", &ival))
+    data_params->fit_DZ_EW_highlat = ival;
+  if (config_lookup_int(&cfg, "fit_DF_EW_highlat", &ival))
+    data_params->fit_DF_EW_highlat = ival;
+#endif
+
+  if (config_lookup_int(&cfg, "synth_data", &ival))
+    poltor_params->synth_data = ival;
+  if (config_lookup_int(&cfg, "synth_noise", &ival))
+    poltor_params->synth_noise = ival;
+  if (config_lookup_int(&cfg, "synth_nmin", &ival))
+    poltor_params->synth_nmin = (size_t) ival;
+
+  config_destroy(&cfg);
+
+  return 0;
+}
+
 /*
 set_flags()
   The preproc program will have calculated the magdata struct,
@@ -50,61 +178,55 @@ but won't set the individual X/Y/Z fitting flags, since that should
 be done here. However it would set the MAGDATA_FLG_DZ_NS flag if
 gradient information is available for each point.
 
-So go through data, and based on the FIT_xxx settings, re-assign
+So go through data, and based on the fit settings, re-assign
 magdata flags
 */
 
 int
-set_flags(magdata *data)
+set_flags(const poltor_parameters *params, magdata *data)
 {
   int s = 0;
   size_t i;
 
   for (i = 0; i < data->n; ++i)
     {
-      size_t flags = 0;
+      if (MAGDATA_Discarded(data->flags[i]))
+        continue;
 
-      /* only fit X/Y at mid/low latitudes */
-      if (data->qdlat[i] >= -60.0 && data->qdlat[i] <= 60.0)
+      /* don't fit X/Y data at high latitudes */
+      if (fabs(data->qdlat[i]) > 60.0)
         {
-#if POLTOR_FIT_X
-          flags |= MAGDATA_FLG_X;
-#endif
-#if POLTOR_FIT_Y
-          flags |= MAGDATA_FLG_Y;
-#endif
+          data->flags[i] &= ~(MAGDATA_FLG_X|MAGDATA_FLG_Y);
+          data->flags[i] &= ~(MAGDATA_FLG_DX_NS|MAGDATA_FLG_DY_NS);
         }
 
-#if POLTOR_FIT_Z
-      flags |= MAGDATA_FLG_Z;
-#endif
+      if (!params->fit_X)
+        data->flags[i] &= ~MAGDATA_FLG_X;
 
-      if (data->flags[i] & MAGDATA_FLG_DZ_NS)
-        {
-          /* vector along-track gradient is available for this point */
+      if (!params->fit_Y)
+        data->flags[i] &= ~MAGDATA_FLG_Y;
 
-          /* only fit X/Y at mid/low latitudes */
-          if (data->qdlat[i] >= -60.0 && data->qdlat[i] <= 60.0)
-            {
-#if POLTOR_FIT_DX
-              flags |= MAGDATA_FLG_DX_NS;
-#endif
-#if POLTOR_FIT_DY
-              flags |= MAGDATA_FLG_DY_NS;
-#endif
-            }
+      if (!params->fit_Z)
+        data->flags[i] &= ~MAGDATA_FLG_Z;
 
-          /* fit B_z at all latitudes */
-#if POLTOR_FIT_DZ
-          flags |= MAGDATA_FLG_DZ_NS;
-#endif
-        }
+      if (!params->fit_F)
+        data->flags[i] &= ~MAGDATA_FLG_F;
 
-      data->flags[i] = flags;
+      if (!params->fit_DX_NS)
+        data->flags[i] &= ~MAGDATA_FLG_DX_NS;
+
+      if (!params->fit_DY_NS)
+        data->flags[i] &= ~MAGDATA_FLG_DY_NS;
+
+      if (!params->fit_DZ_NS)
+        data->flags[i] &= ~MAGDATA_FLG_DZ_NS;
+
+      if (!params->fit_DF_NS)
+        data->flags[i] &= ~MAGDATA_FLG_DF_NS;
     }
 
   return s;
-} /* set_flags() */
+}
 
 int
 print_correlation(const char *filename, poltor_workspace *w)
@@ -517,19 +639,12 @@ print_help(char *argv[])
 {
   fprintf(stderr, "Usage: %s [options] input1.dat input2.dat ...\n", argv[0]);
   fprintf(stderr, "Options:\n");
-  fprintf(stderr, "\t --nmax_int | -n nmax                - internal nmax\n");
-  fprintf(stderr, "\t --mmax_int | -m mmax                - internal mmax\n");
-  fprintf(stderr, "\t --nmax_tor | -a nmax                - toroidal nmax\n");
-  fprintf(stderr, "\t --mmax_tor | -b mmax                - toroidal mmax\n");
-  fprintf(stderr, "\t --nmax_sh | -e nmax                 - shell nmax\n");
-  fprintf(stderr, "\t --mmax_sh | -f mmax                 - shell mmax\n");
   fprintf(stderr, "\t --alpha_int | -c alpha_int          - damping parameter for internal coefficients\n");
   fprintf(stderr, "\t --alpha_sh | -d alpha_sh            - damping parameter for shell poloidal coefficients\n");
   fprintf(stderr, "\t --alpha_tor | -j alpha_tor          - damping parameter for shell toroidal coefficients\n");
   fprintf(stderr, "\t --residual_file | -r file           - residual output file\n");
   fprintf(stderr, "\t --coef_file | -o file               - coefficient output file\n");
   fprintf(stderr, "\t --chisq_file | -p file              - chi^2 output file (for L-curve analysis)\n");
-  fprintf(stderr, "\t --universal_time | -t decimal UT    - Universal time (hours)\n");
   fprintf(stderr, "\t --lls_file | -l lls_file            - LS system file (matrix and rhs)\n");
   fprintf(stderr, "\t --lcurve_file | -k lcurve_file      - output file for L-curve data\n");
   fprintf(stderr, "\t --maxit | -q maxit                  - number of robust iterations\n");
@@ -539,24 +654,15 @@ print_help(char *argv[])
 int
 main(int argc, char *argv[])
 {
-  size_t nmax_int = 60;
-  size_t mmax_int = 6;
-  size_t nmax_ext = 0;
-  size_t mmax_ext = 0;
-  size_t nmax_sh = 60;
-  size_t mmax_sh = 5;
-  size_t nmax_tor = 60;
-  size_t mmax_tor = 5;
-  double alpha_int = 1.0;
-  double alpha_sh = 1.0;
-  double alpha_tor = 1.0;
+  int status;
+  double alpha_int = -1.0;
+  double alpha_sh = -1.0;
+  double alpha_tor = -1.0;
   size_t robust_maxit = 5;
-  const double R = R_EARTH_KM;
-  const double b = R + 110.0;   /* radius of internal current shell (Sq+EEJ) */
-  const double d = R + 350.0;   /* radius of current shell for gravity/diamag */
-  double universal_time = 11.0; /* UT in hours for data selection */
+  const double d = R_EARTH_KM + 350.0;   /* radius of current shell for gravity/diamag */
+  char *config_file = "PT.cfg";
   char *datamap_file = "datamap.dat";
-  char *data_file = "data.dat";
+  char *data_prefix = "output";
   char *spectrum_file = "poltor.s";
   char *corr_file = "corr.dat";
   char *residual_file = NULL;
@@ -570,16 +676,7 @@ main(int argc, char *argv[])
   struct timeval tv0, tv1;
   int print_data = 0;
 
-#if POLTOR_SYNTH_DATA
-  nmax_int = 30;
-  mmax_int = 10;
-  nmax_ext = 2;
-  mmax_ext = 2;
-  nmax_sh = 20;
-  mmax_sh = 10;
-  nmax_tor = 30;
-  mmax_tor = 10;
-#endif
+  poltor_init_params(&params);
 
   while (1)
     {
@@ -587,18 +684,9 @@ main(int argc, char *argv[])
       int option_index = 0;
       static struct option long_options[] =
         {
-          { "nmax_int", required_argument, NULL, 'n' },
-          { "mmax_int", required_argument, NULL, 'm' },
-          { "nmax_tor", required_argument, NULL, 'a' },
-          { "mmax_tor", required_argument, NULL, 'b' },
-          { "nmax_sh", required_argument, NULL, 'e' },
-          { "mmax_sh", required_argument, NULL, 'f' },
-          { "nmax_ext", required_argument, NULL, 'g' },
-          { "mmax_ext", required_argument, NULL, 'h' },
           { "residual_file", required_argument, NULL, 'r' },
           { "output_file", required_argument, NULL, 'o' },
           { "chisq_file", required_argument, NULL, 'p' },
-          { "universal_time", required_argument, NULL, 't' },
           { "lls_file", required_argument, NULL, 'l' },
           { "lcurve_file", required_argument, NULL, 'k' },
           { "alpha_int", required_argument, NULL, 'c' },
@@ -606,45 +694,18 @@ main(int argc, char *argv[])
           { "alpha_tor", required_argument, NULL, 'j' },
           { "maxit", required_argument, NULL, 'q' },
           { "print_data", no_argument, NULL, 'u' },
+          { "config_file", no_argument, NULL, 'C' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:d:e:f:g:h:j:k:l:m:n:o:p:q:r:t:u", long_options, &option_index);
+      c = getopt_long(argc, argv, "c:C:d:j:k:l:o:p:q:r:u", long_options, &option_index);
       if (c == -1)
         break;
 
       switch (c)
         {
-          case 'n':
-            nmax_int = (size_t) atoi(optarg);
-            break;
-
-          case 'm':
-            mmax_int = (size_t) atoi(optarg);
-            break;
-
-          case 'a':
-            nmax_tor = (size_t) atoi(optarg);
-            break;
-
-          case 'b':
-            mmax_tor = (size_t) atoi(optarg);
-            break;
-
-          case 'e':
-            nmax_sh = (size_t) atoi(optarg);
-            break;
-
-          case 'f':
-            mmax_sh = (size_t) atoi(optarg);
-            break;
-
-          case 'g':
-            nmax_ext = (size_t) atoi(optarg);
-            break;
-
-          case 'h':
-            mmax_ext = (size_t) atoi(optarg);
+          case 'C':
+            config_file = optarg;
             break;
 
           case 'c':
@@ -669,10 +730,6 @@ main(int argc, char *argv[])
 
           case 'o':
             output_file = optarg;
-            break;
-
-          case 't':
-            universal_time = atof(optarg);
             break;
 
           case 'p':
@@ -718,24 +775,51 @@ main(int argc, char *argv[])
       exit(1);
     }
 
-  mmax_int = GSL_MIN(mmax_int, nmax_int);
-  mmax_ext = GSL_MIN(mmax_ext, nmax_ext);
-  mmax_sh = GSL_MIN(mmax_sh, nmax_sh);
-  mmax_tor = GSL_MIN(mmax_tor, nmax_tor);
+  /* parse configuration file */
+  fprintf(stderr, "main: parsing configuration file %s...", config_file);
+  status = parse_config_file(config_file, &params);
+  fprintf(stderr, "done (status = %d)\n", status);
+  if (status)
+    exit(1);
 
-  fprintf(stderr, "main: universal time = %.1f\n", universal_time);
+  /* check if command line arguments override config file values */
+  if (alpha_int > 0.0)
+    params.alpha_int = alpha_int;
+  if (alpha_sh > 0.0)
+    params.alpha_sh = alpha_sh;
+  if (alpha_tor > 0.0)
+    params.alpha_tor = alpha_tor;
 
-  fprintf(stderr, "main: nmax_int  = %zu\n", nmax_int);
-  fprintf(stderr, "main: mmax_int  = %zu\n", mmax_int);
-  fprintf(stderr, "main: nmax_ext  = %zu\n", nmax_ext);
-  fprintf(stderr, "main: mmax_ext  = %zu\n", mmax_ext);
-  fprintf(stderr, "main: nmax_sh   = %zu\n", nmax_sh);
-  fprintf(stderr, "main: mmax_sh   = %zu\n", mmax_sh);
-  fprintf(stderr, "main: nmax_tor  = %zu\n", nmax_tor);
-  fprintf(stderr, "main: mmax_tor  = %zu\n", mmax_tor);
-  fprintf(stderr, "main: alpha_int = %g\n", alpha_int);
-  fprintf(stderr, "main: alpha_sh  = %g\n", alpha_sh);
-  fprintf(stderr, "main: alpha_tor = %g\n", alpha_tor);
+#if POLTOR_SYNTH_DATA
+  params.nmax_int = 20;
+  params.mmax_int = 12;
+  params.nmax_ext = 0;
+  params.mmax_ext = 0;
+  params.nmax_sh = 0;
+  params.mmax_sh = 0;
+  params.nmax_tor = 0;
+  params.mmax_tor = 0;
+#endif
+
+  params.mmax_int = GSL_MIN(params.mmax_int, params.nmax_int);
+  params.mmax_ext = GSL_MIN(params.mmax_ext, params.nmax_ext);
+  params.mmax_sh = GSL_MIN(params.mmax_sh, params.nmax_sh);
+  params.mmax_tor = GSL_MIN(params.mmax_tor, params.nmax_tor);
+
+  fprintf(stderr, "main: nmax_int  = %zu\n", params.nmax_int);
+  fprintf(stderr, "main: mmax_int  = %zu\n", params.mmax_int);
+  fprintf(stderr, "main: nmax_ext  = %zu\n", params.nmax_ext);
+  fprintf(stderr, "main: mmax_ext  = %zu\n", params.mmax_ext);
+  fprintf(stderr, "main: nmax_sh   = %zu\n", params.nmax_sh);
+  fprintf(stderr, "main: mmax_sh   = %zu\n", params.mmax_sh);
+  fprintf(stderr, "main: nmax_tor  = %zu\n", params.nmax_tor);
+  fprintf(stderr, "main: mmax_tor  = %zu\n", params.mmax_tor);
+  fprintf(stderr, "main: alpha_int = %g\n", params.alpha_int);
+  fprintf(stderr, "main: alpha_sh  = %g\n", params.alpha_sh);
+  fprintf(stderr, "main: alpha_tor = %g\n", params.alpha_tor);
+  fprintf(stderr, "main: shell_J   = %zu\n", params.shell_J);
+  fprintf(stderr, "main: R         = %g [km]\n", params.R);
+  fprintf(stderr, "main: b         = %g [km]\n", params.b);
 
   if (residual_file)
     fprintf(stderr, "main: residual file = %s\n", residual_file);
@@ -747,7 +831,7 @@ main(int argc, char *argv[])
    * re-compute flags for fitting components / gradient, etc;
    * must be called before magdata_init()
    */
-  set_flags(mdata);
+  set_flags(&params, mdata);
 
   fprintf(stderr, "main: initializing spatial weighting histogram...");
   gettimeofday(&tv0, NULL);
@@ -771,8 +855,8 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: print_data = %d\n", print_data);
   if (print_data)
     {
-      fprintf(stderr, "main: writing data to %s...", data_file);
-      magdata_print(data_file, mdata);
+      fprintf(stderr, "main: writing data to %s...", data_prefix);
+      magdata_print(data_prefix, mdata);
       fprintf(stderr, "done\n");
 
       fprintf(stderr, "main: writing data map to %s...", datamap_file);
@@ -785,24 +869,10 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: satellite rmax = %.1f (%.1f) [km]\n",
           mdata->rmax, mdata->rmax - mdata->R);
 
-  params.R = R;
-  params.b = b;
   params.d = d;
   params.rmin = GSL_MAX(mdata->rmin, mdata->R + 250.0);
   params.rmax = GSL_MIN(mdata->rmax, mdata->R + 450.0);
-  params.nmax_int = nmax_int;
-  params.mmax_int = mmax_int;
-  params.nmax_ext = nmax_ext;
-  params.mmax_ext = mmax_ext;
-  params.nmax_sh = nmax_sh;
-  params.mmax_sh = mmax_sh;
-  params.nmax_tor = nmax_tor;
-  params.mmax_tor = mmax_tor;
-  params.shell_J = 0;
   params.data = mdata;
-  params.alpha_int = alpha_int;
-  params.alpha_sh = alpha_sh;
-  params.alpha_tor = alpha_tor;
 
 #if POLTOR_QD_HARMONICS
   params.flags = POLTOR_FLG_QD_HARMONICS;

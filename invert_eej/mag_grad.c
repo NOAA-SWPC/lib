@@ -319,6 +319,7 @@ mag_grad_compute_F1(const track_data *tptr, const satdata_mag *data,
                     mag_workspace *w)
 {
   int s = 0;
+  const mag_params *params = w->params;
   const double dt_max = 5.0; /* maximum time difference allowed in sec */
   size_t i, j, k;
   size_t idx = 0;
@@ -335,7 +336,7 @@ mag_grad_compute_F1(const track_data *tptr, const satdata_mag *data,
       double B_int[4], B_crust[4], B_ext[4], B_tot[4];
       double B_int_grad[4], B_crust_grad[4], B_ext_grad[4], B_tot_grad[4];
 
-      if (fabs(qdlat) > MAG_MAX_QD_LATITUDE)
+      if (fabs(qdlat) > params->track_qdmax)
         continue;
 
       /* find measurement for satellite 2 with approximately the same time */

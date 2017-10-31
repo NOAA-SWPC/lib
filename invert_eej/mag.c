@@ -789,15 +789,12 @@ mag_compute_F1(const double t_eq, const double phi_eq, const double theta_eq, co
       double qdlat = data->qdlat[i];
       double B_int[4], B_crust[4], B_ext[4], B_tot[4];
 
-      if (fabs(qdlat) > MAG_MAX_QD_LATITUDE)
+      if (fabs(qdlat) > params->track_qdmax)
         continue;
 
       /* if using vector data, make sure NEC measurement exists */
       if (params->use_vector && (data->flags[i] & SATDATA_FLG_NOVEC_NEC))
         continue;
-
-      if (i == sidx + 800)
-        printf("here\n");
 
       B_int[0] = SATDATA_VEC_X(data->B_main, i);
       B_int[1] = SATDATA_VEC_Y(data->B_main, i);

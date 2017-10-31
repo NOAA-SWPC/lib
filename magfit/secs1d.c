@@ -313,7 +313,7 @@ secs1d_add_datum(const double t, const double r, const double theta, const doubl
       gsl_vector_view vx, vz;
 
       if (fabs(qdlat) < 5.0)
-        wi *= 10.0;
+        wi *= SECS1D_WEIGHT_EEJ;
 
       if (state->flags & MAGFIT_FLG_FIT_X)
         {
@@ -432,13 +432,8 @@ secs1d_fit(double * rnorm, double * snorm, void * vstate)
   gsl_multifit_linear_gcv(&bs.vector, reg_param, G, &lambda_gcv, &G_gcv, state->multifit_p);
 
   /* the L-curve method often overdamps the system, not sure why */
-#if 0 /*XXX*/
-  lambda_l *= 1.0e-2;
-  lambda_l = GSL_MAX(lambda_l, 1.0e-3 * s0);
-#else
   lambda_l = GSL_MAX(lambda_l, 1.0e-5 * s0);
   lambda_l = 1.0e-3*s0;
-#endif
 
   lambda = lambda_l;
 

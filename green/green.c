@@ -227,14 +227,14 @@ green_calc_ext(const double r, const double theta, const double phi,
 
           if (m < 0)
             {
-              /* q_{nm} */
+              /* k_{nm} */
               X[cidx] = term * w->sinmphi[mabs] * w->dPlm[pidx];
               Y[cidx] = -term / sint * mabs * w->cosmphi[mabs] * w->Plm[pidx];
               Z[cidx] = (double) n * term * w->sinmphi[mabs] * w->Plm[pidx];
             }
           else
             {
-              /* k_{nm} */
+              /* q_{nm} */
               X[cidx] = term * w->cosmphi[mabs] * w->dPlm[pidx];
               Y[cidx] = term / sint * mabs * w->sinmphi[mabs] * w->Plm[pidx];
               Z[cidx] = (double) n * term * w->cosmphi[mabs] * w->Plm[pidx];

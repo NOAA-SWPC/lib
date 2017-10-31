@@ -6,7 +6,7 @@ AM_CPPFLAGS = -I$(top_builddir)/apex -I$(top_builddir)/green -I$(top_builddir)/m
 
 common_libs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la -L/usr/lib64 -lsatdata -lindices ~/usr/lib/libgsl.a /home/palken/usr/lib/liblapacke.a /home/palken/usr/lib/liblapack.a -lptf77blas -lptcblas -latlas -lpthread /usr/lib64/libfftw3.so.3 -lgfortran -lnetcdf -lcdf
 
-bin_PROGRAMS = plot_maps print stage1 stage2 stage2b stage3 stage3b
+bin_PROGRAMS = plot_maps print stage1 stage2 stage2b stage3 stage3b stage1_ind
 
 plot_maps_SOURCES = plot_maps.c
 plot_maps_LDADD = libpca.la $(top_builddir)/green/libgreen.la -lcommon -lm ${common_libs}
@@ -18,6 +18,11 @@ stage1_SOURCES = stage1.c
 stage1_CFLAGS = -fopenmp
 stage1_LDFLAGS = -fopenmp
 stage1_LDADD = libpca.la $(top_builddir)/apex/libapex.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/green/libgreen.la  $(top_builddir)/track/libtrack.la $(top_builddir)/lapack_wrapper/liblapack_wrapper.la -lcommon -lmsynth -lm -lsatdata -lindices -lcdf -lgsl -lnetcdf ${common_libs}
+
+stage1_ind_SOURCES = stage1_ind.c
+stage1_ind_CFLAGS = -fopenmp
+stage1_ind_LDFLAGS = -fopenmp
+stage1_ind_LDADD = libpca.la $(top_builddir)/apex/libapex.la $(top_builddir)/magdata/libmagdata.la $(top_builddir)/lls/liblls.la $(top_builddir)/green/libgreen.la  $(top_builddir)/track/libtrack.la $(top_builddir)/lapack_wrapper/liblapack_wrapper.la -lcommon -lmsynth -lm -lsatdata -lindices -lcdf -lgsl -lnetcdf ${common_libs}
 
 stage2_SOURCES = stage2.c
 stage2_LDADD = libpca.la $(top_builddir)/green/libgreen.la $(top_builddir)/lapack_wrapper/liblapack_wrapper.la -lcommon -lm -lgsl ${common_libs}

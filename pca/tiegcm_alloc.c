@@ -30,7 +30,7 @@ tiegcm_alloc(const size_t nt, const size_t nlon, const size_t nlat)
 
   tiegcm_realloc(nt, nlon, nlat, data);
 
-  data->nt_max = 2000;
+  data->nt_max = 9000;
   data->workx = malloc(data->nt_max * nlon * nlat * sizeof(double));
   data->worky = malloc(data->nt_max * nlon * nlat * sizeof(double));
   data->workz = malloc(data->nt_max * nlon * nlat * sizeof(double));

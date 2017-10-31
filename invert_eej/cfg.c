@@ -58,11 +58,15 @@ static cfg_struct cfg_dirs[] = {
   { "kp_max", &(cfg_params.kp_max), CFG_DOUBLE|CFG_OPTIONAL },
   { "min_longitude", &(cfg_params.lon_min), CFG_DOUBLE|CFG_OPTIONAL },
   { "max_longitude", &(cfg_params.lon_max), CFG_DOUBLE|CFG_OPTIONAL },
+  { "track_qdmax", &(cfg_params.track_qdmax), CFG_DOUBLE|CFG_OPTIONAL },
 
   { "sq_nmax_int", &(cfg_params.sq_nmax_int), CFG_INT|CFG_OPTIONAL },
   { "sq_mmax_int", &(cfg_params.sq_mmax_int), CFG_INT|CFG_OPTIONAL },
   { "sq_nmax_ext", &(cfg_params.sq_nmax_ext), CFG_INT|CFG_OPTIONAL },
   { "sq_mmax_ext", &(cfg_params.sq_mmax_ext), CFG_INT|CFG_OPTIONAL },
+
+  { "sq_qdmin", &(cfg_params.sq_qdmin), CFG_DOUBLE|CFG_OPTIONAL },
+  { "sq_qdmax", &(cfg_params.sq_qdmax), CFG_DOUBLE|CFG_OPTIONAL },
 
   { "calc_field_models", &(cfg_params.calc_field_models), CFG_INT|CFG_OPTIONAL },
   { "main_nmax_int", &(cfg_params.main_nmax_int), CFG_INT|CFG_OPTIONAL },

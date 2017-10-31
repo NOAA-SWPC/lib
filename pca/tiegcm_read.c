@@ -4,7 +4,14 @@
  * This module contains routines to read tiegcm NetCDF files
  *
  * Required fields in TIEGCM files:
+ *
+ * Dimensions:
+ *
  * time
+ * glon
+ * glat
+ *
+ * Variables:
  * glon
  * glat
  * year
@@ -47,7 +54,7 @@ Return: pointer to data structure containing data
 tiegcm_data *
 tiegcm_read(const char *filename, tiegcm_data *data)
 {
-  int status;
+  int status, status2;
   size_t cur_idx, i;
   int ncid;
   int timeid, glonid, glatid;
@@ -66,8 +73,17 @@ tiegcm_read(const char *filename, tiegcm_data *data)
 
   status = 0;
   status += nc_inq_dimid(ncid, "time", &timeid);
-  status += nc_inq_dimid(ncid, "glon", &glonid);
-  status += nc_inq_dimid(ncid, "glat", &glatid);
+
+  /* when generating netcdf from matlab I had to rename glat/glon to nlat/nlon */
+  status2 = nc_inq_dimid(ncid, "glon", &glonid);
+  if (status2)
+    status2 = nc_inq_dimid(ncid, "nlon", &glonid);
+
+  status2 = nc_inq_dimid(ncid, "glat", &glatid);
+  if (status2)
+    status2 = nc_inq_dimid(ncid, "nlat", &glatid);
+
+  status += status2;
 
   if (status)
     {
@@ -119,7 +135,7 @@ tiegcm_read(const char *filename, tiegcm_data *data)
 
   if (nt > data->nt_max)
     {
-      fprintf(stderr, "tiegcm_read: error: nt_max too small\n");
+      fprintf(stderr, "tiegcm_read: error: nt_max too small [%zu]\n", data->nt_max);
       return 0;
     }
 
