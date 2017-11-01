@@ -10,9 +10,11 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_vector.h>
 #include <gsl/gsl_integration.h>
+#include <gsl/gsl_multilarge_nlinear.h>
 
 #include <common/bin2d.h>
 
+#include "green_complex.h"
 #include "lls.h"
 #include "magdata.h"
 #include "track_weight.h"
@@ -172,7 +174,10 @@ typedef struct
   size_t p;          /* number of coefficients in LS system */
   size_t nblock;     /* max data to fold into normal matrix at a time */
 
+  size_t nnm_int;    /* number of (n,m) pairs for B_pol^{int} */
+  size_t nnm_ext;    /* number of (n,m) pairs for B_pol^{ext} */
   size_t nnm_sh;     /* number of (n,m) pairs for B_pol^{sh} */
+  size_t nnm_tor;    /* number of (n,m) pairs for B_tor */
 
   size_t p_pint;     /* number of coefficients for B_pol^i */
   size_t p_pext;     /* number of coefficients for B_pol^e */
@@ -183,6 +188,28 @@ typedef struct
   size_t pext_offset; /* offset in 'c' of B_pol^e coefficients */
   size_t psh_offset;  /* offset in 'c' of B_pol^{sh} coefficients */
   size_t tor_offset;  /* offset in 'c' of B_tor coefficients */
+
+  /* nonlinear least squares parameters */
+  gsl_vector *wts_final;  /* final weights (robust * spatial), nres-by-1 */
+  size_t ndata;           /* total number of unique data points in LS system */
+  size_t nres_tot;        /* total residuals to minimize, including regularization terms */
+  size_t nres;            /* number of residauls to minimize (data only) */
+  size_t nres_vec;        /* number of vector residuals */
+  size_t nres_vec_grad;   /* number of vector gradient residuals */
+  gsl_multilarge_nlinear_workspace *multilarge_workspace_p;
+
+  gsl_matrix_complex *JHJ_vec; /* J^H J for vector measurements, p-by-p */
+
+  size_t max_threads;
+  gsl_matrix_complex *omp_dX;      /* dX/dg max_threads-by-p */
+  gsl_matrix_complex *omp_dY;      /* dY/dg max_threads-by-p */
+  gsl_matrix_complex *omp_dZ;      /* dZ/dg max_threads-by-p */
+  gsl_matrix_complex *omp_dX_grad; /* gradient dX/dg max_threads-by-p */
+  gsl_matrix_complex *omp_dY_grad; /* gradient dY/dg max_threads-by-p */
+  gsl_matrix_complex *omp_dZ_grad; /* gradient dZ/dg max_threads-by-p */
+  gsl_matrix_complex **omp_J;      /* max_threads matrices, each 4*data_block-by-p_int */
+  size_t *omp_rowidx;              /* row indices for omp_J */
+  green_complex_workspace **green_array_p; /* array of green workspaces, size max_threads */
 
   /* L-curve parameters */
   gsl_vector *reg_param;  /* regularization parameters */

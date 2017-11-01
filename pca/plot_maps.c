@@ -28,6 +28,7 @@ main(int argc, char *argv[])
   size_t i;
   double r = R_EARTH_KM + 0.0; /* radius for magnetic field maps */
   size_t ut = 12;              /* UT hour for maps */
+  pca_source_t source_type = PCA_SRC_EXTERNAL;
 
   while (1)
     {
@@ -38,7 +39,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:t:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:t:g", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -52,8 +53,12 @@ main(int argc, char *argv[])
             ut = (size_t) atoi(optarg);
             break;
 
+          case 'g':
+            source_type = PCA_SRC_INDUCED;
+            break;
+
           default:
-            fprintf(stderr, "Usage: %s [-a altitude] [-t UT]\n", argv[0]);
+            fprintf(stderr, "Usage: %s [-a altitude] [-t UT] [-g]\n", argv[0]);
             exit(1);
             break;
         }
@@ -61,7 +66,7 @@ main(int argc, char *argv[])
 
   fprintf(stderr, "main: radius = %g [km]\n", r);
 
-  pca_workspace_p = pca_alloc();
+  pca_workspace_p = pca_alloc(source_type);
   pca_set_UT(ut, pca_workspace_p);
   
   sprintf(buf, "maps/map_mean_%02zuUT.dat", ut);

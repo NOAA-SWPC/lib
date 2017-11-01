@@ -311,7 +311,7 @@ main(int argc, char *argv[])
   const size_t mmax = GSL_MIN(nmax, 30);
   const double R = R_EARTH_KM;
   green_workspace *green_p = green_alloc(nmax, mmax, R);
-  pca_workspace *pca_p = pca_alloc();
+  pca_workspace *pca_p = pca_alloc(PCA_SRC_EXTERNAL);
   char *knm_file = "data/stage1_knm.dat";
 
   char *pc_file = "pc_time.txt";

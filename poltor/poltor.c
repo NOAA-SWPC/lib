@@ -26,6 +26,7 @@
 #include <complex.h>
 #include <sys/time.h>
 #include <assert.h>
+#include <omp.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_vector.h>
@@ -90,7 +91,6 @@ poltor_alloc(const poltor_parameters *params)
 {
   poltor_workspace *w;
   size_t psize; /* size of Legendre arrays */
-  size_t n;
 
   w = calloc(1, sizeof(poltor_workspace));
   if (!w)
@@ -138,13 +138,16 @@ poltor_alloc(const poltor_parameters *params)
     }
 
   /* count number of spherical harmonic coefficients for each source */
-  w->p_pint = w->mmax_int * (w->mmax_int + 2) + (w->nmax_int - w->mmax_int) * (2*w->mmax_int + 1);
-  w->p_pext = w->mmax_ext * (w->mmax_ext + 2) + (w->nmax_ext - w->mmax_ext) * (2*w->mmax_ext + 1);
-  w->p_tor = w->mmax_tor * (w->mmax_tor + 2) + (w->nmax_tor - w->mmax_tor) * (2*w->mmax_tor + 1);
+  w->nnm_int = w->mmax_int * (w->mmax_int + 2) + (w->nmax_int - w->mmax_int) * (2*w->mmax_int + 1);
+  w->nnm_ext = w->mmax_ext * (w->mmax_ext + 2) + (w->nmax_ext - w->mmax_ext) * (2*w->mmax_ext + 1);
+  w->nnm_sh = w->mmax_sh * (w->mmax_sh + 2) + (w->nmax_sh - w->mmax_sh) * (2*w->mmax_sh + 1);
+  w->nnm_tor = w->mmax_tor * (w->mmax_tor + 2) + (w->nmax_tor - w->mmax_tor) * (2*w->mmax_tor + 1);
 
   /* compute total poloidal shell coefficients accouting for Taylor expansion */
-  w->nnm_sh = w->mmax_sh * (w->mmax_sh + 2) + (w->nmax_sh - w->mmax_sh) * (2*w->mmax_sh + 1);
+  w->p_pint = w->nnm_int;
+  w->p_pext = w->nnm_ext;
   w->p_psh = w->nnm_sh * (w->shell_J + 1);
+  w->p_tor = w->nnm_tor;
 
   w->p = w->p_pint + w->p_pext + w->p_psh + w->p_tor;
 
@@ -264,6 +267,15 @@ poltor_alloc(const poltor_parameters *params)
   w->rho = gsl_vector_alloc(w->nreg);
   w->eta = gsl_vector_alloc(w->nreg);
 
+  w->max_threads = (size_t) omp_get_max_threads();
+
+  w->omp_dX = gsl_matrix_complex_alloc(w->max_threads, w->p);
+  w->omp_dY = gsl_matrix_complex_alloc(w->max_threads, w->p);
+  w->omp_dZ = gsl_matrix_complex_alloc(w->max_threads, w->p);
+  w->omp_dX_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
+  w->omp_dY_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
+  w->omp_dZ_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
+
   return w;
 } /* poltor_alloc() */
 
@@ -326,6 +338,24 @@ poltor_free(poltor_workspace *w)
 
   if (w->eta)
     gsl_vector_free(w->eta);
+
+  if (w->omp_dX)
+    gsl_matrix_complex_free(w->omp_dX);
+
+  if (w->omp_dY)
+    gsl_matrix_complex_free(w->omp_dY);
+
+  if (w->omp_dZ)
+    gsl_matrix_complex_free(w->omp_dZ);
+
+  if (w->omp_dX_grad)
+    gsl_matrix_complex_free(w->omp_dX_grad);
+
+  if (w->omp_dY_grad)
+    gsl_matrix_complex_free(w->omp_dY_grad);
+
+  if (w->omp_dZ_grad)
+    gsl_matrix_complex_free(w->omp_dZ_grad);
 
   free(w);
 }
@@ -542,7 +572,7 @@ poltor_eval_J_shell(const double r, const double theta, const double phi,
                                   cos(theta), w->Pnm, w->dPnm);
 
   /* pre-compute Ynm and dYnm */
-  for (m = 0; m <= w->mmax_sh; ++m)
+  for (m = 0; m <= (int) w->mmax_sh; ++m)
     {
       complex double expimphi = cos(m * phi) + I * sin(m * phi);
 
@@ -876,6 +906,8 @@ poltor_eval_chi_sh(const double r, const double theta, const double phi,
                    double *chi, poltor_workspace *w)
 {
   int s = 0;
+
+  (void)r;
 
   s = poltor_eval_chi(w->d, theta, phi, POLTOR_IDX_PSH, chi, w);
 

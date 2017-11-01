@@ -30,8 +30,21 @@
 #define PCA_STAGE2B_V          "@abs_top_builddir@/pca/data/stage2b_V"
 #define PCA_STAGE2B_MU         "@abs_top_builddir@/pca/data/stage2b_mu"
 
+/* Stage2b_ind: filenames for induced parameters */
+#define PCA_STAGE2B_SVAL_TXT_IND "@abs_top_builddir@/pca/data/stage2b_sval_time_ind"
+#define PCA_STAGE2B_SVAL_IND   "@abs_top_builddir@/pca/data/stage2b_sval_ind"
+#define PCA_STAGE2B_U_IND      "@abs_top_builddir@/pca/data/stage2b_U_ind"
+#define PCA_STAGE2B_V_IND      "@abs_top_builddir@/pca/data/stage2b_V_ind"
+#define PCA_STAGE2B_MU_IND     "@abs_top_builddir@/pca/data/stage2b_mu_ind"
+
 /* Stage3b: cumulative variance file prefix */
 #define PCA_STAGE3B_VAR        "@abs_top_builddir@/pca/data/stage3b_var"
+
+typedef enum
+{
+  PCA_SRC_EXTERNAL,
+  PCA_SRC_INDUCED
+} pca_source_t;
 
 typedef struct
 {
@@ -56,6 +69,8 @@ typedef struct
   double *Z;
   gsl_vector *work;   /* size nnm */
 
+  pca_source_t source_type; /* type of source (external or induced) */
+
   green_workspace *green_workspace_p;
 } pca_workspace;
 
@@ -63,7 +78,7 @@ typedef struct
  * Prototypes
  */
 
-pca_workspace *pca_alloc();
+pca_workspace *pca_alloc(const pca_source_t source_type);
 void pca_free(pca_workspace *w);
 int pca_set_UT(const size_t ut, pca_workspace *w);
 int pca_sval(gsl_vector * T, pca_workspace *w);

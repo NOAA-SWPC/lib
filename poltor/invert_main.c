@@ -30,6 +30,7 @@
 #include <common/common.h>
 #include <common/oct.h>
 
+#include "magdata_list.h"
 #include "track.h"
 
 #include "poltor.h"
@@ -183,46 +184,51 @@ magdata flags
 */
 
 int
-set_flags(const poltor_parameters *params, magdata *data)
+set_flags(const poltor_parameters *params, magdata_list *list)
 {
   int s = 0;
-  size_t i;
+  size_t i, j;
 
-  for (i = 0; i < data->n; ++i)
+  for (i = 0; i < list->n; ++i)
     {
-      if (MAGDATA_Discarded(data->flags[i]))
-        continue;
+      magdata *mptr = magdata_list_ptr(i, list);
 
-      /* don't fit X/Y data at high latitudes */
-      if (fabs(data->qdlat[i]) > 60.0)
+      for (j = 0; j < mptr->n; ++j)
         {
-          data->flags[i] &= ~(MAGDATA_FLG_X|MAGDATA_FLG_Y);
-          data->flags[i] &= ~(MAGDATA_FLG_DX_NS|MAGDATA_FLG_DY_NS);
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          /* don't fit X/Y data at high latitudes */
+          if (fabs(mptr->qdlat[j]) > 60.0)
+            {
+              mptr->flags[j] &= ~(MAGDATA_FLG_X|MAGDATA_FLG_Y);
+              mptr->flags[j] &= ~(MAGDATA_FLG_DX_NS|MAGDATA_FLG_DY_NS);
+            }
+
+          if (!params->fit_X)
+            mptr->flags[j] &= ~MAGDATA_FLG_X;
+
+          if (!params->fit_Y)
+            mptr->flags[j] &= ~MAGDATA_FLG_Y;
+
+          if (!params->fit_Z)
+            mptr->flags[j] &= ~MAGDATA_FLG_Z;
+
+          if (!params->fit_F)
+            mptr->flags[j] &= ~MAGDATA_FLG_F;
+
+          if (!params->fit_DX_NS)
+            mptr->flags[j] &= ~MAGDATA_FLG_DX_NS;
+
+          if (!params->fit_DY_NS)
+            mptr->flags[j] &= ~MAGDATA_FLG_DY_NS;
+
+          if (!params->fit_DZ_NS)
+            mptr->flags[j] &= ~MAGDATA_FLG_DZ_NS;
+
+          if (!params->fit_DF_NS)
+            mptr->flags[j] &= ~MAGDATA_FLG_DF_NS;
         }
-
-      if (!params->fit_X)
-        data->flags[i] &= ~MAGDATA_FLG_X;
-
-      if (!params->fit_Y)
-        data->flags[i] &= ~MAGDATA_FLG_Y;
-
-      if (!params->fit_Z)
-        data->flags[i] &= ~MAGDATA_FLG_Z;
-
-      if (!params->fit_F)
-        data->flags[i] &= ~MAGDATA_FLG_F;
-
-      if (!params->fit_DX_NS)
-        data->flags[i] &= ~MAGDATA_FLG_DX_NS;
-
-      if (!params->fit_DY_NS)
-        data->flags[i] &= ~MAGDATA_FLG_DY_NS;
-
-      if (!params->fit_DZ_NS)
-        data->flags[i] &= ~MAGDATA_FLG_DZ_NS;
-
-      if (!params->fit_DF_NS)
-        data->flags[i] &= ~MAGDATA_FLG_DF_NS;
     }
 
   return s;
@@ -670,11 +676,12 @@ main(int argc, char *argv[])
   char *chisq_file = NULL;
   char *lls_file = NULL;
   char *Lcurve_file = NULL;
-  magdata *mdata = NULL;
+  magdata_list *mlist = NULL;
   poltor_workspace *poltor_p;
   poltor_parameters params;
   struct timeval tv0, tv1;
   int print_data = 0;
+  int nsource; /* number of different satellites */
 
   poltor_init_params(&params);
 
@@ -753,26 +760,33 @@ main(int argc, char *argv[])
         }
     }
 
-  while (optind < argc)
-    {
-      fprintf(stderr, "main: reading %s...", argv[optind]);
-      gettimeofday(&tv0, NULL);
-      mdata = magdata_read(argv[optind], mdata);
-      gettimeofday(&tv1, NULL);
-
-      if (!mdata)
-        exit(1);
-
-      fprintf(stderr, "done (%zu data total, %g seconds)\n",
-              mdata->n, time_diff(tv0, tv1));
-
-      ++optind;
-    }
-
-  if (!mdata)
+  nsource = argc - optind;
+  if (nsource == 0)
     {
       print_help(argv);
       exit(1);
+    }
+
+  mlist = magdata_list_alloc(nsource);
+  if (!mlist)
+    {
+      print_help(argv);
+      exit(1);
+    }
+
+  /* read in magdata files */
+  while (optind < argc)
+    {
+      size_t ndata;
+
+      fprintf(stderr, "main: reading %s...", argv[optind]);
+      gettimeofday(&tv0, NULL);
+      ndata = magdata_list_add(argv[optind], mlist);
+      gettimeofday(&tv1, NULL);
+      fprintf(stderr, "done (%zu data total, %g seconds)\n",
+              ndata, time_diff(tv0, tv1));
+
+      ++optind;
     }
 
   /* parse configuration file */
@@ -831,24 +845,26 @@ main(int argc, char *argv[])
    * re-compute flags for fitting components / gradient, etc;
    * must be called before magdata_init()
    */
-  set_flags(&params, mdata);
+  set_flags(&params, mlist);
 
+#if 0/*XXX*/
   fprintf(stderr, "main: initializing spatial weighting histogram...");
   gettimeofday(&tv0, NULL);
-  magdata_init(mdata);
+  magdata_init(mlist);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   /* re-compute weights, nvec, nres based on flags update */
   fprintf(stderr, "main: computing spatial weighting of data...");
   gettimeofday(&tv0, NULL);
-  magdata_calc(mdata);
+  magdata_calc(mlist);
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+#endif
 
 #if POLTOR_SYNTH_DATA
   fprintf(stderr, "main: setting unit spatial weights...");
-  magdata_unit_weights(mdata);
+  magdata_unit_weights(mlist);
   fprintf(stderr, "done\n");
 #endif
 
@@ -856,23 +872,23 @@ main(int argc, char *argv[])
   if (print_data)
     {
       fprintf(stderr, "main: writing data to %s...", data_prefix);
-      magdata_print(data_prefix, mdata);
+      magdata_list_print(data_prefix, mlist);
       fprintf(stderr, "done\n");
 
       fprintf(stderr, "main: writing data map to %s...", datamap_file);
-      magdata_map(datamap_file, mdata);
+      magdata_map(datamap_file, mlist);
       fprintf(stderr, "done\n");
     }
 
   fprintf(stderr, "main: satellite rmin = %.1f (%.1f) [km]\n",
-          mdata->rmin, mdata->rmin - mdata->R);
+          mlist->rmin, mlist->rmin - mlist->R);
   fprintf(stderr, "main: satellite rmax = %.1f (%.1f) [km]\n",
-          mdata->rmax, mdata->rmax - mdata->R);
+          mlist->rmax, mlist->rmax - mlist->R);
 
   params.d = d;
-  params.rmin = GSL_MAX(mdata->rmin, mdata->R + 250.0);
-  params.rmax = GSL_MIN(mdata->rmax, mdata->R + 450.0);
-  params.data = mdata;
+  params.rmin = GSL_MAX(mlist->rmin, mlist->R + 250.0);
+  params.rmax = GSL_MIN(mlist->rmax, mlist->R + 450.0);
+  params.data = mlist;
 
 #if POLTOR_QD_HARMONICS
   params.flags = POLTOR_FLG_QD_HARMONICS;
@@ -883,9 +899,9 @@ main(int argc, char *argv[])
   poltor_p = poltor_alloc(&params);
 
   fprintf(stderr, "main: poltor rmin = %.1f (%.1f) [km]\n",
-          params.rmin, params.rmin - mdata->R);
+          params.rmin, params.rmin - mlist->R);
   fprintf(stderr, "main: poltor rmax = %.1f (%.1f) [km]\n",
-          params.rmax, params.rmax - mdata->R);
+          params.rmax, params.rmax - mlist->R);
 
 #if POLTOR_SYNTH_DATA
   fprintf(stderr, "main: replacing with synthetic data...");
@@ -970,7 +986,7 @@ main(int argc, char *argv[])
       fprintf(stderr, "done\n");
     }
 
-  magdata_free(mdata);
+  magdata_list_free(mlist);
   poltor_free(poltor_p);
 
   return 0;

@@ -32,11 +32,11 @@ Inputs: data - tiegcm data
 */
 
 int
-print_data(const char *filename, const tiegcm_data *data)
+print_data(const char *filename, const tiegcm_data *data, const int time_idx)
 {
   int s = 0;
   size_t i;
-  size_t it, ilat, ilon;
+  size_t ilat, ilon;
   FILE *fp;
 
   fp = fopen(filename, "w");
@@ -46,10 +46,8 @@ print_data(const char *filename, const tiegcm_data *data)
               filename, strerror(errno));
     }
 
-  it = 10; /* time index */
-
   i = 1;
-  fprintf(fp, "# Time: %ld (%.6f)\n", data->t[it], data->doy[it] + data->ut[it] / 24.0);
+  fprintf(fp, "# Time: %ld (%.6f)\n", data->t[time_idx], data->doy[time_idx] + data->ut[time_idx] / 24.0);
   fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: B_x (nT)\n", i++);
@@ -60,7 +58,7 @@ print_data(const char *filename, const tiegcm_data *data)
     {
       for (ilat = 0; ilat < data->nlat; ++ilat)
         {
-          size_t idx = TIEGCM_BIDX(it, ilat, ilon, data);
+          size_t idx = TIEGCM_BIDX(time_idx, ilat, ilon, data);
 
           fprintf(fp, "%8.4f %8.4f %8.2f %8.2f %8.2f\n",
                   data->glon[ilon],
@@ -85,6 +83,7 @@ main(int argc, char *argv[])
   struct timeval tv0, tv1;
   char *infile = NULL;
   char *outfile = "data.txt";
+  int time_idx = 0;
 
   while (1)
     {
@@ -95,7 +94,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:", long_options, &option_index);
+      c = getopt_long(argc, argv, "i:o:t:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -105,6 +104,14 @@ main(int argc, char *argv[])
             infile = optarg;
             break;
 
+          case 't':
+            time_idx = atol(optarg);
+            break;
+
+          case 'o':
+            outfile = optarg;
+            break;
+
           default:
             break;
         }
@@ -112,7 +119,7 @@ main(int argc, char *argv[])
 
   if (!infile)
     {
-      fprintf(stderr, "Usage: %s <-i tiegcm_nc_file>\n", argv[0]);
+      fprintf(stderr, "Usage: %s <-i tiegcm_nc_file> [-t time_idx] [-o output_file]\n", argv[0]);
       exit(1);
     }
 
@@ -133,7 +140,7 @@ main(int argc, char *argv[])
           time_diff(tv0, tv1));
 
   fprintf(stderr, "main: writing data to %s...", outfile);
-  print_data(outfile, data);
+  print_data(outfile, data, time_idx);
   fprintf(stderr, "done\n");
 
   tiegcm_free(data);

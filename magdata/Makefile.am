@@ -2,7 +2,7 @@ noinst_LTLIBRARIES = libmagdata.la
 
 AM_CPPFLAGS = -I$(top_builddir)/track
 
-libmagdata_la_SOURCES = magdata.c preproc.c
+libmagdata_la_SOURCES = magdata.c magdata_list.c preproc.c
 
 check_PROGRAMS = test print
 
