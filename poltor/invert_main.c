@@ -70,6 +70,10 @@ parse_config_file(const char *filename, poltor_parameters *poltor_params)
     poltor_params->nmax_int = (size_t) ival;
   if (config_lookup_int(&cfg, "mmax_int", &ival))
     poltor_params->mmax_int = (size_t) ival;
+  if (config_lookup_int(&cfg, "nmax_ext", &ival))
+    poltor_params->nmax_ext = (size_t) ival;
+  if (config_lookup_int(&cfg, "mmax_ext", &ival))
+    poltor_params->mmax_ext = (size_t) ival;
   if (config_lookup_int(&cfg, "nmax_sh", &ival))
     poltor_params->nmax_sh = (size_t) ival;
   if (config_lookup_int(&cfg, "mmax_sh", &ival))
@@ -162,10 +166,6 @@ parse_config_file(const char *filename, poltor_parameters *poltor_params)
 
   if (config_lookup_int(&cfg, "synth_data", &ival))
     poltor_params->synth_data = ival;
-  if (config_lookup_int(&cfg, "synth_noise", &ival))
-    poltor_params->synth_noise = ival;
-  if (config_lookup_int(&cfg, "synth_nmin", &ival))
-    poltor_params->synth_nmin = (size_t) ival;
 
   config_destroy(&cfg);
 
@@ -288,145 +288,147 @@ print_correlation(const char *filename, poltor_workspace *w)
 int
 print_coefficients(poltor_workspace *w)
 {
-#if POLTOR_SYNTH_DATA
+  const poltor_parameters *params = &(w->params);
 
-  /* print and check synthetic coefficients */
-  poltor_synth_print(w);
-
-#else
-
-  const double b = w->b;
-  const double R = w->R;
-  const size_t nmax_int = GSL_MIN(3, w->nmax_int);
-  const size_t mmax_int = GSL_MIN(3, w->mmax_int);
-  const size_t nmax_ext = GSL_MIN(2, w->nmax_ext);
-  const size_t mmax_ext = GSL_MIN(2, w->mmax_ext);
-  const size_t nmax_sh = GSL_MIN(2, w->nmax_sh);
-  const size_t mmax_sh = GSL_MIN(2, w->mmax_sh);
-  const size_t nmax_tor = GSL_MIN(3, w->nmax_tor);
-  const size_t mmax_tor = GSL_MIN(3, w->mmax_tor);
-  size_t n;
-
-  /* print internal poloidal coefficients */
-  fprintf(stderr, "Internal poloidal coefficients:\n");
-  for (n = 1; n <= nmax_int; ++n)
+  if (params->synth_data)
     {
-      int ni = (int) GSL_MIN(n, mmax_int);
-      int m;
-
-      /*
-       * only need to print positive m coefficients since
-       * c_{n,-m} = c_{nm}
-       */
-      for (m = 0; m <= ni; ++m)
-        {
-          size_t cidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
-          gsl_complex coef = poltor_get(cidx, w);
-          double gnm = GSL_REAL(coef);
-          double qnm = -(2.0*n + 1.0) / (double)n * gnm *
-                       pow(R / b, n + 3.0);
-
-          fprintf(stderr, "g(%2zu,%2d) = %12g q(%2zu,%2d) = %12g [nT]\n",
-                  n, m, gnm,
-                  n, m, qnm);
-        }
+      /* print and check synthetic coefficients */
+      poltor_synth_print(w);
     }
-
-  /* print external poloidal coefficients */
-  fprintf(stderr, "External poloidal coefficients:\n");
-  for (n = 1; n <= nmax_ext; ++n)
+  else
     {
-      int ni = (int) GSL_MIN(n, mmax_ext);
-      int m;
+      const double b = w->b;
+      const double R = w->R;
+      const size_t nmax_int = GSL_MIN(3, w->nmax_int);
+      const size_t mmax_int = GSL_MIN(3, w->mmax_int);
+      const size_t nmax_ext = GSL_MIN(2, w->nmax_ext);
+      const size_t mmax_ext = GSL_MIN(2, w->mmax_ext);
+      const size_t nmax_sh = GSL_MIN(2, w->nmax_sh);
+      const size_t mmax_sh = GSL_MIN(2, w->mmax_sh);
+      const size_t nmax_tor = GSL_MIN(3, w->nmax_tor);
+      const size_t mmax_tor = GSL_MIN(3, w->mmax_tor);
+      size_t n;
 
-      /*
-       * only need to print positive m coefficients since
-       * c_{n,-m} = c_{nm}
-       */
-      for (m = 0; m <= ni; ++m)
+      /* print internal poloidal coefficients */
+      fprintf(stderr, "Internal poloidal coefficients:\n");
+      for (n = 1; n <= nmax_int; ++n)
         {
-          size_t cidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, w);
-          gsl_complex coef = poltor_get(cidx, w);
-          double knm = GSL_REAL(coef);
+          int ni = (int) GSL_MIN(n, mmax_int);
+          int m;
 
-          fprintf(stderr, "k(%2zu,%2d) = %12g [nT]\n",
-                  n,
-                  m,
-                  knm);
+          /*
+           * only need to print positive m coefficients since
+           * c_{n,-m} = c_{nm}
+           */
+          for (m = 0; m <= ni; ++m)
+            {
+              size_t cidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
+              gsl_complex coef = poltor_get(cidx, w);
+              double gnm = GSL_REAL(coef);
+              double qnm = -(2.0*n + 1.0) / (double)n * gnm *
+                           pow(R / b, n + 3.0);
+
+              fprintf(stderr, "g(%2zu,%2d) = %12g q(%2zu,%2d) = %12g [nT]\n",
+                      n, m, gnm,
+                      n, m, qnm);
+            }
         }
-    }
 
-  /* print shell poloidal coefficients */
-  {
-    char buf[2048];
-    char *bufptr = buf;
-    int offset;
-    size_t j;
+      /* print external poloidal coefficients */
+      fprintf(stderr, "External poloidal coefficients:\n");
+      for (n = 1; n <= nmax_ext; ++n)
+        {
+          int ni = (int) GSL_MIN(n, mmax_ext);
+          int m;
 
-    fprintf(stderr, "Shell poloidal coefficients:\n");
-    for (n = 1; n <= nmax_sh; ++n)
+          /*
+           * only need to print positive m coefficients since
+           * c_{n,-m} = c_{nm}
+           */
+          for (m = 0; m <= ni; ++m)
+            {
+              size_t cidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, w);
+              gsl_complex coef = poltor_get(cidx, w);
+              double knm = GSL_REAL(coef);
+
+              fprintf(stderr, "k(%2zu,%2d) = %12g [nT]\n",
+                      n,
+                      m,
+                      knm);
+            }
+        }
+
+      /* print shell poloidal coefficients */
       {
-        int ni = (int) GSL_MIN(n, mmax_sh);
-        int m;
+        char buf[2048];
+        char *bufptr = buf;
+        int offset;
+        size_t j;
 
-        /*
-         * only need to print positive m coefficients since
-         * c_{n,-m} = c_{nm}
-         */
-        for (m = 0; m <= ni; ++m)
+        fprintf(stderr, "Shell poloidal coefficients:\n");
+        for (n = 1; n <= nmax_sh; ++n)
           {
-            bufptr = buf;
-            for (j = 0; j <= w->shell_J; ++j)
+            int ni = (int) GSL_MIN(n, mmax_sh);
+            int m;
+
+            /*
+             * only need to print positive m coefficients since
+             * c_{n,-m} = c_{nm}
+             */
+            for (m = 0; m <= ni; ++m)
               {
-                size_t cidx = poltor_jnmidx(j, n, m, w);
-                gsl_complex coef = poltor_get(cidx, w);
-                double qnm = GSL_REAL(coef);
+                bufptr = buf;
+                for (j = 0; j <= w->shell_J; ++j)
+                  {
+                    size_t cidx = poltor_jnmidx(j, n, m, w);
+                    gsl_complex coef = poltor_get(cidx, w);
+                    double qnm = GSL_REAL(coef);
 
-                sprintf(bufptr, "%12g%s %n",
-                        qnm,
-                        (j < w->shell_J) ? "," : "",
-                        &offset);
-                bufptr += offset;
+                    sprintf(bufptr, "%12g%s %n",
+                            qnm,
+                            (j < w->shell_J) ? "," : "",
+                            &offset);
+                    bufptr += offset;
+                  }
+
+                fprintf(stderr, "q(%2zu,%2d) = %s [nT]\n", n, m, buf);
               }
-
-            fprintf(stderr, "q(%2zu,%2d) = %s [nT]\n", n, m, buf);
           }
       }
-  }
 
-  /* print toroidal coefficients */
-  fprintf(stderr, "Shell toroidal coefficients:\n");
-  for (n = 1; n <= nmax_tor; ++n)
-    {
-      int ni = (int) GSL_MIN(n, mmax_tor);
-      int m;
-
-      /*
-       * only need to print positive m coefficients since
-       * c_{n,-m} = c_{nm}
-       */
-      for (m = 0; m <= ni; ++m)
+      /* print toroidal coefficients */
+      fprintf(stderr, "Shell toroidal coefficients:\n");
+      for (n = 1; n <= nmax_tor; ++n)
         {
-          size_t cidx = poltor_nmidx(POLTOR_IDX_TOR, n, m, w);
-          gsl_complex coef = poltor_get(cidx, w);
-          double phinm = GSL_REAL(coef);
+          int ni = (int) GSL_MIN(n, mmax_tor);
+          int m;
 
-          fprintf(stderr, "phi(%2zu,%2d) = %12g [nT]\n",
-                  n,
-                  m,
-                  phinm);
+          /*
+           * only need to print positive m coefficients since
+           * c_{n,-m} = c_{nm}
+           */
+          for (m = 0; m <= ni; ++m)
+            {
+              size_t cidx = poltor_nmidx(POLTOR_IDX_TOR, n, m, w);
+              gsl_complex coef = poltor_get(cidx, w);
+              double phinm = GSL_REAL(coef);
+
+              fprintf(stderr, "phi(%2zu,%2d) = %12g [nT]\n",
+                      n,
+                      m,
+                      phinm);
+            }
         }
     }
 
-#endif /* POLTOR_SYNTH_DATA */
-
   return 0;
-} /* print_coefficients() */
+}
 
 int
 print_Lcurve(const char *filename, poltor_workspace *w)
 {
   int s = 0;
+#if 0 /*XXX*/
   FILE *fp;
   const size_t p = w->p;
   double rnorm, Lnorm;
@@ -470,6 +472,7 @@ print_Lcurve(const char *filename, poltor_workspace *w)
   printv_octave(w->L, "L");
 
   fclose(fp);
+#endif/*XXX*/
 
   return s;
 } /* print_Lcurve() */
@@ -477,6 +480,7 @@ print_Lcurve(const char *filename, poltor_workspace *w)
 int
 print_residuals(const char *filename, poltor_workspace *w)
 {
+#if 0/*XXX*/
   size_t i, j;
   FILE *fp;
   magdata *data = w->data;
@@ -608,6 +612,7 @@ print_residuals(const char *filename, poltor_workspace *w)
     }
 
   fclose(fp);
+#endif
 
   return 0;
 } /* print_residuals() */
@@ -665,9 +670,10 @@ main(int argc, char *argv[])
   double alpha_sh = -1.0;
   double alpha_tor = -1.0;
   size_t robust_maxit = 5;
-  const double d = R_EARTH_KM + 350.0;   /* radius of current shell for gravity/diamag */
+  const double R = R_EARTH_KM;
+  const double d = R + 350.0;   /* radius of current shell for gravity/diamag */
   char *config_file = "PT.cfg";
-  char *datamap_file = "datamap.dat";
+  char *datamap_prefix = "output";
   char *data_prefix = "output";
   char *spectrum_file = "poltor.s";
   char *corr_file = "corr.dat";
@@ -681,6 +687,7 @@ main(int argc, char *argv[])
   poltor_parameters params;
   struct timeval tv0, tv1;
   int print_data = 0;
+  double rmin, rmax; /* min/max radii of sources (km) */
   int nsource; /* number of different satellites */
 
   poltor_init_params(&params);
@@ -804,16 +811,17 @@ main(int argc, char *argv[])
   if (alpha_tor > 0.0)
     params.alpha_tor = alpha_tor;
 
-#if POLTOR_SYNTH_DATA
-  params.nmax_int = 20;
-  params.mmax_int = 12;
-  params.nmax_ext = 0;
-  params.mmax_ext = 0;
-  params.nmax_sh = 0;
-  params.mmax_sh = 0;
-  params.nmax_tor = 0;
-  params.mmax_tor = 0;
-#endif
+  if (params.synth_data)
+    {
+      params.nmax_int = 20;
+      params.mmax_int = 12;
+      params.nmax_ext = 6;
+      params.mmax_ext = 6;
+      params.nmax_sh = 0;
+      params.mmax_sh = 0;
+      params.nmax_tor = 0;
+      params.mmax_tor = 0;
+    }
 
   params.mmax_int = GSL_MIN(params.mmax_int, params.nmax_int);
   params.mmax_ext = GSL_MIN(params.mmax_ext, params.nmax_ext);
@@ -862,32 +870,23 @@ main(int argc, char *argv[])
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 #endif
 
-#if POLTOR_SYNTH_DATA
-  fprintf(stderr, "main: setting unit spatial weights...");
-  magdata_unit_weights(mlist);
-  fprintf(stderr, "done\n");
-#endif
-
-  fprintf(stderr, "main: print_data = %d\n", print_data);
-  if (print_data)
+#if 0/*XXX*/
+  if (params.synth_data)
     {
-      fprintf(stderr, "main: writing data to %s...", data_prefix);
-      magdata_list_print(data_prefix, mlist);
-      fprintf(stderr, "done\n");
-
-      fprintf(stderr, "main: writing data map to %s...", datamap_file);
-      magdata_map(datamap_file, mlist);
+      fprintf(stderr, "main: setting unit spatial weights...");
+      magdata_unit_weights(mlist);
       fprintf(stderr, "done\n");
     }
+#endif
 
-  fprintf(stderr, "main: satellite rmin = %.1f (%.1f) [km]\n",
-          mlist->rmin, mlist->rmin - mlist->R);
-  fprintf(stderr, "main: satellite rmax = %.1f (%.1f) [km]\n",
-          mlist->rmax, mlist->rmax - mlist->R);
+  magdata_list_rminmax(mlist, &rmin, &rmax);
+
+  fprintf(stderr, "main: satellite rmin = %.1f (%.1f) [km]\n", rmin, rmin - R);
+  fprintf(stderr, "main: satellite rmax = %.1f (%.1f) [km]\n", rmax, rmax - R);
 
   params.d = d;
-  params.rmin = GSL_MAX(mlist->rmin, mlist->R + 250.0);
-  params.rmax = GSL_MIN(mlist->rmax, mlist->R + 450.0);
+  params.rmin = GSL_MAX(rmin, R + 250.0);
+  params.rmax = GSL_MIN(rmax, R + 450.0);
   params.data = mlist;
 
 #if POLTOR_QD_HARMONICS
@@ -899,17 +898,29 @@ main(int argc, char *argv[])
   poltor_p = poltor_alloc(&params);
 
   fprintf(stderr, "main: poltor rmin = %.1f (%.1f) [km]\n",
-          params.rmin, params.rmin - mlist->R);
+          params.rmin, params.rmin - R);
   fprintf(stderr, "main: poltor rmax = %.1f (%.1f) [km]\n",
-          params.rmax, params.rmax - mlist->R);
+          params.rmax, params.rmax - R);
 
-#if POLTOR_SYNTH_DATA
-  fprintf(stderr, "main: replacing with synthetic data...");
-  gettimeofday(&tv0, NULL);
-  poltor_synth(poltor_p);
-  gettimeofday(&tv1, NULL);
-  fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
-#endif
+  if (params.synth_data)
+    {
+      fprintf(stderr, "main: replacing with synthetic data...");
+      gettimeofday(&tv0, NULL);
+      poltor_synth(poltor_p);
+      gettimeofday(&tv1, NULL);
+      fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+    }
+
+  if (print_data)
+    {
+      fprintf(stderr, "main: writing data to %s...", data_prefix);
+      magdata_list_print(data_prefix, mlist);
+      fprintf(stderr, "done\n");
+
+      fprintf(stderr, "main: writing data map to %s...", datamap_prefix);
+      magdata_list_map(datamap_prefix, mlist);
+      fprintf(stderr, "done\n");
+    }
 
   if (lls_file)
     {
@@ -927,19 +938,14 @@ main(int argc, char *argv[])
       size_t iter = 0;
       char buf[2048];
 
-#if POLTOR_SYNTH_DATA
-      maxiter = 1;
-#endif
+      if (params.synth_data)
+        maxiter = 1;
 
       while (iter++ < maxiter)
         {
           fprintf(stderr, "main: ROBUST ITERATION %zu/%zu\n", iter, maxiter);
 
-          /* build LS system */
-          poltor_calc(poltor_p);
-
-          /* solve LS system */
-          poltor_solve(poltor_p);
+          poltor_calc_nonlinear(poltor_p);
 
           sprintf(buf, "%s.iter%zu", spectrum_file, iter);
           fprintf(stderr, "main: printing spectrum to %s...", buf);

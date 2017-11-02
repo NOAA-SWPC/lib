@@ -40,7 +40,7 @@
 #include <common/oct.h>
 
 #include "lls.h"
-#include "magdata.h"
+#include "magdata_list.h"
 #include "poltor.h"
 
 static int poltor_row(const double r, const double theta, const double phi,
@@ -129,7 +129,9 @@ poltor_alloc(const poltor_parameters *params)
 
   if (w->data)
     {
-      w->n = w->data->nres;
+      /* count data and find total number of residuals */
+      magdata_list_count(w->data, w->res_cnt);
+      w->n = w->res_cnt[MAGDATA_LIST_IDX_TOTAL];
     }
   else
     {
@@ -158,31 +160,7 @@ poltor_alloc(const poltor_parameters *params)
 
   if (w->n > 0)
     {
-      /*
-       * Need to fold in measurements in blocks, otherwise 'A'
-       * matrix will be too large to fit in memory for some cases;
-       * multiply by 6 for X,Y,Z,DX,DY,DZ
-       */
-      w->nblock = GSL_MIN(w->n, 6 * POLTOR_BLOCK_SIZE);
-
-      w->A = gsl_matrix_complex_alloc(w->nblock, w->p);
-      if (!w->A)
-        {
-          fprintf(stderr, "poltor_alloc: cannot allocate design matrix: %s\n",
-                  strerror(errno));
-          poltor_free(w);
-          return 0;
-        }
-
-      w->rhs = gsl_vector_complex_alloc(w->nblock);
-      if (!w->rhs)
-        {
-          fprintf(stderr, "poltor_alloc: cannot allocate rhs vector: %s\n",
-                  strerror(errno));
-          poltor_free(w);
-          return 0;
-        }
-
+#if 0/*XXX*/
       w->weights = gsl_vector_alloc(w->nblock);
       if (!w->weights)
         {
@@ -191,15 +169,7 @@ poltor_alloc(const poltor_parameters *params)
           poltor_free(w);
           return 0;
         }
-
-      w->lls_workspace_p = lls_complex_alloc(w->nblock, w->p);
-      if (!w->lls_workspace_p)
-        {
-          fprintf(stderr, "poltor_alloc: cannot allocate lls workspace: %s\n",
-                  strerror(errno));
-          poltor_free(w);
-          return 0;
-        }
+#endif
 
       w->dof = (int) w->n - (int) w->p;
     }
@@ -275,6 +245,52 @@ poltor_alloc(const poltor_parameters *params)
   w->omp_dX_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
   w->omp_dY_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
   w->omp_dZ_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
+  w->omp_rowidx = malloc(w->max_threads * sizeof(size_t));
+
+  w->JHJ_vec = gsl_matrix_complex_alloc(w->p, w->p);
+  w->JHf_vec = gsl_vector_complex_alloc(w->p);
+
+  {
+    const size_t nmax_max = GSL_MAX(w->nmax_int, GSL_MAX(w->nmax_ext, GSL_MAX(w->nmax_sh, w->nmax_tor)));
+    const size_t mmax_max = GSL_MAX(w->mmax_int, GSL_MAX(w->mmax_ext, GSL_MAX(w->mmax_sh, w->mmax_tor)));
+    size_t i;
+
+    /*
+     * maximum observations to accumulate at once in LS system, calculated to make
+     * each omp_J matrix approximately of size 'POLTOR_MATRIX_SIZE'
+     */
+    w->nblock = POLTOR_MATRIX_SIZE / (w->p * sizeof(double));
+
+    w->green_int_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
+    w->green_ext_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
+    w->green_grad_int_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
+    w->green_grad_ext_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
+    w->omp_J = malloc(w->max_threads * sizeof(gsl_matrix_complex *));
+    w->omp_f = malloc(w->max_threads * sizeof(gsl_vector_complex *));
+    w->lls_workspace_p = lls_complex_alloc(w->nblock, w->p);
+
+    for (i = 0; i < w->max_threads; ++i)
+      {
+        w->green_int_p[i] = green_complex_alloc(w->nmax_int, w->mmax_int, w->R);
+        w->green_ext_p[i] = green_complex_alloc(w->nmax_ext, w->mmax_ext, w->R);
+        w->green_grad_int_p[i] = green_complex_alloc(w->nmax_int, w->mmax_int, w->R);
+        w->green_grad_ext_p[i] = green_complex_alloc(w->nmax_ext, w->mmax_ext, w->R);
+        w->omp_J[i] = gsl_matrix_complex_alloc(w->nblock, w->p);
+        w->omp_f[i] = gsl_vector_complex_alloc(w->nblock);
+      }
+  }
+
+  /* determine if system is linear */
+  if (w->res_cnt[MAGDATA_LIST_IDX_F] == 0 &&
+      w->res_cnt[MAGDATA_LIST_IDX_DF_NS] == 0 &&
+      w->res_cnt[MAGDATA_LIST_IDX_DF_EW] == 0)
+    {
+      w->lls_solution = 1;
+    }
+  else
+    {
+      w->lls_solution = 0;
+    }
 
   return w;
 } /* poltor_alloc() */
@@ -282,12 +298,6 @@ poltor_alloc(const poltor_parameters *params)
 void
 poltor_free(poltor_workspace *w)
 {
-  if (w->A)
-    gsl_matrix_complex_free(w->A);
-
-  if (w->rhs)
-    gsl_vector_complex_free(w->rhs);
-
   if (w->weights)
     gsl_vector_free(w->weights);
 
@@ -357,6 +367,47 @@ poltor_free(poltor_workspace *w)
   if (w->omp_dZ_grad)
     gsl_matrix_complex_free(w->omp_dZ_grad);
 
+  if (w->omp_rowidx)
+    free(w->omp_rowidx);
+
+  if (w->JHJ_vec)
+    gsl_matrix_complex_free(w->JHJ_vec);
+
+  if (w->JHf_vec)
+    gsl_vector_complex_free(w->JHf_vec);
+
+  {
+    size_t i;
+
+    for (i = 0; i < w->max_threads; ++i)
+      {
+        if (w->green_int_p[i])
+          green_complex_free(w->green_int_p[i]);
+
+        if (w->green_ext_p[i])
+          green_complex_free(w->green_ext_p[i]);
+
+        if (w->green_grad_int_p[i])
+          green_complex_free(w->green_grad_int_p[i]);
+
+        if (w->green_grad_ext_p[i])
+          green_complex_free(w->green_grad_ext_p[i]);
+
+        if (w->omp_J[i])
+          gsl_matrix_complex_free(w->omp_J[i]);
+
+        if (w->omp_f[i])
+          gsl_vector_complex_free(w->omp_f[i]);
+      }
+
+    free(w->green_int_p);
+    free(w->green_ext_p);
+    free(w->green_grad_int_p);
+    free(w->green_grad_ext_p);
+    free(w->omp_J);
+    free(w->omp_f);
+  }
+
   free(w);
 }
 
@@ -394,8 +445,6 @@ poltor_init_params(poltor_parameters * params)
   params->fit_DZ_NS = 1;
   params->fit_DF_NS = 1;
   params->synth_data = 0;
-  params->synth_noise = 0;
-  params->synth_nmin = 0;
 
   return 0;
 }
@@ -413,15 +462,18 @@ poltor_calc(poltor_workspace *w)
 {
   int s = 0;
   const char *lls_file = "LLS.dat";
-  magdata *data = w->data;
 
-  fprintf(stderr, "poltor_calc: nvec   = %zu\n", data->nvec);
-  fprintf(stderr, "poltor_calc: ngrad  = %zu\n", data->ngrad);
-  fprintf(stderr, "poltor_calc: nres   = %zu\n", data->nres);
-  fprintf(stderr, "poltor_calc: ncoeff = %zu\n", w->p);
-  fprintf(stderr, "poltor_calc: nres / ncoeff = %.1f\n",
-          (double) data->nres / (double) w->p);
+  fprintf(stderr, "poltor_calc: vector residuals      = %zu\n", w->res_cnt[MAGDATA_LIST_IDX_VECTOR]);
+  fprintf(stderr, "poltor_calc: scalar residuals      = %zu\n", w->res_cnt[MAGDATA_LIST_IDX_F]);
+  fprintf(stderr, "poltor_calc: vector grad residuals = %zu\n", w->res_cnt[MAGDATA_LIST_IDX_VGRAD]);
+  fprintf(stderr, "poltor_calc: scalar grad residuals = %zu\n",
+    w->res_cnt[MAGDATA_LIST_IDX_DF_NS] + w->res_cnt[MAGDATA_LIST_IDX_DF_EW]);
+  fprintf(stderr, "poltor_calc: total residuals       = %zu\n", w->n);
+  fprintf(stderr, "poltor_calc: ncoeff                = %zu\n", w->p);
+  fprintf(stderr, "poltor_calc: nres / ncoeff         = %.1f\n",
+          (double) w->n / (double) w->p);
 
+#if 0
   /* initialize lls module */
   lls_complex_reset(w->lls_workspace_p);
 
@@ -456,6 +508,7 @@ poltor_calc(poltor_workspace *w)
 
   printc_octave(w->lls_workspace_p->AHA, "AHA");
   printcv_octave(w->lls_workspace_p->AHb, "AHb");
+#endif/*XXX*/
 
   return s;
 } /* poltor_calc() */
@@ -477,7 +530,7 @@ poltor_solve(poltor_workspace *w)
 {
   int s = 0;
   struct timeval tv0, tv1;
-  const double dof = (double) w->data->nres - (double) w->p;
+  const double dof = (double) w->n - (double) w->p;
   double lambda = 0.0; /* regularization parameter */
 
 #if !POLTOR_SYNTH_DATA
@@ -1015,6 +1068,7 @@ poltor_eval_B(const double r, const double theta, const double phi,
               double B[4], poltor_workspace *w)
 {
   int s = 0;
+#if 0
   gsl_vector_complex_view vx, vy, vz;
   gsl_complex valx, valy, valz;
 
@@ -1036,6 +1090,7 @@ poltor_eval_B(const double r, const double theta, const double phi,
   B[1] = GSL_REAL(valy);
   B[2] = GSL_REAL(valz);
   B[3] = gsl_hypot3(B[0], B[1], B[2]);
+#endif
 
   return s;
 } /* poltor_eval_B() */
@@ -1066,6 +1121,7 @@ poltor_eval_B_all(const double r, const double theta, const double phi,
                   poltor_workspace *w)
 {
   int s = 0;
+#if 0/*XXX*/
   gsl_vector_complex_view vx, vy, vz;
   gsl_vector_complex_view c, sx, sy, sz;
   gsl_complex valx, valy, valz;
@@ -1183,6 +1239,7 @@ poltor_eval_B_all(const double r, const double theta, const double phi,
   B_ext[3] = gsl_hypot3(B_ext[0], B_ext[1], B_ext[2]);
   B_sh[3] = gsl_hypot3(B_sh[0], B_sh[1], B_sh[2]);
   B_tor[3] = gsl_hypot3(B_tor[0], B_tor[1], B_tor[2]);
+#endif/*XXX*/
 
   return s;
 } /* poltor_eval_B_all() */
@@ -1441,6 +1498,7 @@ poltor_print_lcurve(const char *filename, const poltor_workspace *w)
   return 0;
 }
 
+#if 0/*XXX*/
 /*
 poltor_theta()
   Determine colatitude (either geocentric or QD)
@@ -1479,10 +1537,13 @@ poltor_theta_ns(const size_t idx, const poltor_workspace *w)
   return w->data->theta_ns[idx];
 } /* poltor_theta_ns() */
 
+#endif/*XXX*/
+
 /***********************************************
  * INTERNAL ROUTINES                           *
  ***********************************************/
 
+#if 0/*XXX*/
 /*
 poltor_build_ls()
   Build LS design matrix
@@ -2308,6 +2369,8 @@ poltor_row_tor(const double r, const double theta,
 
   return s;
 } /* poltor_row_tor() */
+
+#endif /*XXX*/
 
 /*
 poltor_nmidx()

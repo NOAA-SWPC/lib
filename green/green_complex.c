@@ -297,8 +297,8 @@ green_complex_Ynm(const double theta, const double phi, green_complex_workspace 
   int m;
 
   /* compute associated Legendres */
-  gsl_sf_legendre_deriv_array(GSL_SF_LEGENDRE_SCHMIDT,
-                              nmax, cos(theta), w->Pnm, w->dPnm);
+  gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT,
+                                  nmax, cos(theta), w->Pnm, w->dPnm);
 
   /* pre-compute Ynm and dYnm */
   for (m = 0; m <= (int) mmax; ++m)

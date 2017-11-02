@@ -72,8 +72,8 @@ magdata_alloc(const size_t n, const double R)
   data->ngrad = 0;
   data->nres = 0;
 
-  data->rmin = 1.0e6;
-  data->rmax = -1.0e6;
+  data->rmin = 1.0e9;
+  data->rmax = -1.0e9;
 
   data->euler_flags = 0;
   data->global_flags = 0;
@@ -424,6 +424,10 @@ magdata_add(const magdata_datum *datum, magdata *data)
   data->lt_ns[n] = datum->lt_ns;
   data->lt_eq_ns[n] = datum->lt_eq_ns;
 
+  /* update rmin/rmax */
+  data->rmin = GSL_MIN(data->rmin, data->r[n]);
+  data->rmax = GSL_MAX(data->rmax, data->r[n]);
+
   ++(data->n);
 
   return s;
@@ -433,7 +437,6 @@ magdata_add(const magdata_datum *datum, magdata *data)
 magdata_init()
   After data has been added to magdata struct,
 pass through data and initialize spatial weighting histogram.
-Also compute rmin and rmax
 */
 
 int
@@ -443,9 +446,6 @@ magdata_init(magdata *data)
   size_t i;
 
   track_weight_reset(data->weight_workspace_p);
-
-  data->rmin = 1.0e8;
-  data->rmax = -1.0e8;
 
   for (i = 0; i < data->n; ++i)
     {
@@ -470,11 +470,6 @@ magdata_init(magdata *data)
         track_weight_add_data(data->theta[i], data->phi[i], data->weight_workspace_p);
       if (data->flags[i] & MAGDATA_FLG_DZ_NS)
         track_weight_add_data(data->theta[i], data->phi[i], data->weight_workspace_p);
-
-      if (data->r[i] > data->rmax)
-        data->rmax = data->r[i];
-      if (data->r[i] < data->rmin)
-        data->rmin = data->r[i];
     }
 
   return s;
@@ -578,7 +573,7 @@ magdata_calc(magdata *data)
 magdata_print()
   Output data points in ASCII format
 
-Inputs: prefix - directory where to store data
+Inputs: prefix - file prefix where to store data
         data   - data
 
 Return: success/error
@@ -593,37 +588,37 @@ magdata_print(const char *prefix, const magdata *data)
   size_t n = 11; /* number of files to write */
   char buf[2048];
 
-  sprintf(buf, "%s/data_X.dat", prefix);
+  sprintf(buf, "%s_X.dat", prefix);
   fp[0] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_Y.dat", prefix);
+  sprintf(buf, "%s_Y.dat", prefix);
   fp[1] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_Z.dat", prefix);
+  sprintf(buf, "%s_Z.dat", prefix);
   fp[2] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_F.dat", prefix);
+  sprintf(buf, "%s_F.dat", prefix);
   fp[3] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_DX_NS.dat", prefix);
+  sprintf(buf, "%s_DX_NS.dat", prefix);
   fp[4] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_DY_NS.dat", prefix);
+  sprintf(buf, "%s_DY_NS.dat", prefix);
   fp[5] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_DZ_NS.dat", prefix);
+  sprintf(buf, "%s_DZ_NS.dat", prefix);
   fp[6] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_DF_NS.dat", prefix);
+  sprintf(buf, "%s_DF_NS.dat", prefix);
   fp[7] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_DX_EW.dat", prefix);
+  sprintf(buf, "%s_DX_EW.dat", prefix);
   fp[8] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_DY_EW.dat", prefix);
+  sprintf(buf, "%s_DY_EW.dat", prefix);
   fp[9] = fopen(buf, "w");
 
-  sprintf(buf, "%s/data_DZ_EW.dat", prefix);
+  sprintf(buf, "%s_DZ_EW.dat", prefix);
   fp[10] = fopen(buf, "w");
 
   for (i = 0; i < n; ++i)
@@ -745,7 +740,7 @@ magdata_print(const char *prefix, const magdata *data)
 magdata_map()
   Output lat/lon map of data coverage
 
-Inputs: prefix - directory prefix for where to store data map
+Inputs: prefix - file prefix for where to store data map
         data   - lat/lon data
 
 Return: success/error
@@ -760,37 +755,37 @@ magdata_map(const char *prefix, const magdata *data)
   size_t n = 11; /* number of files to write */
   char buf[2048];
 
-  sprintf(buf, "%s/map_X.dat", prefix);
+  sprintf(buf, "%s_X.dat", prefix);
   fp[0] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_Y.dat", prefix);
+  sprintf(buf, "%s_Y.dat", prefix);
   fp[1] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_Z.dat", prefix);
+  sprintf(buf, "%s_Z.dat", prefix);
   fp[2] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_F.dat", prefix);
+  sprintf(buf, "%s_F.dat", prefix);
   fp[3] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_DX_NS.dat", prefix);
+  sprintf(buf, "%s_DX_NS.dat", prefix);
   fp[4] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_DY_NS.dat", prefix);
+  sprintf(buf, "%s_DY_NS.dat", prefix);
   fp[5] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_DZ_NS.dat", prefix);
+  sprintf(buf, "%s_DZ_NS.dat", prefix);
   fp[6] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_DF_NS.dat", prefix);
+  sprintf(buf, "%s_DF_NS.dat", prefix);
   fp[7] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_DX_EW.dat", prefix);
+  sprintf(buf, "%s_DX_EW.dat", prefix);
   fp[8] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_DY_EW.dat", prefix);
+  sprintf(buf, "%s_DY_EW.dat", prefix);
   fp[9] = fopen(buf, "w");
 
-  sprintf(buf, "%s/map_DZ_EW.dat", prefix);
+  sprintf(buf, "%s_DZ_EW.dat", prefix);
   fp[10] = fopen(buf, "w");
 
   for (i = 0; i < n; ++i)

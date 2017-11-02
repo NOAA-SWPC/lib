@@ -16,7 +16,7 @@
 
 #include "green_complex.h"
 #include "lls.h"
-#include "magdata.h"
+#include "magdata_list.h"
 #include "track_weight.h"
 
 /* use synthetic data for testing */
@@ -37,24 +37,10 @@
 /* maximum number of possible current shells */
 #define POLTOR_MAX_SHELL             2
 
-/* maximum number of vector measurements (X,Y,Z) to fold into A^H A matrix at once */
-#define POLTOR_BLOCK_SIZE            100000
-
-#if !POLTOR_SYNTH_DATA
-#define POLTOR_WEIGHT_X              (1.0)
-#define POLTOR_WEIGHT_Y              (1.0)
-#define POLTOR_WEIGHT_Z              (1.0)
-#define POLTOR_WEIGHT_DX             (1.0)
-#define POLTOR_WEIGHT_DY             (1.0)
-#define POLTOR_WEIGHT_DZ             (1.0)
-#else
-#define POLTOR_WEIGHT_X              (1.0)
-#define POLTOR_WEIGHT_Y              (1.0)
-#define POLTOR_WEIGHT_Z              (1.0)
-#define POLTOR_WEIGHT_DX             (1.0)
-#define POLTOR_WEIGHT_DY             (1.0)
-#define POLTOR_WEIGHT_DZ             (1.0)
-#endif
+/* approximate matrix size in bytes for precomputing J^H J; each
+ * thread gets its own matrix (1GB)
+ */
+#define POLTOR_MATRIX_SIZE           (1e9)
 
 #define POLTOR_FLG_QD_HARMONICS      (1 << 0) /* use QD coordinates for spherical harmonics */
 #define POLTOR_FLG_REGULARIZE        (1 << 1) /* use regularization in inverse problem */
@@ -107,10 +93,8 @@ typedef struct
 
   /* synthetic data parameters */
   int synth_data;    /* replace real data with synthetic for testing */
-  int synth_noise;   /* add gaussian noise to synthetic model */
-  size_t synth_nmin; /* minimum spherical harmonic degree for synthetic model */
 
-  magdata *data;     /* satellite data */
+  magdata_list *data; /* satellite data */
 } poltor_parameters;
 
 typedef struct
@@ -130,7 +114,7 @@ typedef struct
   size_t nmax_tor;   /* maximum spherical harmonic degree for B_tor */
   size_t mmax_tor;   /* maximum spherical harmonic order for B_tor */
   size_t shell_J;    /* order of Taylor series expansion of q_{nm}(r) for shell B_pol */
-  magdata *data;     /* satellite data */
+  magdata_list *data; /* satellite data */
   double alpha_int;  /* damping parameter for internal coefficients */
   double alpha_sh;   /* damping parameter for poloidal shell coefficients */
   double alpha_tor;  /* damping parameter for toroidal shell coefficients */
@@ -150,8 +134,6 @@ typedef struct
   complex double *Ynm2;    /* Pnm * exp(i m phi2) */
   complex double *dYnm2;   /* dPnm * exp(i m phi2) */
 
-  gsl_matrix_complex *A;   /* least squares matrix */
-  gsl_vector_complex *rhs; /* rhs vector */
   gsl_vector *weights;     /* weights vector */
   gsl_vector *L;           /* Tikhonov regularization matrix = diag(L) */
 
@@ -172,7 +154,9 @@ typedef struct
 
   size_t n;          /* total data in LS system */
   size_t p;          /* number of coefficients in LS system */
-  size_t nblock;     /* max data to fold into normal matrix at a time */
+
+  /* counts of data types */
+  size_t res_cnt[MAGDATA_LIST_IDX_END];
 
   size_t nnm_int;    /* number of (n,m) pairs for B_pol^{int} */
   size_t nnm_ext;    /* number of (n,m) pairs for B_pol^{ext} */
@@ -189,16 +173,15 @@ typedef struct
   size_t psh_offset;  /* offset in 'c' of B_pol^{sh} coefficients */
   size_t tor_offset;  /* offset in 'c' of B_tor coefficients */
 
+  int lls_solution;   /* set to 1 if LS system is linear */
+
   /* nonlinear least squares parameters */
   gsl_vector *wts_final;  /* final weights (robust * spatial), nres-by-1 */
   size_t ndata;           /* total number of unique data points in LS system */
-  size_t nres_tot;        /* total residuals to minimize, including regularization terms */
-  size_t nres;            /* number of residauls to minimize (data only) */
-  size_t nres_vec;        /* number of vector residuals */
-  size_t nres_vec_grad;   /* number of vector gradient residuals */
   gsl_multilarge_nlinear_workspace *multilarge_workspace_p;
 
-  gsl_matrix_complex *JHJ_vec; /* J^H J for vector measurements, p-by-p */
+  gsl_matrix_complex *JHJ_vec;     /* J^H J for vector measurements, p-by-p */
+  gsl_vector_complex *JHf_vec;     /* J^H f for vector measurements, size p */
 
   size_t max_threads;
   gsl_matrix_complex *omp_dX;      /* dX/dg max_threads-by-p */
@@ -207,9 +190,14 @@ typedef struct
   gsl_matrix_complex *omp_dX_grad; /* gradient dX/dg max_threads-by-p */
   gsl_matrix_complex *omp_dY_grad; /* gradient dY/dg max_threads-by-p */
   gsl_matrix_complex *omp_dZ_grad; /* gradient dZ/dg max_threads-by-p */
-  gsl_matrix_complex **omp_J;      /* max_threads matrices, each 4*data_block-by-p_int */
+  gsl_matrix_complex **omp_J;      /* max_threads matrices, each nblock-by-p_int */
+  gsl_vector_complex **omp_f;      /* max_threads vectors, each size nblock */
   size_t *omp_rowidx;              /* row indices for omp_J */
-  green_complex_workspace **green_array_p; /* array of green workspaces, size max_threads */
+  size_t nblock;                   /* maximum rows to fold into normal matrix at a time */
+  green_complex_workspace **green_int_p; /* array of internal green workspaces, size max_threads */
+  green_complex_workspace **green_ext_p; /* array of external green workspaces, size max_threads */
+  green_complex_workspace **green_grad_int_p; /* array of internal green workspaces, size max_threads */
+  green_complex_workspace **green_grad_ext_p; /* array of external green workspaces, size max_threads */
 
   /* L-curve parameters */
   gsl_vector *reg_param;  /* regularization parameters */
@@ -265,6 +253,9 @@ int poltor_regularize(gsl_vector *L, poltor_workspace *w);
 int poltor_build_ls(const int fold, poltor_workspace *w);
 double poltor_theta(const size_t idx, const poltor_workspace *w);
 double poltor_theta_ns(const size_t idx, const poltor_workspace *w);
+
+/* poltor_nonlinear.c */
+int poltor_calc_nonlinear(poltor_workspace *w);
 
 /* poltor_shell.c */
 int poltor_shell_An(const size_t n, const size_t j, const double r,

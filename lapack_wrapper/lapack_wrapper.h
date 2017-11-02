@@ -27,5 +27,7 @@ int lapack_complex_svd(const gsl_matrix_complex * A, gsl_vector * S,
 int lapack_cholesky_solve(const gsl_matrix * A, const gsl_vector * b, gsl_vector * x,
                           double * rcond, gsl_matrix * L);
 int lapack_cholesky_invert(gsl_matrix * A);
+int lapack_zposv(const gsl_matrix_complex * A, const gsl_vector_complex * b, gsl_vector_complex *x,
+                 double * rcond);
 
 #endif /* INCLUDED_lapack_common_h */

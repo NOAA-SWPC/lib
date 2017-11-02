@@ -356,39 +356,42 @@ int
 poltor_synth(poltor_workspace *w)
 {
   int s = 0;
-  size_t i;
+  size_t i, j;
   gsl_vector_complex *g = gsl_vector_complex_calloc(w->p);
-  magdata *data = w->data;
+  magdata_list *list = w->data;
 
   s = poltor_synth_init(g, w);
 
-  for (i = 0; i < data->n; ++i)
+  for (i = 0; i < list->n; ++i)
     {
-      double B[3];
-      double theta = poltor_theta(i, w);
+      magdata *mptr = magdata_list_ptr(i, list);
 
-      s += poltor_synth_calc(data->r[i], theta, data->phi[i], g, B, w);
-
-      data->Bx_nec[i] = B[0];
-      data->By_nec[i] = B[1];
-      data->Bz_nec[i] = B[2];
-      data->Bx_model[i] = 0.0;
-      data->By_model[i] = 0.0;
-      data->Bz_model[i] = 0.0;
-
-      if (data->flags[i] & MAGDATA_FLG_DZ_NS)
+      for (j = 0; j < mptr->n; ++j)
         {
-          double B_ns[3];
-          double theta_ns = poltor_theta_ns(i, w);
+          double B[3];
 
-          s += poltor_synth_calc(data->r_ns[i], theta_ns, data->phi_ns[i], g, B_ns, w);
+          s += poltor_synth_calc(mptr->r[j], mptr->theta[j], mptr->phi[j], g, B, w);
 
-          data->Bx_nec_ns[i] = B_ns[0];
-          data->By_nec_ns[i] = B_ns[1];
-          data->Bz_nec_ns[i] = B_ns[2];
-          data->Bx_model_ns[i] = 0.0;
-          data->By_model_ns[i] = 0.0;
-          data->Bz_model_ns[i] = 0.0;
+          mptr->Bx_nec[j] = B[0];
+          mptr->By_nec[j] = B[1];
+          mptr->Bz_nec[j] = B[2];
+          mptr->Bx_model[j] = 0.0;
+          mptr->By_model[j] = 0.0;
+          mptr->Bz_model[j] = 0.0;
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS))
+            {
+              double B_ns[3];
+
+              s += poltor_synth_calc(mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], g, B_ns, w);
+
+              mptr->Bx_nec_ns[j] = B_ns[0];
+              mptr->By_nec_ns[j] = B_ns[1];
+              mptr->Bz_nec_ns[j] = B_ns[2];
+              mptr->Bx_model_ns[j] = 0.0;
+              mptr->By_model_ns[j] = 0.0;
+              mptr->Bz_model_ns[j] = 0.0;
+            }
         }
     }
 

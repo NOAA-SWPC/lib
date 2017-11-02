@@ -538,3 +538,53 @@ lapack_cholesky_invert(gsl_matrix * A)
 
   return s;
 }
+
+/* solve A x = b for square Hermitian system and compute condition number */
+int
+lapack_zposv(const gsl_matrix_complex * A, const gsl_vector_complex * b, gsl_vector_complex *x,
+             double * rcond)
+{
+  int s = 0;
+  lapack_int n = A->size1;
+  lapack_int nrhs = 1;
+  lapack_int lda = A->size1;
+  lapack_int ldb = b->size;
+  lapack_int ldx = x->size;
+  gsl_matrix_complex *work_A = gsl_matrix_complex_alloc(n, n);
+  gsl_vector_complex *work_b = gsl_vector_complex_alloc(n);
+  gsl_matrix_complex *AF = gsl_matrix_complex_alloc(n, n);
+  gsl_vector *S = gsl_vector_alloc(n);
+  double ferr, berr;
+  lapack_int ldaf = n;
+  char equed = 'N';
+
+  gsl_matrix_complex_transpose_memcpy(work_A, A);
+  gsl_vector_complex_memcpy(work_b, b);
+
+  /* use expert driver to get condition number estimate */
+  s = LAPACKE_zposvx(LAPACK_COL_MAJOR,
+                     'E',
+                     'U',
+                     n,
+                     nrhs,
+                     (lapack_complex_double *) work_A->data,
+                     lda,
+                     (lapack_complex_double *) AF->data,
+                     ldaf,
+                     &equed,
+                     S->data,
+                     (lapack_complex_double *) work_b->data,
+                     ldb,
+                     (lapack_complex_double *) x->data,
+                     ldx,
+                     rcond,
+                     &ferr,
+                     &berr);
+
+  gsl_matrix_complex_free(work_A);
+  gsl_matrix_complex_free(AF);
+  gsl_vector_complex_free(work_b);
+  gsl_vector_free(S);
+
+  return s;
+}
