@@ -194,10 +194,8 @@ typedef struct
   gsl_vector_complex **omp_f;      /* max_threads vectors, each size nblock */
   size_t *omp_rowidx;              /* row indices for omp_J */
   size_t nblock;                   /* maximum rows to fold into normal matrix at a time */
-  green_complex_workspace **green_int_p; /* array of internal green workspaces, size max_threads */
-  green_complex_workspace **green_ext_p; /* array of external green workspaces, size max_threads */
-  green_complex_workspace **green_grad_int_p; /* array of internal green workspaces, size max_threads */
-  green_complex_workspace **green_grad_ext_p; /* array of external green workspaces, size max_threads */
+  green_complex_workspace **green_p; /* array of green workspaces, size max_threads */
+  green_complex_workspace **green_grad_p; /* array of green workspaces for gradient point, size max_threads */
 
   /* L-curve parameters */
   gsl_vector *reg_param;  /* regularization parameters */
@@ -249,10 +247,19 @@ int poltor_print_spectrum(const char *filename, poltor_workspace *w);
 int poltor_print_lcurve(const char *filename, const poltor_workspace *w);
 size_t poltor_nmidx(const size_t type, const size_t n, const int m, poltor_workspace *w);
 size_t poltor_jnmidx(const size_t j, const size_t n, const int m, poltor_workspace *w);
+size_t poltor_jnmidx2(const size_t j, const size_t n, const int m, poltor_workspace *w);
 int poltor_regularize(gsl_vector *L, poltor_workspace *w);
 int poltor_build_ls(const int fold, poltor_workspace *w);
 double poltor_theta(const size_t idx, const poltor_workspace *w);
 double poltor_theta_ns(const size_t idx, const poltor_workspace *w);
+int poltor_calc_psh(const double r, const double theta,
+                    const complex double *Ynm, const complex double *dYnm,
+                    complex double *X, complex double *Y, complex double *Z,
+                    poltor_workspace *w);
+int poltor_calc_tor(const double r, const double theta,
+                    const complex double *Ynm, const complex double *dYnm,
+                    complex double *X, complex double *Y, complex double *Z,
+                    poltor_workspace *w);
 
 /* poltor_nonlinear.c */
 int poltor_calc_nonlinear(poltor_workspace *w);

@@ -140,10 +140,10 @@ poltor_alloc(const poltor_parameters *params)
     }
 
   /* count number of spherical harmonic coefficients for each source */
-  w->nnm_int = w->mmax_int * (w->mmax_int + 2) + (w->nmax_int - w->mmax_int) * (2*w->mmax_int + 1);
-  w->nnm_ext = w->mmax_ext * (w->mmax_ext + 2) + (w->nmax_ext - w->mmax_ext) * (2*w->mmax_ext + 1);
-  w->nnm_sh = w->mmax_sh * (w->mmax_sh + 2) + (w->nmax_sh - w->mmax_sh) * (2*w->mmax_sh + 1);
-  w->nnm_tor = w->mmax_tor * (w->mmax_tor + 2) + (w->nmax_tor - w->mmax_tor) * (2*w->mmax_tor + 1);
+  w->nnm_int = green_calc_nnm(w->nmax_int, w->mmax_int);
+  w->nnm_ext = green_calc_nnm(w->nmax_ext, w->mmax_ext);
+  w->nnm_sh = green_calc_nnm(w->nmax_sh, w->mmax_sh);
+  w->nnm_tor = green_calc_nnm(w->nmax_tor, w->mmax_tor);
 
   /* compute total poloidal shell coefficients accouting for Taylor expansion */
   w->p_pint = w->nnm_int;
@@ -261,20 +261,16 @@ poltor_alloc(const poltor_parameters *params)
      */
     w->nblock = POLTOR_MATRIX_SIZE / (w->p * sizeof(double));
 
-    w->green_int_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
-    w->green_ext_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
-    w->green_grad_int_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
-    w->green_grad_ext_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
+    w->green_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
+    w->green_grad_p = malloc(w->max_threads * sizeof(green_complex_workspace *));
     w->omp_J = malloc(w->max_threads * sizeof(gsl_matrix_complex *));
     w->omp_f = malloc(w->max_threads * sizeof(gsl_vector_complex *));
     w->lls_workspace_p = lls_complex_alloc(w->nblock, w->p);
 
     for (i = 0; i < w->max_threads; ++i)
       {
-        w->green_int_p[i] = green_complex_alloc(w->nmax_int, w->mmax_int, w->R);
-        w->green_ext_p[i] = green_complex_alloc(w->nmax_ext, w->mmax_ext, w->R);
-        w->green_grad_int_p[i] = green_complex_alloc(w->nmax_int, w->mmax_int, w->R);
-        w->green_grad_ext_p[i] = green_complex_alloc(w->nmax_ext, w->mmax_ext, w->R);
+        w->green_p[i] = green_complex_alloc(nmax_max, mmax_max, w->R);
+        w->green_grad_p[i] = green_complex_alloc(nmax_max, mmax_max, w->R);
         w->omp_J[i] = gsl_matrix_complex_alloc(w->nblock, w->p);
         w->omp_f[i] = gsl_vector_complex_alloc(w->nblock);
       }
@@ -381,17 +377,11 @@ poltor_free(poltor_workspace *w)
 
     for (i = 0; i < w->max_threads; ++i)
       {
-        if (w->green_int_p[i])
-          green_complex_free(w->green_int_p[i]);
+        if (w->green_p[i])
+          green_complex_free(w->green_p[i]);
 
-        if (w->green_ext_p[i])
-          green_complex_free(w->green_ext_p[i]);
-
-        if (w->green_grad_int_p[i])
-          green_complex_free(w->green_grad_int_p[i]);
-
-        if (w->green_grad_ext_p[i])
-          green_complex_free(w->green_grad_ext_p[i]);
+        if (w->green_grad_p[i])
+          green_complex_free(w->green_grad_p[i]);
 
         if (w->omp_J[i])
           gsl_matrix_complex_free(w->omp_J[i]);
@@ -400,10 +390,8 @@ poltor_free(poltor_workspace *w)
           gsl_vector_complex_free(w->omp_f[i]);
       }
 
-    free(w->green_int_p);
-    free(w->green_ext_p);
-    free(w->green_grad_int_p);
-    free(w->green_grad_ext_p);
+    free(w->green_p);
+    free(w->green_grad_p);
     free(w->omp_J);
     free(w->omp_f);
   }
@@ -1498,6 +1486,148 @@ poltor_print_lcurve(const char *filename, const poltor_workspace *w)
   return 0;
 }
 
+/*
+poltor_calc_psh()
+  Compute Green's functions for X,Y,Z spherical harmonic expansion due to
+toroidal current source inside the shell. These are simply the basis functions multiplying
+the q_{nm}^{(j)} coefficients. The Y_{nm} and d/dtheta Y_{nm} functions must be
+precomputed and passed in
+
+Inputs: r     - radius (km)
+        theta - colatitude (radians)
+        Ynm   - P_{nm} exp(i m phi), size nnm
+        dYnm  - d/dtheta P_{nm} exp(i m phi), size nnm
+        X     - (output) array of X Green's functions, size p_psh
+        Y     - (output) array of Y Green's functions, size p_psh
+        Z     - (output) array of Z Green's functions, size p_psh
+        w     - workspace
+*/
+
+int
+poltor_calc_psh(const double r, const double theta,
+                const complex double *Ynm, const complex double *dYnm,
+                complex double *X, complex double *Y, complex double *Z,
+                poltor_workspace *w)
+{
+  int s = 0;
+  size_t n, j;
+  const double ratio = w->R / r;
+  const complex double invisint = I / sin(theta);
+  gsl_complex val;
+
+  /* outer loop over Taylor series */
+  for (j = 0; j <= w->shell_J; ++j)
+    {
+      for (n = 1; n <= w->nmax_sh; ++n)
+        {
+          int M = (int) GSL_MIN(n, w->mmax_sh);
+          int m;
+          double An, Bn, ABsum, dABsum;
+
+          /* compute Taylor series integrals */
+          s = poltor_shell_An(n, j, r, &An, w);
+          s += poltor_shell_Bn(n, j, r, &Bn, w);
+          if (s)
+            return s;
+
+          ABsum = An + Bn;
+          dABsum = -(double)n * An + (n + 1.0) * Bn;
+
+          for (m = -M; m <= M; ++m)
+            {
+              int mabs = abs(m);
+              size_t nmidx = poltor_jnmidx2(j, n, m, w);
+              size_t pidx = gsl_sf_legendre_array_index(n, mabs);
+              complex double Y_nm, dY_nm;
+
+              if (m >= 0)
+                {
+                  Y_nm = Ynm[pidx];
+                  dY_nm = dYnm[pidx];
+                }
+              else
+                {
+                  Y_nm = conj(Ynm[pidx]);
+                  dY_nm = conj(dYnm[pidx]);
+                }
+
+              /* compute (X,Y,Z) components of B_{lm} */
+
+              X[nmidx] = ratio * dABsum * dY_nm;
+              Y[nmidx] = -ratio * m * invisint * dABsum * Y_nm;
+              Z[nmidx] = ratio * n * (n + 1.0) * ABsum * Y_nm;
+            }
+        }
+    }
+
+  return s;
+}
+
+/*
+poltor_calc_tor()
+  Compute Green's functions for X,Y,Z spherical harmonic expansion due to
+poloidal current source inside the shell (toroidal field). These are simply the
+basis functions multiplying the phi{nm} coefficients.
+The Y_{nm} and d/dtheta Y_{nm} functions must be precomputed and passed in.
+
+Inputs: r     - radius (km)
+        theta - colatitude (radians)
+        Ynm   - P_{nm} exp(i m phi), size nnm
+        dYnm  - d/dtheta P_{nm} exp(i m phi), size nnm
+        X     - (output) array of X Green's functions, size p_tor
+        Y     - (output) array of Y Green's functions, size p_tor
+        Z     - (output) array of Z Green's functions, size p_tor
+        w     - workspace
+
+Notes:
+1) This routine assumes phi_{nm}(r) is constant
+*/
+
+int
+poltor_calc_tor(const double r, const double theta,
+                const complex double *Ynm, const complex double *dYnm,
+                complex double *X, complex double *Y, complex double *Z,
+                poltor_workspace *w)
+{
+  int s = 0;
+  const complex double invisint = I / sin(theta);
+  size_t n;
+  gsl_complex val;
+
+  for (n = 1; n <= w->nmax_tor; ++n)
+    {
+      int M = (int) GSL_MIN(n, w->mmax_tor);
+      int m;
+
+      for (m = -M; m <= M; ++m)
+        {
+          int mabs = abs(m);
+          size_t nmidx = green_idx(n, m, w->mmax_tor);
+          size_t pidx = gsl_sf_legendre_array_index(n, mabs);
+          complex double Y_nm, dY_nm;
+
+          if (m >= 0)
+            {
+              Y_nm = Ynm[pidx];
+              dY_nm = dYnm[pidx];
+            }
+          else
+            {
+              Y_nm = conj(Ynm[pidx]);
+              dY_nm = conj(dYnm[pidx]);
+            }
+
+          /* compute (r,theta,phi) components of B_{lm} */
+
+          X[nmidx] = m * invisint * Y_nm;
+          Y[nmidx] = dY_nm;
+          Z[nmidx] = 0.0;
+        }
+    }
+
+  return s;
+}
+
 #if 0/*XXX*/
 /*
 poltor_theta()
@@ -2478,6 +2608,20 @@ poltor_jnmidx(const size_t j, const size_t n, const int m, poltor_workspace *w)
 
   return nmidx + j * w->nnm_sh;
 } /* poltor_jnmidx() */
+
+/*
+poltor_jnmidx2()
+  Return index of shell poloidal coefficient corresponding
+to (j,n,m) where j is the term in the Taylor series expansion
+for q_{nm}(r)
+*/
+
+size_t
+poltor_jnmidx2(const size_t j, const size_t n, const int m, poltor_workspace *w)
+{
+  size_t nmidx = green_idx(n, m, w->mmax_sh);
+  return nmidx + j * w->nnm_sh;
+}
 
 /*
 poltor_regularize()

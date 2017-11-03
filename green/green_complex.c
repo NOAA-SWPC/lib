@@ -17,8 +17,6 @@
 #include "green.h"
 #include "green_complex.h"
 
-static int green_complex_Ynm(const double theta, const double phi, green_complex_workspace *w);
-
 /*
 green_complex_alloc()
   Allocate Green's function workspace
@@ -89,7 +87,7 @@ green_complex_free(green_complex_workspace *w)
 }
 
 /*
-green_complex_calc_int()
+green_complex_int()
   Compute Green's functions for X,Y,Z spherical harmonic expansion. These
 are simply the basis functions multiplying the g_{nm} coefficients
 
@@ -110,58 +108,27 @@ w->dYnm
 */
 
 int
-green_complex_calc_int(const double r, const double theta, const double phi,
-                       complex double *X, complex double *Y, complex double *Z,
-                       green_complex_workspace *w)
+green_complex_int(const double r, const double theta, const double phi,
+                  complex double *X, complex double *Y, complex double *Z,
+                  green_complex_workspace *w)
 {
-  int s = 0;
-  const size_t nmax = w->nmax;
-  const size_t mmax = w->mmax;
-  const complex double invisint = I / sin(theta);
-  const double ratio = w->R / r;
-  double rterm = ratio * ratio; /* (R/r)^{n+2} */
-  size_t n;
+  int s;
 
   /* compute Y_{nm} and d/dtheta Y_{nm} */
-  green_complex_Ynm(theta, phi, w);
+  s = green_complex_Ynm(theta, phi, w);
+  if (s)
+    return s;
 
-  for (n = 1; n <= nmax; ++n)
-    {
-      int M = (int) GSL_MIN(n, mmax);
-      int m;
+  s = green_complex_calc_int(w->nmax, w->mmax, w->R, r, theta,
+                             w->Ynm, w->dYnm, X, Y, Z);
+  if (s)
+    return s;
 
-      /* (R/r)^(n+2) */
-      rterm *= ratio;
-
-      for (m = -M; m <= M; ++m)
-        {
-          int mabs = abs(m);
-          size_t nmidx = green_idx(n, m, mmax);
-          size_t pidx = gsl_sf_legendre_array_index(n, mabs);
-          complex double Ynm, dYnm;
-
-          if (m >= 0)
-            {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
-            }
-          else
-            {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
-            }
-
-          X[nmidx] = rterm * dYnm;
-          Y[nmidx] = -rterm * m * invisint * Ynm;
-          Z[nmidx] = -rterm * (n + 1.0) * Ynm;
-        }
-    }
-
-  return s;
+  return 0;
 }
 
 /*
-green_complex_calc_ext()
+green_complex_ext()
   Compute Green's functions for X,Y,Z spherical harmonic expansion due to
 external current source. These are simply the basis functions multiplying
 the k_{nm} coefficients
@@ -183,20 +150,123 @@ w->dYnm
 */
 
 int
-green_complex_calc_ext(const double r, const double theta, const double phi,
-                       complex double *X, complex double *Y, complex double *Z,
-                       green_complex_workspace *w)
+green_complex_ext(const double r, const double theta, const double phi,
+                  complex double *X, complex double *Y, complex double *Z,
+                  green_complex_workspace *w)
 {
-  int s = 0;
-  const size_t nmax = w->nmax;
-  const size_t mmax = w->mmax;
-  const complex double invisint = I / sin(theta);
-  const double ratio = r / w->R;
-  double rterm = 1.0; /* (r/R)^{n-1} */
-  size_t n;
+  int s;
 
   /* compute Y_{nm} and d/dtheta Y_{nm} */
-  green_complex_Ynm(theta, phi, w);
+  s = green_complex_Ynm(theta, phi, w);
+  if (s)
+    return s;
+
+  s = green_complex_calc_ext(w->nmax, w->mmax, w->R, r, theta,
+                             w->Ynm, w->dYnm, X, Y, Z);
+  if (s)
+    return s;
+
+
+  return 0;
+}
+
+/*
+green_complex_calc_int()
+  Compute internal Green's functions for X,Y,Z spherical harmonic expansion. These
+are simply the basis functions multiplying the g_{nm} coefficients
+This function does not reference any green workspace and is suitable for
+calculating Green's functions when the Ynm and dYnm have already been computed
+
+Inputs: nmax  - maximum spherical harmonic degree
+        mmax  - maximum spherical harmonic order
+        R     - reference radius (km)
+        r     - radius (km)
+        theta - colatitude (radians)
+        Ynm   - P_{nm} exp(i m phi), size nnm
+        dYnm  - d/dtheta P_{nm} exp(i m phi), size nnm
+        X     - (output) array of X Green's functions, size nnm
+        Y     - (output) array of Y Green's functions, size nnm
+        Z     - (output) array of Z Green's functions, size nnm
+*/
+
+int
+green_complex_calc_int(const size_t nmax, const size_t mmax, const double R,
+                       const double r, const double theta,
+                       const complex double *Ynm, const complex double *dYnm,
+                       complex double *X, complex double *Y, complex double *Z)
+{
+  int s = 0;
+  const complex double invisint = I / sin(theta);
+  const double ratio = R / r;
+  double rterm = ratio * ratio; /* (R/r)^{n+2} */
+  size_t n;
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int M = (int) GSL_MIN(n, mmax);
+      int m;
+
+      /* (R/r)^(n+2) */
+      rterm *= ratio;
+
+      for (m = -M; m <= M; ++m)
+        {
+          int mabs = abs(m);
+          size_t nmidx = green_idx(n, m, mmax);
+          size_t pidx = gsl_sf_legendre_array_index(n, mabs);
+          complex double Y_nm, dY_nm;
+
+          if (m >= 0)
+            {
+              Y_nm = Ynm[pidx];
+              dY_nm = dYnm[pidx];
+            }
+          else
+            {
+              Y_nm = conj(Ynm[pidx]);
+              dY_nm = conj(dYnm[pidx]);
+            }
+
+          X[nmidx] = rterm * dY_nm;
+          Y[nmidx] = -rterm * m * invisint * Y_nm;
+          Z[nmidx] = -rterm * (n + 1.0) * Y_nm;
+        }
+    }
+
+  return s;
+}
+
+/*
+green_complex_calc_ext()
+  Compute Green's functions for X,Y,Z spherical harmonic expansion due to
+external current source. These are simply the basis functions multiplying
+the k_{nm} coefficients. This function does not reference any green workspace
+and is suitable for calculating green's functions when the Ynm and dYnm
+have already been computed
+
+Inputs: nmax  - maximum spherical harmonic degree
+        mmax  - maximum spherical harmonic order
+        R     - reference radius (km)
+        r     - radius (km)
+        theta - colatitude (radians)
+        Ynm   - P_{nm} exp(i m phi), size nnm
+        dYnm  - d/dtheta P_{nm} exp(i m phi), size nnm
+        X     - (output) array of X Green's functions, size nnm
+        Y     - (output) array of Y Green's functions, size nnm
+        Z     - (output) array of Z Green's functions, size nnm
+*/
+
+int
+green_complex_calc_ext(const size_t nmax, const size_t mmax, const double R,
+                       const double r, const double theta,
+                       const complex double *Ynm, const complex double *dYnm,
+                       complex double *X, complex double *Y, complex double *Z)
+{
+  int s = 0;
+  const complex double invisint = I / sin(theta);
+  const double ratio = r / R;
+  double rterm = 1.0; /* (r/R)^{n-1} */
+  size_t n;
 
   for (n = 1; n <= nmax; ++n)
     {
@@ -208,22 +278,22 @@ green_complex_calc_ext(const double r, const double theta, const double phi,
           int mabs = abs(m);
           size_t nmidx = green_idx(n, m, mmax);
           size_t pidx = gsl_sf_legendre_array_index(n, mabs);
-          complex double Ynm, dYnm;
+          complex double Y_nm, dY_nm;
 
           if (m >= 0)
             {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
+              Y_nm = Ynm[pidx];
+              dY_nm = dYnm[pidx];
             }
           else
             {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
+              Y_nm = conj(Ynm[pidx]);
+              dY_nm = conj(dYnm[pidx]);
             }
 
-          X[nmidx] = rterm * dYnm;
-          Y[nmidx] = -rterm * m * invisint * Ynm;
-          Z[nmidx] = rterm * n * Ynm;
+          X[nmidx] = rterm * dY_nm;
+          Y[nmidx] = -rterm * m * invisint * Y_nm;
+          Z[nmidx] = rterm * n * Y_nm;
         }
 
       /* (r/R)^{n-1} */
@@ -287,7 +357,7 @@ w->Ylm
 w->dYlm
 */
 
-static int
+int
 green_complex_Ynm(const double theta, const double phi, green_complex_workspace *w)
 {
   int s = 0;

@@ -41,7 +41,7 @@ green_alloc(const size_t nmax, const size_t mmax, const double R)
     return 0;
 
   /* total number of SH coefficients */
-  w->nnm = mmax * (mmax + 2) + (nmax - mmax) * (2*mmax + 1);
+  w->nnm = green_calc_nnm(nmax, mmax);
 
   w->nmax = nmax;
   w->mmax = mmax;
@@ -483,6 +483,24 @@ size_t
 green_nnm(const green_workspace *w)
 {
   return w->nnm;
+}
+
+/*
+green_calc_nnm()
+  Compute total number of spherical harmonic coefficients
+for a given nmax and mmax
+
+Inputs: nmax - maximum SH degree
+        mmax - maximum SH order
+
+Return: number of total spherical harmonic coefficients
+*/
+
+size_t
+green_calc_nnm(const size_t nmax, const size_t mmax)
+{
+  size_t nnm = mmax * (mmax + 2) + (nmax - mmax) * (2*mmax + 1);
+  return nnm;
 }
 
 int

@@ -815,12 +815,12 @@ main(int argc, char *argv[])
     {
       params.nmax_int = 20;
       params.mmax_int = 12;
-      params.nmax_ext = 6;
-      params.mmax_ext = 6;
-      params.nmax_sh = 0;
-      params.mmax_sh = 0;
-      params.nmax_tor = 0;
-      params.mmax_tor = 0;
+      params.nmax_ext = 3;
+      params.mmax_ext = 2;
+      params.nmax_sh = 5;
+      params.mmax_sh = 5;
+      params.nmax_tor = 30;
+      params.mmax_tor = 10;
     }
 
   params.mmax_int = GSL_MIN(params.mmax_int, params.nmax_int);
