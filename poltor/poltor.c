@@ -43,6 +43,7 @@
 #include "lls.h"
 #include "magdata_list.h"
 #include "poltor.h"
+#include "track_weight.h"
 
 static int poltor_row(const double r, const double theta, const double phi,
                       const double r_ns, const double theta_ns, const double phi_ns,
@@ -71,6 +72,7 @@ static int poltor_row_tor(const double r, const double theta,
                           poltor_workspace *w);
 static int poltor_eval_chi(const double r, const double theta, const double phi,
                            const size_t idx, double *chi, poltor_workspace *w);
+static int poltor_init_weights(poltor_workspace * w);
 
 /*
 poltor_alloc()
@@ -291,6 +293,12 @@ poltor_alloc(const poltor_parameters *params)
   else
     {
       w->lls_solution = 0;
+    }
+
+  if (w->data)
+    {
+      /* compute spatial weights */
+      poltor_init_weights(w);
     }
 
   return w;
@@ -2856,3 +2864,135 @@ poltor_eval_chi(const double r, const double theta, const double phi,
 
   return s;
 } /* poltor_eval_chi() */
+
+/*
+poltor_init_weights()
+  Initialize spatial weights
+
+Inputs: w - workspace
+
+Notes:
+1) On output, w->wts_spatial is initialized with spatial weights
+*/
+
+static int
+poltor_init_weights(poltor_workspace * w)
+{
+  int s = 0;
+  size_t idx = 0;
+  size_t i, j;
+  const poltor_parameters *params = &(w->params);
+  magdata_list *list = w->data;
+  const size_t ntheta = 90; /* 2 deg bins */
+  const size_t nphi = 24;   /* 15 deg bins */
+  track_weight_workspace *weight_p = track_weight_alloc(ntheta, nphi);
+
+  /* initialize spatial weighting histogram */
+
+  fprintf(stderr, "poltor_init_weights: initializing weighting histogram...");
+
+  for (i = 0; i < list->n; ++i)
+    {
+      magdata *mptr = magdata_list_ptr(i, list);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          if (MAGDATA_ExistX(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistY(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistZ(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistDX_NS(mptr->flags[j]) || MAGDATA_ExistDX_EW(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistDY_NS(mptr->flags[j]) || MAGDATA_ExistDY_EW(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistDZ_NS(mptr->flags[j]) || MAGDATA_ExistDZ_EW(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            track_weight_add_data(mptr->theta[j], mptr->phi[j], weight_p);
+        }
+    }
+
+  fprintf(stderr, "done\n");
+
+  /* compute data weights with histogram */
+  track_weight_calc(weight_p);
+
+  /* calculate spatial weights */
+
+  fprintf(stderr, "poltor_init_weights: calculating spatial weights...");
+
+  for (i = 0; i < list->n; ++i)
+    {
+      magdata *mptr = magdata_list_ptr(i, list);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          double wt; /* spatial weight */
+
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+#if 1
+          {
+            double thetaq = M_PI / 2.0 - mptr->qdlat[j] * M_PI / 180.0;
+            wt = sin(thetaq);
+          }
+#else
+          track_weight_get(mptr->phi[j], mptr->theta[j], &wt, weight_p);
+#endif
+
+          if (MAGDATA_ExistX(mptr->flags[j]))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_X * wt);
+
+          if (MAGDATA_ExistY(mptr->flags[j]))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_Y * wt);
+
+          if (MAGDATA_ExistZ(mptr->flags[j]))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_Z * wt);
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_F * wt);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DX_EW))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_DX_NS * wt);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DY_NS | MAGDATA_FLG_DY_EW))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_DY_NS * wt);
+
+          if (mptr->flags[j] & (MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DZ_EW))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_DZ_NS * wt);
+
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_DF_NS * wt);
+
+          /*XXX*/
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            gsl_vector_set(w->wts_spatial, idx++, params->weight_F * wt);
+        }
+    }
+
+  fprintf(stderr, "done\n");
+
+  assert(idx == w->n);
+
+  track_weight_free(weight_p);
+
+  return s;
+}

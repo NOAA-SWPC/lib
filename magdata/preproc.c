@@ -621,6 +621,9 @@ print_track_stats(const satdata_mag *data, const track_workspace *track_p)
 polar_damp_apply()
   Apply cosine window to polar data to reduce ionospheric signatures
 
+The window function is defined in Chulliat et al, 2016. I use the square
+of the window function defined in that paper
+
 Inputs: params  - magdata parameters
         track_p - track workspace
         data    - satellite data
@@ -647,12 +650,11 @@ polar_damp_apply(const magdata_preprocess_parameters *params, track_workspace *t
           double *B_obs = &(data->B[3 * j]);
           double window; /* window function */
 
-          /* calculate residual for this point */
-          satdata_mag_residual(j, B_res, data);
+          /* ignore bad data */
+          if (SATDATA_BadData(data->flags[j]))
+            continue;
 
-          /* calculate model values for this point */
-          satdata_mag_model(j, B_model, data);
-
+          /* compute window values */
           if (thetaq < thetaq0)
             {
               /* close to north pole */
@@ -669,17 +671,45 @@ polar_damp_apply(const magdata_preprocess_parameters *params, track_workspace *t
               window = 1.0;
             }
 
-          /* apply correction to satellite data */
-          for (k = 0; k < 3; ++k)
+          window *= window;
+
+          /* calculate model values for this point */
+          satdata_mag_model(j, B_model, data);
+
+          if (SATDATA_ExistVector(data->flags[j]))
             {
-              /* apply window to residual at high latitudes */
-              B_res[k] *= window * window;
+              /* calculate vector residual for this point */
+              satdata_mag_residual(j, B_res, data);
 
-              /* apply correction to satellite data */
-              B_obs[k] = B_res[k] + B_model[k];
+              /* apply correction to vector satellite data */
+              for (k = 0; k < 3; ++k)
+                {
+                  /* apply window to residual at high latitudes */
+                  B_res[k] *= window;
+
+                  /* apply correction to satellite data */
+                  B_obs[k] = B_res[k] + B_model[k];
+                }
+
+              /* recalculate scalar measurement */
+              data->F[j] = gsl_hypot3(B_obs[0], B_obs[1], B_obs[2]);
             }
+          else if (SATDATA_ExistScalar(data->flags[j]))
+            {
+              /* calculate scalar residual for this point */
+              B_res[3] = data->F[j] - B_model[3];
 
-          data->F[j] = gsl_hypot3(B_obs[0], B_obs[1], B_obs[2]);
+              /* apply window function */
+              B_res[3] *= window;
+
+              /* recalculate scalar measurement */
+              data->F[j] = B_res[3] + B_model[3];
+            }
+          else
+            {
+              fprintf(stderr, "polar_damp_apply: error: neither scalar nor vector data exist\n");
+              exit(1);
+            }
         }
     }
 

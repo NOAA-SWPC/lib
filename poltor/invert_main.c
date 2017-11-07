@@ -535,9 +535,9 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
   char buf[2048];
   FILE *fp[12];
   const size_t n = 12; /* number of components to write to disk */
-  const char *fmtstr = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
-  const char *fmtstr_F = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
-  const char *fmtstr_grad = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
+  const char *fmtstr = "%ld %9.4f %8.4f %8.4f %9.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
+  const char *fmtstr_F = "%ld %9.4f %8.4f %8.4f %9.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
+  const char *fmtstr_grad = "%ld %9.4f %8.4f %8.4f %9.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
   const double qdlat_cutoff = 55.0; /* cutoff latitude for high/low statistics */
   size_t i;
   magdata_list *list = w->data;
@@ -641,7 +641,6 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
         {
           k = 1;
           fprintf(fp[j], "# Field %zu: timestamp (UT seconds since 1970-01-01)\n", k++);
-          fprintf(fp[j], "# Field %zu: time (decimal year)\n", k++);
           fprintf(fp[j], "# Field %zu: longitude (degrees)\n", k++);
           fprintf(fp[j], "# Field %zu: geocentric latitude (degrees)\n", k++);
           fprintf(fp[j], "# Field %zu: QD latitude (degrees)\n", k++);
@@ -720,11 +719,11 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
 
       for (j = 0; j < mptr->n; ++j)
         {
-          double t = satdata_epoch2year(mptr->t[j]);
           time_t unix_time = satdata_epoch2timet(mptr->t[j]);
           double r = mptr->r[j];
           double theta = mptr->theta[j];
           double phi = mptr->phi[j];
+          double lon = phi * 180.0 / M_PI;
           double lat = 90.0 - theta * 180.0 / M_PI;
           double qdlat = mptr->qdlat[j];
           double B_obs[4], B_obs_grad[4];     /* observations in NEC */
@@ -796,7 +795,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
 
-                  fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[0] - B_prior[0], B_fit[0], res[0]);
+                  fprintf(fp[0], fmtstr, unix_time, lon, lat, qdlat, r, ws, wr, wf, B_obs[0] - B_prior[0], B_fit[0], res[0]);
                   gsl_rstat_add(res[0], rstat_x);
                 }
 
@@ -810,7 +809,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double ws = gsl_vector_get(w->wts_spatial, idx);
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
-                  fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[1] - B_prior[1], B_fit[1], res[1]);
+                  fprintf(fp[1], fmtstr, unix_time, lon, lat, qdlat, r, ws, wr, wf, B_obs[1] - B_prior[1], B_fit[1], res[1]);
                   gsl_rstat_add(res[1], rstat_y);
                 }
 
@@ -824,7 +823,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double ws = gsl_vector_get(w->wts_spatial, idx);
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
-                  fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[2] - B_prior[2], B_fit[2], res[2]);
+                  fprintf(fp[2], fmtstr, unix_time, lon, lat, qdlat, r, ws, wr, wf, B_obs[2] - B_prior[2], B_fit[2], res[2]);
 
                   gsl_rstat_add(res[2], rstat_z);
 
@@ -843,7 +842,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
               double wr = gsl_vector_get(w->wts_robust, idx);
               double wf = gsl_vector_get(w->wts_final, idx);
 
-              fprintf(fp[3], fmtstr_F, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[3], B_model[3], res[3]);
+              fprintf(fp[3], fmtstr_F, unix_time, lon, lat, qdlat, r, ws, wr, wf, B_obs[3], B_model[3], res[3]);
               gsl_rstat_add(res[3], rstat_f);
 
               if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
@@ -861,7 +860,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double ws = gsl_vector_get(w->wts_spatial, idx);
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
-                  fprintf(fp[4], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[0] - B_prior_grad[0]) - (B_obs[0] - B_prior[0]), B_grad_fit[0] - B_fit[0], res_grad[0]);
+                  fprintf(fp[4], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, (B_obs_grad[0] - B_prior_grad[0]) - (B_obs[0] - B_prior[0]), B_grad_fit[0] - B_fit[0], res_grad[0]);
                   gsl_rstat_add(res_grad[0], rstat_dx_ns);
                 }
 
@@ -875,7 +874,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double ws = gsl_vector_get(w->wts_spatial, idx);
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
-                  fprintf(fp[5], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[1] - B_prior_grad[1]) - (B_obs[1] - B_prior[1]), B_grad_fit[1] - B_fit[1], res_grad[1]);
+                  fprintf(fp[5], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, (B_obs_grad[1] - B_prior_grad[1]) - (B_obs[1] - B_prior[1]), B_grad_fit[1] - B_fit[1], res_grad[1]);
                   gsl_rstat_add(res_grad[1], rstat_dy_ns);
                 }
 
@@ -890,7 +889,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
 
-                  fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[2] - B_prior_grad[2]) - (B_obs[2] - B_prior[2]), B_grad_fit[2] - B_fit[2], res_grad[2]);
+                  fprintf(fp[6], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, (B_obs_grad[2] - B_prior_grad[2]) - (B_obs[2] - B_prior[2]), B_grad_fit[2] - B_fit[2], res_grad[2]);
 
                   if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
                     gsl_rstat_add(res_grad[2], rstat_low_dz_ns);
@@ -906,7 +905,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
               double ws = gsl_vector_get(w->wts_spatial, idx);
               double wr = gsl_vector_get(w->wts_robust, idx);
               double wf = gsl_vector_get(w->wts_final, idx);
-              fprintf(fp[7], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs_grad[3] - B_obs[3], B_model_grad[3] - B_model[3], res_grad[3]);
+              fprintf(fp[7], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, B_obs_grad[3] - B_obs[3], B_model_grad[3] - B_model[3], res_grad[3]);
               gsl_rstat_add(res_grad[3], rstat_df_ns);
 
               ++idx;
@@ -919,7 +918,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double ws = gsl_vector_get(w->wts_spatial, idx);
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
-                  fprintf(fp[8], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[0] - B_prior_grad[0]) - (B_obs[0] - B_prior[0]), B_grad_fit[0] - B_fit[0], res_grad[0]);
+                  fprintf(fp[8], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, (B_obs_grad[0] - B_prior_grad[0]) - (B_obs[0] - B_prior[0]), B_grad_fit[0] - B_fit[0], res_grad[0]);
                   gsl_rstat_add(res_grad[0], rstat_dx_ew);
                 }
 
@@ -933,7 +932,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double ws = gsl_vector_get(w->wts_spatial, idx);
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
-                  fprintf(fp[9], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[1] - B_prior_grad[1]) - (B_obs[1] - B_prior[1]), B_grad_fit[1] - B_fit[1], res_grad[1]);
+                  fprintf(fp[9], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, (B_obs_grad[1] - B_prior_grad[1]) - (B_obs[1] - B_prior[1]), B_grad_fit[1] - B_fit[1], res_grad[1]);
                   gsl_rstat_add(res_grad[1], rstat_dx_ew);
                 }
 
@@ -947,7 +946,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   double ws = gsl_vector_get(w->wts_spatial, idx);
                   double wr = gsl_vector_get(w->wts_robust, idx);
                   double wf = gsl_vector_get(w->wts_final, idx);
-                  fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[2] - B_prior_grad[2]) - (B_obs[2] - B_prior[2]), B_grad_fit[2] - B_fit[2], res_grad[2]);
+                  fprintf(fp[10], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, (B_obs_grad[2] - B_prior_grad[2]) - (B_obs[2] - B_prior[2]), B_grad_fit[2] - B_fit[2], res_grad[2]);
 
                   if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
                     gsl_rstat_add(res_grad[2], rstat_low_dz_ew);
@@ -963,7 +962,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
               double ws = gsl_vector_get(w->wts_spatial, idx);
               double wr = gsl_vector_get(w->wts_robust, idx);
               double wf = gsl_vector_get(w->wts_final, idx);
-              /*fprintf(fp[11], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B[3], B_model[3], B_fit[3], B_grad[3], B_grad_model[3], B_grad_fit[3]);
+              /*fprintf(fp[11], fmtstr_grad, unix_time, lon, lat, qdlat, r, ws, wr, wf, B[3], B_model[3], B_fit[3], B_grad[3], B_grad_model[3], B_grad_fit[3]);
               gsl_rstat_add(B[3] - B_model[3] - B_fit[3] - (B_grad[3] - B_grad_model[3] - B_grad_fit[3]), rstat_df_ew);*/
 
               ++idx;
@@ -1355,11 +1354,11 @@ main(int argc, char *argv[])
     exit(1);
 
   /* check if command line arguments override config file values */
-  if (alpha_int > 0.0)
+  if (alpha_int >= 0.0)
     params.alpha_int = alpha_int;
-  if (alpha_sh > 0.0)
+  if (alpha_sh >= 0.0)
     params.alpha_sh = alpha_sh;
-  if (alpha_tor > 0.0)
+  if (alpha_tor >= 0.0)
     params.alpha_tor = alpha_tor;
   if (maxit > 0)
     params.max_iter = maxit;
@@ -1377,6 +1376,9 @@ main(int argc, char *argv[])
 
       /* turn off weights for synthetic test */
       params.use_weights = 0;
+
+      /* turn off regularization */
+      params.regularize = 0;
     }
 
   params.mmax_int = GSL_MIN(params.mmax_int, params.nmax_int);
