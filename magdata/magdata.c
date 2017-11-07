@@ -988,6 +988,62 @@ magdata_residual_dB_ns(const size_t idx, double dB[4], const magdata *data)
 } /* magdata_residual_dB_ns() */
 
 /*
+magdata_prior()
+  Store a priori model (B_main + B_crust + ...) in an array
+
+Inputs: idx     - data index
+        B_prior - (output) magnetic prior model in NEC frame (nT)
+                  B_prior[0] = X model (nT)
+                  B_prior[1] = Y model (nT)
+                  B_prior[2] = Z model (nT)
+                  B_prior[3] = F model (nT)
+        data    - magdata
+
+Return: success/error
+*/
+
+int
+magdata_prior(const size_t idx, double B_prior[4], const magdata *data)
+{
+  int s = 0;
+
+  B_prior[0] = data->Bx_model[idx];
+  B_prior[1] = data->By_model[idx];
+  B_prior[2] = data->Bz_model[idx];
+  B_prior[3] = gsl_hypot3(B_prior[0], B_prior[1], B_prior[2]);
+
+  return s;
+}
+
+/*
+magdata_prior_grad()
+  Store a priori model (B_main + B_crust + ...) for gradient point in an array
+
+Inputs: idx     - data index
+        B_prior - (output) magnetic prior model for gradient point in NEC frame (nT)
+                  B_prior[0] = X model (nT)
+                  B_prior[1] = Y model (nT)
+                  B_prior[2] = Z model (nT)
+                  B_prior[3] = F model (nT)
+        data    - magdata
+
+Return: success/error
+*/
+
+int
+magdata_prior_grad(const size_t idx, double B_prior[4], const magdata *data)
+{
+  int s = 0;
+
+  B_prior[0] = data->Bx_model_ns[idx];
+  B_prior[1] = data->By_model_ns[idx];
+  B_prior[2] = data->Bz_model_ns[idx];
+  B_prior[3] = gsl_hypot3(B_prior[0], B_prior[1], B_prior[2]);
+
+  return s;
+}
+
+/*
 magdata_t()
   Find first/last timestamp in magdata structure, ignoring
 discarded data

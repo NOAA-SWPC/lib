@@ -25,6 +25,7 @@
 #include "track.h"
 
 static int print_track_stats(const satdata_mag *data, const track_workspace *track_p);
+static int polar_damp_apply(const magdata_preprocess_parameters *params, track_workspace *track_p, satdata_mag *data);
 
 #include "preproc_filter.c"
 
@@ -62,6 +63,7 @@ magdata_preprocess_default_parameters(void)
   params.euler_max_LT = -1.0;
   params.qdlat_preproc_cutoff = -1.0;
   params.min_zenith = -1.0;
+  params.flag_IMF = 0;
   params.season_min = -1.0;
   params.season_max = -1.0;
   params.season_min2 = -1.0;
@@ -79,6 +81,8 @@ magdata_preprocess_default_parameters(void)
   params.subtract_B_main = -1;
   params.subtract_B_crust = -1;
   params.subtract_B_ext = -1;
+  params.polar_damping = 0;
+  params.polar_qdlat = -1.0;
   params.pb_flag = -1;
   params.pb_qdmax = -1.0;
   params.pb_thresh[0] = -1.0;
@@ -155,6 +159,13 @@ magdata_preprocess_parse(const char *filename, magdata_preprocess_parameters *pa
     params->gradient_ns = (size_t) ival;
   if (config_lookup_int(&cfg, "fit_track_RC", &ival))
     params->fit_track_RC = (size_t) ival;
+  if (config_lookup_int(&cfg, "flag_IMF", &ival))
+    params->flag_IMF = (size_t) ival;
+
+  if (config_lookup_int(&cfg, "polar_damping", &ival))
+    params->polar_damping = (size_t) ival;
+  if (config_lookup_float(&cfg, "polar_qdlat", &fval))
+    params->polar_qdlat = fval;
 
   if (config_lookup_int(&cfg, "subtract_B_main", &ival))
     params->subtract_B_main = (size_t) ival;
@@ -228,12 +239,6 @@ magdata_preprocess_check(magdata_preprocess_parameters * params)
   if (params->qdlat_preproc_cutoff < 0.0)
     {
       fprintf(stderr, "magdata_preprocess_check: qdlat_preproc_cutoff must be > 0\n");
-      ++s;
-    }
-
-  if (params->min_zenith < 0.0)
-    {
-      fprintf(stderr, "magdata_preprocess_check: min_zenith must be > 0\n");
       ++s;
     }
 
@@ -315,6 +320,12 @@ magdata_preprocess_check(magdata_preprocess_parameters * params)
       ++s;
     }
 
+  if (params->polar_damping && params->polar_qdlat < 0.0)
+    {
+      fprintf(stderr, "magdata_preprocess_check: polar_damping enabled but polar_qdlat is < 0\n");
+      ++s;
+    }
+
   return s;
 }
 
@@ -350,6 +361,15 @@ magdata_preprocess(const magdata_preprocess_parameters *params, const size_t mag
     fprintf(stderr, "magdata_preprocess: flagged (%zu/%zu) (%.1f%%) tracks due to high rms\n",
             nrms, track_p->n, (double) nrms / (double) track_p->n * 100.0);
   }
+
+  if (params->polar_damping)
+    {
+      fprintf(stderr, "magdata_preprocess: applying cosine window to polar data...");
+      gettimeofday(&tv0, NULL);
+      polar_damp_apply(params, track_p, data);
+      gettimeofday(&tv1, NULL);
+      fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
+    }
 
   /* select geomagnetically quiet data */
   fprintf(stderr, "magdata_preprocess: selecting geomagnetically quiet data...");
@@ -595,4 +615,73 @@ print_track_stats(const satdata_mag *data, const track_workspace *track_p)
           nleft_track, track_p->n, (double)nleft_track / (double)track_p->n * 100.0);
 
   return 0;
+}
+
+/*
+polar_damp_apply()
+  Apply cosine window to polar data to reduce ionospheric signatures
+
+Inputs: params  - magdata parameters
+        track_p - track workspace
+        data    - satellite data
+*/
+
+static int
+polar_damp_apply(const magdata_preprocess_parameters *params, track_workspace *track_p,
+                 satdata_mag *data)
+{
+  int s = 0;
+  const double thetaq0 = M_PI / 2.0 - params->polar_qdlat * M_PI / 180.0; /* cutoff QD co-latitude */
+  size_t i, j, k;
+
+  for (i = 0; i < track_p->n; ++i)
+    {
+      track_data *tptr = &(track_p->tracks[i]);
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+
+      for (j = start_idx; j <= end_idx; ++j)
+        {
+          double thetaq = M_PI / 2.0 - data->qdlat[j] * M_PI / 180.0; /* QD co-latitude */
+          double B_res[4], B_model[4];
+          double *B_obs = &(data->B[3 * j]);
+          double window; /* window function */
+
+          /* calculate residual for this point */
+          satdata_mag_residual(j, B_res, data);
+
+          /* calculate model values for this point */
+          satdata_mag_model(j, B_model, data);
+
+          if (thetaq < thetaq0)
+            {
+              /* close to north pole */
+              window = 0.5 * (1.0 + cos(M_PI * (thetaq / thetaq0 - 1.0)));
+            }
+          else if (thetaq > (M_PI - thetaq0))
+            {
+              /* close to south pole */
+              window = 0.5 * (1.0 + cos(M_PI * (thetaq / thetaq0 - M_PI / thetaq0 + 1.0)));
+            }
+          else
+            {
+              /* mid/low latitudes, leave signal intact */
+              window = 1.0;
+            }
+
+          /* apply correction to satellite data */
+          for (k = 0; k < 3; ++k)
+            {
+              /* apply window to residual at high latitudes */
+              B_res[k] *= window * window;
+
+              /* apply correction to satellite data */
+              B_obs[k] = B_res[k] + B_model[k];
+            }
+
+          data->F[j] = gsl_hypot3(B_obs[0], B_obs[1], B_obs[2]);
+        }
+    }
+
+  return s;
 }

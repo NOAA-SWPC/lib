@@ -353,7 +353,12 @@ magdata_flag_zenith(const magdata_preprocess_parameters * params, track_workspac
 {
   size_t nflagged = 0; /* number of points flagged */
   size_t i, j;
-  solarpos_workspace *solarpos_workspace_p = solarpos_alloc();
+  solarpos_workspace *solarpos_workspace_p;
+  
+  if (params->min_zenith < 0.0)
+    return 0; /* zenith test disabled */
+
+  solarpos_workspace_p = solarpos_alloc();
 
   for (i = 0; i < track_p->n; ++i)
     {
@@ -575,7 +580,7 @@ magdata_preprocess_filter()
 
 static int
 magdata_preprocess_filter(const size_t magdata_flags, const magdata_preprocess_parameters *params,
-                         track_workspace *track_p, satdata_mag *data)
+                          track_workspace *track_p, satdata_mag *data)
 {
   int s = 0;
   size_t nflagged_kp,
@@ -628,9 +633,12 @@ magdata_preprocess_filter(const size_t magdata_flags, const magdata_preprocess_p
   fprintf(stderr, "\t magdata_preprocess_filter: flagged %zu/%zu (%.1f%%) high-latitude points due to zenith angle [cutoff: %.1f deg]\n",
           nflagged_zenith, data->n, (double) nflagged_zenith / (double) data->n * 100.0, params->qdlat_preproc_cutoff);
 
-  nflagged_IMF = magdata_flag_IMF(params, track_p, data);
-  fprintf(stderr, "\t magdata_preprocess_filter: flagged %zu/%zu (%.1f%%) high-latitude points due to IMF [cutoff: %.1f deg]\n",
-          nflagged_IMF, data->n, (double) nflagged_IMF / (double) data->n * 100.0, params->qdlat_preproc_cutoff);
+  if (params->flag_IMF)
+    {
+      nflagged_IMF = magdata_flag_IMF(params, track_p, data);
+      fprintf(stderr, "\t magdata_preprocess_filter: flagged %zu/%zu (%.1f%%) high-latitude points due to IMF [cutoff: %.1f deg]\n",
+              nflagged_IMF, data->n, (double) nflagged_IMF / (double) data->n * 100.0, params->qdlat_preproc_cutoff);
+    }
 
   /* look for plasma bubbles last, after LT selection */
   if (params->pb_flag)

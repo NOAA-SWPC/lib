@@ -141,8 +141,8 @@ int
 main(int argc, char *argv[])
 {
   int status;
-  char *datamap_prefix = "output";
-  char *data_prefix = "output";
+  char *datamap_prefix = "output/map";
+  char *data_prefix = "output/data";
   char *output_file = NULL;
   char *config_file = "PT_preproc.cfg";
   satdata_mag *data = NULL;

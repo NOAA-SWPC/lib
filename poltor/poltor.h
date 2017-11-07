@@ -176,8 +176,10 @@ typedef struct
   int lls_solution;   /* set to 1 if LS system is linear */
 
   /* nonlinear least squares parameters */
-  gsl_vector *wts_final;  /* final weights (robust * spatial), nres-by-1 */
-  size_t ndata;           /* total number of unique data points in LS system */
+  gsl_vector *wts_spatial; /* spatial weights */
+  gsl_vector *wts_robust;  /* robust weights */
+  gsl_vector *wts_final;   /* final weights (spatial * robust) */
+  size_t ndata;            /* total number of unique data points in LS system */
   gsl_multilarge_nlinear_workspace *multilarge_workspace_p;
 
   gsl_matrix_complex *JHJ_vec;     /* J^H J for vector measurements, p-by-p */
@@ -239,11 +241,11 @@ int poltor_eval_B_all(const double r, const double theta, const double phi,
 int poltor_write(const char *filename, poltor_workspace *w);
 poltor_workspace *poltor_read(const char *filename);
 gsl_complex poltor_get(const size_t cidx, const poltor_workspace *w);
-double poltor_spectrum_int(const size_t n, poltor_workspace *w);
-double poltor_spectrum_ext(const size_t n, poltor_workspace *w);
-double poltor_spectrum_sh(const size_t n, poltor_workspace *w);
-double poltor_spectrum_tor(const size_t n, poltor_workspace *w);
-int poltor_print_spectrum(const char *filename, poltor_workspace *w);
+double poltor_spectrum_int(const size_t n, gsl_vector_complex *c, poltor_workspace *w);
+double poltor_spectrum_ext(const size_t n, gsl_vector_complex *c, poltor_workspace *w);
+double poltor_spectrum_sh(const size_t n, gsl_vector_complex *c, poltor_workspace *w);
+double poltor_spectrum_tor(const size_t n, gsl_vector_complex *c, poltor_workspace *w);
+int poltor_print_spectrum(const char *filename, gsl_vector_complex *c, poltor_workspace *w);
 int poltor_print_lcurve(const char *filename, const poltor_workspace *w);
 size_t poltor_nmidx(const size_t type, const size_t n, const int m, poltor_workspace *w);
 size_t poltor_jnmidx(const size_t j, const size_t n, const int m, poltor_workspace *w);
@@ -271,6 +273,7 @@ int poltor_shell_Bn(const size_t n, const size_t j, const double r,
                     double *result, poltor_workspace *w);
 
 /* poltor_synth.c */
+int poltor_synth_init(gsl_vector_complex *g, poltor_workspace *w);
 int poltor_synth(poltor_workspace *w);
 int poltor_synth_print(poltor_workspace *w);
 

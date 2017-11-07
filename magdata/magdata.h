@@ -211,6 +211,7 @@ typedef struct
   double min_zenith;      /* minimum zenith angle for high-latitude data selection */
   size_t gradient_ns;     /* number of seconds between N/S gradient samples */
   int fit_track_RC;       /* fit track-by-track RC field */
+  int flag_IMF;           /* flag high-latitude points according to IMF criteria */
 
   double season_min;      /* season minimum [0,366] */
   double season_max;      /* season maximum [0,366] */
@@ -230,6 +231,9 @@ typedef struct
 
   double max_kp;          /* maximum kp */
   double max_dRC;         /* maximum dRC/dt (nT/hour) */
+
+  int polar_damping;      /* apply cosine damping window to polar data */
+  double polar_qdlat;     /* QD latitude cutoff for polar damping window */
 
   int pb_flag;            /* flag tracks with plasma bubble signatures */
   double pb_qdmax;        /* QD latitude range for PB search */
@@ -254,6 +258,8 @@ int magdata_map(const char *prefix, const magdata *data);
 int magdata_residual(const size_t idx, double B[4], const magdata *data);
 int magdata_residual_ns(const size_t idx, double B[4], const magdata *data);
 int magdata_residual_dB_ns(const size_t idx, double dB[4], const magdata *data);
+int magdata_prior(const size_t idx, double B_prior[4], const magdata *data);
+int magdata_prior_grad(const size_t idx, double B_prior[4], const magdata *data);
 int magdata_t(double *t0, double *t1, const magdata *data);
 int magdata_write(const char *filename, magdata *data);
 magdata *magdata_read(const char *filename, magdata *data);

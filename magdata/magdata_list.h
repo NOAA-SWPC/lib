@@ -48,6 +48,6 @@ int magdata_list_map(const char *dir_prefix, const magdata_list *w);
 int magdata_list_print(const char *dir_prefix, const magdata_list *w);
 magdata *magdata_list_ptr(const size_t idx, const magdata_list *w);
 int magdata_list_rminmax(const magdata_list * list, double * rmin, double * rmax);
-int magdata_list_count(const magdata_list * list, size_t count[]);
+int magdata_list_index(magdata_list * list, size_t count[]);
 
 #endif /* INCLUDED_magdata_list_h */

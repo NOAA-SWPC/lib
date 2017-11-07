@@ -39,6 +39,7 @@
 #include <common/common.h>
 #include <common/oct.h>
 
+#include "green.h"
 #include "lls.h"
 #include "magdata_list.h"
 #include "poltor.h"
@@ -130,7 +131,7 @@ poltor_alloc(const poltor_parameters *params)
   if (w->data)
     {
       /* count data and find total number of residuals */
-      magdata_list_count(w->data, w->res_cnt);
+      magdata_list_index(w->data, w->res_cnt);
       w->n = w->res_cnt[MAGDATA_LIST_IDX_TOTAL];
     }
   else
@@ -203,6 +204,10 @@ poltor_alloc(const poltor_parameters *params)
       poltor_free(w);
       return 0;
     }
+
+  w->wts_spatial = gsl_vector_alloc(w->n);
+  w->wts_robust = gsl_vector_alloc(w->n);
+  w->wts_final = gsl_vector_alloc(w->n);
 
   psize = gsl_sf_legendre_array_n(w->nmax_max);
 
@@ -296,6 +301,15 @@ poltor_free(poltor_workspace *w)
 {
   if (w->weights)
     gsl_vector_free(w->weights);
+
+  if (w->wts_spatial)
+    gsl_vector_free(w->wts_spatial);
+
+  if (w->wts_robust)
+    gsl_vector_free(w->wts_robust);
+
+  if (w->wts_final)
+    gsl_vector_free(w->wts_final);
 
   if (w->c)
     gsl_vector_complex_free(w->c);
@@ -1056,29 +1070,80 @@ poltor_eval_B(const double r, const double theta, const double phi,
               double B[4], poltor_workspace *w)
 {
   int s = 0;
-#if 0
-  gsl_vector_complex_view vx, vy, vz;
-  gsl_complex valx, valy, valz;
+  green_complex_workspace *green_p = w->green_p[0];
+  complex double *Ynm = green_p->Ynm;
+  complex double *dYnm = green_p->dYnm;
+  gsl_vector_complex_view dX = gsl_matrix_complex_row(w->omp_dX, 0);
+  gsl_vector_complex_view dY = gsl_matrix_complex_row(w->omp_dY, 0);
+  gsl_vector_complex_view dZ = gsl_matrix_complex_row(w->omp_dZ, 0);
+  gsl_vector_complex_view X, Y, Z;
+  gsl_complex val[3];
 
-  /* views of 3 rows of the design matrix for X,Y,Z */
-  vx = gsl_matrix_complex_row(w->A, 0);
-  vy = gsl_matrix_complex_row(w->A, 1);
-  vz = gsl_matrix_complex_row(w->A, 2);
+  /* compute Ynm and d/dtheta Ynm */
+  green_complex_Ynm(theta, phi, green_p);
 
-  /* build these 3 rows of design matrix at this point */
-  poltor_row(r, theta, phi, 0.0, 0.0, 0.0,
-             &vx.vector, &vy.vector, &vz.vector,
-             NULL, NULL, NULL, w);
+  if (w->p_pint > 0)
+    {
+      X = gsl_vector_complex_subvector(&dX.vector, w->pint_offset, w->p_pint);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->pint_offset, w->p_pint);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->pint_offset, w->p_pint);
 
-  gsl_blas_zdotu(&vx.vector, w->c, &valx);
-  gsl_blas_zdotu(&vy.vector, w->c, &valy);
-  gsl_blas_zdotu(&vz.vector, w->c, &valz);
+      /* compute internal Green's functions */
+      green_complex_calc_int(w->nmax_int, w->mmax_int, w->R, r, theta, Ynm, dYnm,
+                             (complex double *) X.vector.data,
+                             (complex double *) Y.vector.data,
+                             (complex double *) Z.vector.data);
+    }
 
-  B[0] = GSL_REAL(valx);
-  B[1] = GSL_REAL(valy);
-  B[2] = GSL_REAL(valz);
+  if (w->p_pext > 0)
+    {
+      X = gsl_vector_complex_subvector(&dX.vector, w->pext_offset, w->p_pext);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->pext_offset, w->p_pext);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->pext_offset, w->p_pext);
+
+      /* compute external Green's functions */
+      green_complex_calc_ext(w->nmax_ext, w->mmax_ext, w->R, r, theta, Ynm, dYnm,
+                             (complex double *) X.vector.data,
+                             (complex double *) Y.vector.data,
+                             (complex double *) Z.vector.data);
+    }
+
+  if (w->p_psh > 0)
+    {
+      X = gsl_vector_complex_subvector(&dX.vector, w->psh_offset, w->p_psh);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->psh_offset, w->p_psh);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->psh_offset, w->p_psh);
+
+      /* compute shell Green's functions */
+      poltor_calc_psh(r, theta, Ynm, dYnm,
+                      (complex double *) X.vector.data,
+                      (complex double *) Y.vector.data,
+                      (complex double *) Z.vector.data,
+                      w);
+    }
+
+  if (w->p_tor > 0)
+    {
+      X = gsl_vector_complex_subvector(&dX.vector, w->tor_offset, w->p_tor);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->tor_offset, w->p_tor);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->tor_offset, w->p_tor);
+
+      /* compute shell Green's functions */
+      poltor_calc_tor(r, theta, Ynm, dYnm,
+                      (complex double *) X.vector.data,
+                      (complex double *) Y.vector.data,
+                      (complex double *) Z.vector.data,
+                      w);
+    }
+
+  gsl_blas_zdotu(&dX.vector, w->c, &val[0]);
+  gsl_blas_zdotu(&dY.vector, w->c, &val[1]);
+  gsl_blas_zdotu(&dZ.vector, w->c, &val[2]);
+
+  B[0] = GSL_REAL(val[0]);
+  B[1] = GSL_REAL(val[1]);
+  B[2] = GSL_REAL(val[2]);
   B[3] = gsl_hypot3(B[0], B[1], B[2]);
-#endif
 
   return s;
 } /* poltor_eval_B() */
@@ -1306,7 +1371,7 @@ poltor_get(const size_t cidx, const poltor_workspace *w)
 }
 
 double
-poltor_spectrum_int(const size_t n, poltor_workspace *w)
+poltor_spectrum_int(const size_t n, gsl_vector_complex *c, poltor_workspace *w)
 {
   int ni = (int) GSL_MIN(n, w->mmax_int);
   int m;
@@ -1318,7 +1383,7 @@ poltor_spectrum_int(const size_t n, poltor_workspace *w)
   for (m = -ni; m <= ni; ++m)
     {
       size_t cidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
-      gsl_complex coef = poltor_get(cidx, w);
+      gsl_complex coef = gsl_vector_complex_get(c, cidx);
       double gnm = GSL_REAL(coef);
 
       sum += gnm * gnm;
@@ -1331,7 +1396,7 @@ poltor_spectrum_int(const size_t n, poltor_workspace *w)
 }
 
 double
-poltor_spectrum_ext(const size_t n, poltor_workspace *w)
+poltor_spectrum_ext(const size_t n, gsl_vector_complex *c, poltor_workspace *w)
 {
   int ni = (int) GSL_MIN(n, w->mmax_ext);
   int m;
@@ -1343,7 +1408,7 @@ poltor_spectrum_ext(const size_t n, poltor_workspace *w)
   for (m = -ni; m <= ni; ++m)
     {
       size_t cidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, w);
-      gsl_complex coef = poltor_get(cidx, w);
+      gsl_complex coef = gsl_vector_complex_get(c, cidx);
       double knm = GSL_REAL(coef);
 
       sum += knm * knm;
@@ -1356,7 +1421,7 @@ poltor_spectrum_ext(const size_t n, poltor_workspace *w)
 } /* poltor_spectrum_ext() */
 
 double
-poltor_spectrum_sh(const size_t n, poltor_workspace *w)
+poltor_spectrum_sh(const size_t n, gsl_vector_complex *c, poltor_workspace *w)
 {
   int ni = (int) GSL_MIN(n, w->mmax_sh);
   int m;
@@ -1368,7 +1433,7 @@ poltor_spectrum_sh(const size_t n, poltor_workspace *w)
   for (m = -ni; m <= ni; ++m)
     {
       size_t cidx = poltor_nmidx(POLTOR_IDX_PSH, n, m, w);
-      gsl_complex coef = poltor_get(cidx, w);
+      gsl_complex coef = gsl_vector_complex_get(c, cidx);
       double qnm = GSL_REAL(coef);
 
       sum += qnm * qnm;
@@ -1381,7 +1446,7 @@ poltor_spectrum_sh(const size_t n, poltor_workspace *w)
 } /* poltor_spectrum_sh() */
 
 double
-poltor_spectrum_tor(const size_t n, poltor_workspace *w)
+poltor_spectrum_tor(const size_t n, gsl_vector_complex *c, poltor_workspace *w)
 {
   int ni = (int) GSL_MIN(n, w->mmax_tor);
   int m;
@@ -1393,7 +1458,7 @@ poltor_spectrum_tor(const size_t n, poltor_workspace *w)
   for (m = -ni; m <= ni; ++m)
     {
       size_t cidx = poltor_nmidx(POLTOR_IDX_TOR, n, m, w);
-      gsl_complex coef = poltor_get(cidx, w);
+      gsl_complex coef = gsl_vector_complex_get(c, cidx);
       double phinm = GSL_REAL(coef);
 
       sum += phinm * phinm;
@@ -1406,7 +1471,7 @@ poltor_spectrum_tor(const size_t n, poltor_workspace *w)
 } /* poltor_spectrum_tor() */
 
 int
-poltor_print_spectrum(const char *filename, poltor_workspace *w)
+poltor_print_spectrum(const char *filename, gsl_vector_complex *c, poltor_workspace *w)
 {
   const size_t nmax = w->nmax_max;
   size_t n;
@@ -1429,10 +1494,10 @@ poltor_print_spectrum(const char *filename, poltor_workspace *w)
 
   for (n = 1; n <= nmax; ++n)
     {
-      double gn = poltor_spectrum_int(n, w);
-      double kn = poltor_spectrum_ext(n, w);
-      double qn = poltor_spectrum_sh(n, w);
-      double phin = poltor_spectrum_tor(n, w);
+      double gn = poltor_spectrum_int(n, c, w);
+      double kn = poltor_spectrum_ext(n, c, w);
+      double qn = poltor_spectrum_sh(n, c, w);
+      double phin = poltor_spectrum_tor(n, c, w);
 
       fprintf(fp, "%zu %.12e %.12e %.12e %.12e\n",
               n,
@@ -1513,7 +1578,6 @@ poltor_calc_psh(const double r, const double theta,
   size_t n, j;
   const double ratio = w->R / r;
   const complex double invisint = I / sin(theta);
-  gsl_complex val;
 
   /* outer loop over Taylor series */
   for (j = 0; j <= w->shell_J; ++j)
@@ -1592,7 +1656,6 @@ poltor_calc_tor(const double r, const double theta,
   int s = 0;
   const complex double invisint = I / sin(theta);
   size_t n;
-  gsl_complex val;
 
   for (n = 1; n <= w->nmax_tor; ++n)
     {

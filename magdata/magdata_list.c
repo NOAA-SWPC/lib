@@ -277,21 +277,26 @@ magdata_list_rminmax(const magdata_list * list, double * rmin, double * rmax)
 }
 
 /*
-magdata_list_count()
-  Count number of data of each type
+magdata_list_index()
+  Count number of data of each type and build index for each
+data point
 
 Inputs: list  - magdata list
         count - (output) counts of each data type, indexed by
                 MAGDATA_LIST_IDX_xxx (size MAGDATA_LIST_IDX_END)
 
 Return: success/error
+
+Notes:
+1) The mptr->index[j] array is updated to contain the index of
+mptr->datum[j] (the jth point in mptr in [0,data_total - 1])
 */
 
 int
-magdata_list_count(const magdata_list * list, size_t count[])
+magdata_list_index(magdata_list * list, size_t count[])
 {
   int s = 0;
-  size_t i, j;
+  size_t i, j, k;
 
   for (i = 0; i < MAGDATA_LIST_IDX_END; ++i)
     count[i] = 0;
@@ -304,6 +309,13 @@ magdata_list_count(const magdata_list * list, size_t count[])
         {
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
+
+          /* store index of this data point accounting for all previous counts */
+          mptr->index[j] = 0;
+          for (k = 0; k <= MAGDATA_LIST_IDX_DF_EW; ++k)
+            {
+              mptr->index[j] += count[k];
+            }
 
           if (MAGDATA_ExistX(mptr->flags[j]))
             ++count[MAGDATA_LIST_IDX_X];

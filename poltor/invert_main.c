@@ -26,6 +26,8 @@
 #include <gsl/gsl_complex.h>
 #include <gsl/gsl_complex_math.h>
 #include <gsl/gsl_blas.h>
+#include <gsl/gsl_statistics.h>
+#include <gsl/gsl_rstat.h>
 
 #include <common/common.h>
 #include <common/oct.h>
@@ -34,13 +36,6 @@
 #include "track.h"
 
 #include "poltor.h"
-
-#define POLTOR_FIT_X               1 /* fit X component */
-#define POLTOR_FIT_Y               1 /* fit Y component */
-#define POLTOR_FIT_Z               1 /* fit Z component */
-#define POLTOR_FIT_DX              1 /* fit DX component */
-#define POLTOR_FIT_DY              1 /* fit DY component */
-#define POLTOR_FIT_DZ              1 /* fit DZ component */
 
 /* define to use QD coordinates in spherical harmonic transforms */
 #define POLTOR_QD_HARMONICS        1
@@ -170,6 +165,34 @@ parse_config_file(const char *filename, poltor_parameters *poltor_params)
   config_destroy(&cfg);
 
   return 0;
+}
+
+int
+initial_guess(gsl_vector_complex *c, poltor_workspace *w)
+{
+  int s = 0;
+  const poltor_parameters *params = &(w->params);
+
+  if (params->synth_data)
+    {
+#if 0
+      poltor_synth_init(c, w);
+#else
+      /* set the (1,0) element to 1, since a 0 vector causes problems with the scalar Jacobian,
+       * which divides by || B_model || */
+      gsl_vector_complex_set_zero(c);
+      gsl_vector_complex_set(c, 1, GSL_COMPLEX_ONE);
+#endif
+    }
+  else
+    {
+      /* set the (1,0) element to 1, since a 0 vector causes problems with the scalar Jacobian,
+       * which divides by || B_model || */
+      gsl_vector_complex_set_zero(c);
+      gsl_vector_complex_set(c, 1, GSL_COMPLEX_ONE);
+    }
+
+  return s;
 }
 
 /*
@@ -478,6 +501,531 @@ print_Lcurve(const char *filename, poltor_workspace *w)
 } /* print_Lcurve() */
 
 int
+poltor_print_residual_stat(const char *component_str, const gsl_rstat_workspace *rstat_p)
+{
+  if (component_str == NULL)
+    {
+      /* print header */
+      fprintf(stderr, "%12s %10s %12s %12s %12s\n",
+              "", "N", "mean (nT)", "sigma (nT)", "rms (nT)");
+
+    }
+  else
+    {
+      const size_t n = gsl_rstat_n(rstat_p);
+
+      if (n > 0)
+        {
+          fprintf(stderr, "%12s %10zu %12.2f %12.2f %12.2f\n",
+                  component_str,
+                  n,
+                  gsl_rstat_mean(rstat_p),
+                  gsl_rstat_sd(rstat_p),
+                  gsl_rstat_rms(rstat_p));
+        }
+    }
+
+  return GSL_SUCCESS;
+}
+
+int
+poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *w)
+{
+  int s = 0;
+  char buf[2048];
+  FILE *fp[12];
+  const size_t n = 12; /* number of components to write to disk */
+  const char *fmtstr = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
+  const char *fmtstr_F = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
+  const char *fmtstr_grad = "%ld %.8f %.4f %.4f %.4f %.4f %.3e %.3e %.3e %.4f %.4f %.4f\n";
+  const double qdlat_cutoff = 55.0; /* cutoff latitude for high/low statistics */
+  size_t i;
+  magdata_list *list = w->data;
+  size_t idx = 0;
+  gsl_rstat_workspace *rstat_x = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_y = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_z = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_f = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_lowz = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_highz = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_lowf = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_highf = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_dx_ns = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_dy_ns = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_low_dz_ns = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_high_dz_ns = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_df_ns = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_dx_ew = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_dy_ew = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_low_dz_ew = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_high_dz_ew = gsl_rstat_alloc();
+  gsl_rstat_workspace *rstat_df_ew = gsl_rstat_alloc();
+
+  fprintf(stderr, "\n");
+
+  for (i = 0; i < list->n; ++i)
+    {
+      magdata *mptr = magdata_list_ptr(i, list);
+      size_t j, k;
+
+      gsl_rstat_reset(rstat_x);
+      gsl_rstat_reset(rstat_y);
+      gsl_rstat_reset(rstat_z);
+      gsl_rstat_reset(rstat_f);
+      gsl_rstat_reset(rstat_lowz);
+      gsl_rstat_reset(rstat_highz);
+      gsl_rstat_reset(rstat_lowf);
+      gsl_rstat_reset(rstat_highf);
+      gsl_rstat_reset(rstat_dx_ns);
+      gsl_rstat_reset(rstat_dy_ns);
+      gsl_rstat_reset(rstat_low_dz_ns);
+      gsl_rstat_reset(rstat_high_dz_ns);
+      gsl_rstat_reset(rstat_df_ns);
+      gsl_rstat_reset(rstat_dx_ew);
+      gsl_rstat_reset(rstat_dy_ew);
+      gsl_rstat_reset(rstat_low_dz_ew);
+      gsl_rstat_reset(rstat_high_dz_ew);
+      gsl_rstat_reset(rstat_df_ew);
+
+      sprintf(buf, "%s/res%zu_X_iter%zu.dat", prefix, i, iter);
+      fp[0] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_Y_iter%zu.dat", prefix, i, iter);
+      fp[1] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_Z_iter%zu.dat", prefix, i, iter);
+      fp[2] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_F_iter%zu.dat", prefix, i, iter);
+      fp[3] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DX_NS_iter%zu.dat", prefix, i, iter);
+      fp[4] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DY_NS_iter%zu.dat", prefix, i, iter);
+      fp[5] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DZ_NS_iter%zu.dat", prefix, i, iter);
+      fp[6] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DF_NS_iter%zu.dat", prefix, i, iter);
+      fp[7] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DX_EW_iter%zu.dat", prefix, i, iter);
+      fp[8] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DY_EW_iter%zu.dat", prefix, i, iter);
+      fp[9] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DZ_EW_iter%zu.dat", prefix, i, iter);
+      fp[10] = fopen(buf, "w");
+
+      sprintf(buf, "%s/res%zu_DF_EW_iter%zu.dat", prefix, i, iter);
+      fp[11] = fopen(buf, "w");
+
+      /* header line */
+      fprintf(fp[0], "# X vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[1], "# Y vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[2], "# Z vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[3], "# F scalar residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[4], "# DX gradient (N/S) vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[5], "# DY gradient (N/S) vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[6], "# DZ gradient (N/S) vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[7], "# DZ gradient (N/S) scalar residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[8], "# DX gradient (E/W) vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[9], "# DY gradient (E/W) vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[10], "# DZ gradient (E/W) vector residuals (satellite %zu, iteration %zu)\n", i, iter);
+      fprintf(fp[11], "# DF gradient (E/W) scalar residuals (satellite %zu, iteration %zu)\n", i, iter);
+
+      for (j = 0; j < n; ++j)
+        {
+          k = 1;
+          fprintf(fp[j], "# Field %zu: timestamp (UT seconds since 1970-01-01)\n", k++);
+          fprintf(fp[j], "# Field %zu: time (decimal year)\n", k++);
+          fprintf(fp[j], "# Field %zu: longitude (degrees)\n", k++);
+          fprintf(fp[j], "# Field %zu: geocentric latitude (degrees)\n", k++);
+          fprintf(fp[j], "# Field %zu: QD latitude (degrees)\n", k++);
+          fprintf(fp[j], "# Field %zu: geocentric radius (km)\n", k++);
+          fprintf(fp[j], "# Field %zu: spatial weight factor\n", k++);
+          fprintf(fp[j], "# Field %zu: robust weight factor\n", k++);
+          fprintf(fp[j], "# Field %zu: total weight factor\n", k++);
+        }
+
+      fprintf(fp[0], "# Field %zu: X vector measurement (observation minus a priori model) (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y vector measurement (observation minus a priori model) (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z vector measurement (observation minus a priori model) (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: F scalar measurement (no subtraction of prior model) (nT)\n", k);
+      fprintf(fp[4], "# Field %zu: DX N/S vector difference (a priori models subtracted) (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: DY N/S vector difference (a priori models subtracted) (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: DZ N/S vector difference (a priori models subtracted) (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: DF N/S scalar difference (no subtraction of prior models) (nT)\n", k);
+      fprintf(fp[8], "# Field %zu: X vector measurement (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y vector measurement (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z vector measurement (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F scalar measurement (nT)\n", k);
+      ++k;
+
+      fprintf(fp[0], "# Field %zu: X fitted model (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y fitted model (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z fitted model (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: F total model || B_prior + B_fitted || (nT)\n", k);
+      fprintf(fp[4], "# Field %zu: DX N/S fitted model (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: DY N/S fitted model (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: DZ N/S fitted model (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: DF N/S difference of fitted models || B_fitted_NS + B_prior_NS || - || B_fitted + B_prior || (nT)\n", k);
+
+      fprintf(fp[8], "# Field %zu: X a priori model (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y a priori model (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z a priori model (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F a priori model (nT)\n", k);
+      ++k;
+
+      fprintf(fp[0], "# Field %zu: X residual (nT)\n", k);
+      fprintf(fp[1], "# Field %zu: Y residual (nT)\n", k);
+      fprintf(fp[2], "# Field %zu: Z residual (nT)\n", k);
+      fprintf(fp[3], "# Field %zu: scalar residual (nT)\n", k);
+      fprintf(fp[4], "# Field %zu: DX N/S residual (nT)\n", k);
+      fprintf(fp[5], "# Field %zu: DY N/S residual (nT)\n", k);
+      fprintf(fp[6], "# Field %zu: DZ N/S residual (nT)\n", k);
+      fprintf(fp[7], "# Field %zu: DF N/S residual (nT)\n", k);
+
+      fprintf(fp[8], "# Field %zu: X fitted model (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y fitted model (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z fitted model (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F fitted model (nT)\n", k);
+      ++k;
+
+      fprintf(fp[8], "# Field %zu: X vector measurement at E/W gradient point (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y vector measurement at E/W gradient point (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z vector measurement at E/W gradient point (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F scalar measurement at E/W gradient point (nT)\n", k);
+      ++k;
+
+      fprintf(fp[8], "# Field %zu: X a priori model at E/W gradient point (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y a priori model at E/W gradient point (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z a priori model at E/W gradient point (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F a priori model at E/W gradient point (nT)\n", k);
+      ++k;
+
+      fprintf(fp[8], "# Field %zu: X fitted model at E/W gradient point (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: Y fitted model at E/W gradient point (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: Z fitted model at E/W gradient point (nT)\n", k);
+      fprintf(fp[11], "# Field %zu: F fitted model at E/W gradient point (nT)\n", k);
+      ++k;
+
+      fprintf(fp[8], "# Field %zu: DX E/W residual (nT)\n", k);
+      fprintf(fp[9], "# Field %zu: DY E/W residual (nT)\n", k);
+      fprintf(fp[10], "# Field %zu: DZ E/W residual (nT)\n", k);
+      ++k;
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          double t = satdata_epoch2year(mptr->t[j]);
+          time_t unix_time = satdata_epoch2timet(mptr->t[j]);
+          double r = mptr->r[j];
+          double theta = mptr->theta[j];
+          double phi = mptr->phi[j];
+          double lat = 90.0 - theta * 180.0 / M_PI;
+          double qdlat = mptr->qdlat[j];
+          double B_obs[4], B_obs_grad[4];     /* observations in NEC */
+          double B_prior[4], B_prior_grad[4]; /* prior models (main, crust, external) */
+          double B_fit[4], B_grad_fit[4];     /* fitted (ionosphere) field model */
+          double B_model[4], B_model_grad[4]; /* B_fit + B_prior */
+          double res[4], res_grad[4];         /* residuals */
+
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          /* compute B_prior = B_main + B_crust + B_ext */
+          magdata_prior(j, B_prior, mptr);
+
+          B_obs[0] = mptr->Bx_nec[j];
+          B_obs[1] = mptr->By_nec[j];
+          B_obs[2] = mptr->Bz_nec[j];
+          B_obs[3] = mptr->F[j];
+
+          if (MAGDATA_FitMF(mptr->flags[j]))
+            {
+              /* evaluate model */
+              poltor_eval_B(r, theta, phi, B_fit, w);
+
+              if (MAGDATA_ExistDX_NS(mptr->flags[j]) || MAGDATA_ExistDY_NS(mptr->flags[j]) ||
+                  MAGDATA_ExistDZ_NS(mptr->flags[j]) || MAGDATA_ExistDF_NS(mptr->flags[j]) ||
+                  MAGDATA_ExistDX_EW(mptr->flags[j]) || MAGDATA_ExistDY_EW(mptr->flags[j]) ||
+                  MAGDATA_ExistDZ_EW(mptr->flags[j]) || MAGDATA_ExistDF_EW(mptr->flags[j]))
+                {
+                  /* compute B_prior_grad = B_main + B_crust + B_ext */
+                  magdata_prior_grad(j, B_prior_grad, mptr);
+
+                  B_obs_grad[0] = mptr->Bx_nec_ns[j];
+                  B_obs_grad[1] = mptr->By_nec_ns[j];
+                  B_obs_grad[2] = mptr->Bz_nec_ns[j];
+                  B_obs_grad[3] = mptr->F_ns[j];
+
+                  poltor_eval_B(mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], B_grad_fit, w);
+                }
+
+              /* calculate vector residuals */
+              for (k = 0; k < 3; ++k)
+                {
+                  B_model[k] = B_fit[k] + B_prior[k];
+                  B_model_grad[k] = B_grad_fit[k] + B_prior_grad[k];
+
+                  res[k] = B_obs[k] - B_model[k];
+                  res_grad[k] = (B_obs_grad[k] - B_model_grad[k]) - res[k];
+                }
+
+              B_model[3] = gsl_hypot3(B_model[0], B_model[1], B_model[2]);
+              B_model_grad[3] = gsl_hypot3(B_model_grad[0], B_model_grad[1], B_model_grad[2]);
+
+              res[3] = B_obs[3] - B_model[3];
+              res_grad[3] = (B_obs_grad[3] - B_model_grad[3]) - res[3];
+            }
+
+          if ((j > 0) && (mptr->flags[j] & MAGDATA_FLG_TRACK_START))
+            {
+              for (k = 0; k < n; ++k)
+                fprintf(fp[k], "\n\n");
+            }
+
+          if (MAGDATA_ExistX(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+
+                  fprintf(fp[0], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[0] - B_prior[0], B_fit[0], res[0]);
+                  gsl_rstat_add(res[0], rstat_x);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistY(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[1], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[1] - B_prior[1], B_fit[1], res[1]);
+                  gsl_rstat_add(res[1], rstat_y);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistZ(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[2], fmtstr, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[2] - B_prior[2], B_fit[2], res[2]);
+
+                  gsl_rstat_add(res[2], rstat_z);
+
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(res[2], rstat_lowz);
+                  else
+                    gsl_rstat_add(res[2], rstat_highz);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            {
+              double ws = gsl_vector_get(w->wts_spatial, idx);
+              double wr = gsl_vector_get(w->wts_robust, idx);
+              double wf = gsl_vector_get(w->wts_final, idx);
+
+              fprintf(fp[3], fmtstr_F, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs[3], B_model[3], res[3]);
+              gsl_rstat_add(res[3], rstat_f);
+
+              if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                gsl_rstat_add(res[3], rstat_lowf);
+              else
+                gsl_rstat_add(res[3], rstat_highf);
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDX_NS(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[4], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[0] - B_prior_grad[0]) - (B_obs[0] - B_prior[0]), B_grad_fit[0] - B_fit[0], res_grad[0]);
+                  gsl_rstat_add(res_grad[0], rstat_dx_ns);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDY_NS(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[5], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[1] - B_prior_grad[1]) - (B_obs[1] - B_prior[1]), B_grad_fit[1] - B_fit[1], res_grad[1]);
+                  gsl_rstat_add(res_grad[1], rstat_dy_ns);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDZ_NS(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+
+                  fprintf(fp[6], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[2] - B_prior_grad[2]) - (B_obs[2] - B_prior[2]), B_grad_fit[2] - B_fit[2], res_grad[2]);
+
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(res_grad[2], rstat_low_dz_ns);
+                  else
+                    gsl_rstat_add(res_grad[2], rstat_high_dz_ns);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            {
+              double ws = gsl_vector_get(w->wts_spatial, idx);
+              double wr = gsl_vector_get(w->wts_robust, idx);
+              double wf = gsl_vector_get(w->wts_final, idx);
+              fprintf(fp[7], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B_obs_grad[3] - B_obs[3], B_model_grad[3] - B_model[3], res_grad[3]);
+              gsl_rstat_add(res_grad[3], rstat_df_ns);
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDX_EW(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[8], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[0] - B_prior_grad[0]) - (B_obs[0] - B_prior[0]), B_grad_fit[0] - B_fit[0], res_grad[0]);
+                  gsl_rstat_add(res_grad[0], rstat_dx_ew);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDY_EW(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[9], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[1] - B_prior_grad[1]) - (B_obs[1] - B_prior[1]), B_grad_fit[1] - B_fit[1], res_grad[1]);
+                  gsl_rstat_add(res_grad[1], rstat_dx_ew);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDZ_EW(mptr->flags[j]))
+            {
+              if (MAGDATA_FitMF(mptr->flags[j]))
+                {
+                  double ws = gsl_vector_get(w->wts_spatial, idx);
+                  double wr = gsl_vector_get(w->wts_robust, idx);
+                  double wf = gsl_vector_get(w->wts_final, idx);
+                  fprintf(fp[10], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, (B_obs_grad[2] - B_prior_grad[2]) - (B_obs[2] - B_prior[2]), B_grad_fit[2] - B_fit[2], res_grad[2]);
+
+                  if (fabs(mptr->qdlat[j]) <= qdlat_cutoff)
+                    gsl_rstat_add(res_grad[2], rstat_low_dz_ew);
+                  else
+                    gsl_rstat_add(res_grad[2], rstat_high_dz_ew);
+                }
+
+              ++idx;
+            }
+
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            {
+              double ws = gsl_vector_get(w->wts_spatial, idx);
+              double wr = gsl_vector_get(w->wts_robust, idx);
+              double wf = gsl_vector_get(w->wts_final, idx);
+              /*fprintf(fp[11], fmtstr_grad, unix_time, t, phi, lat, qdlat, r, ws, wr, wf, B[3], B_model[3], B_fit[3], B_grad[3], B_grad_model[3], B_grad_fit[3]);
+              gsl_rstat_add(B[3] - B_model[3] - B_fit[3] - (B_grad[3] - B_grad_model[3] - B_grad_fit[3]), rstat_df_ew);*/
+
+              ++idx;
+            }
+        }
+
+      fprintf(stderr, "=== FIT STATISTICS SATELLITE %zu ===\n", i);
+
+      /* print header */
+      poltor_print_residual_stat(NULL, NULL);
+
+      poltor_print_residual_stat("X", rstat_x);
+      poltor_print_residual_stat("Y", rstat_y);
+      poltor_print_residual_stat("Z", rstat_z);
+      poltor_print_residual_stat("F", rstat_f);
+      poltor_print_residual_stat("low Z", rstat_lowz);
+      poltor_print_residual_stat("high Z", rstat_highz);
+      poltor_print_residual_stat("low F", rstat_lowf);
+      poltor_print_residual_stat("high F", rstat_highf);
+
+      poltor_print_residual_stat("N/S DX", rstat_dx_ns);
+      poltor_print_residual_stat("N/S DY", rstat_dy_ns);
+      poltor_print_residual_stat("low N/S DZ", rstat_low_dz_ns);
+      poltor_print_residual_stat("high N/S DZ", rstat_high_dz_ns);
+      poltor_print_residual_stat("N/S DF", rstat_df_ns);
+
+      poltor_print_residual_stat("E/W DX", rstat_dx_ew);
+      poltor_print_residual_stat("E/W DY", rstat_dy_ew);
+      poltor_print_residual_stat("low E/W DZ", rstat_low_dz_ew);
+      poltor_print_residual_stat("high E/W DZ", rstat_high_dz_ew);
+      poltor_print_residual_stat("E/W DF", rstat_df_ew);
+    }
+
+  assert(idx == w->n);
+
+  for (i = 0; i < n; ++i)
+    fclose(fp[i]);
+
+  gsl_rstat_free(rstat_x);
+  gsl_rstat_free(rstat_y);
+  gsl_rstat_free(rstat_z);
+  gsl_rstat_free(rstat_f);
+  gsl_rstat_free(rstat_lowf);
+  gsl_rstat_free(rstat_highf);
+  gsl_rstat_free(rstat_lowz);
+  gsl_rstat_free(rstat_highz);
+  gsl_rstat_free(rstat_dx_ns);
+  gsl_rstat_free(rstat_dy_ns);
+  gsl_rstat_free(rstat_low_dz_ns);
+  gsl_rstat_free(rstat_high_dz_ns);
+  gsl_rstat_free(rstat_df_ns);
+  gsl_rstat_free(rstat_dx_ew);
+  gsl_rstat_free(rstat_dy_ew);
+  gsl_rstat_free(rstat_low_dz_ew);
+  gsl_rstat_free(rstat_high_dz_ew);
+  gsl_rstat_free(rstat_df_ew);
+
+  return s;
+}
+
+#if 0
+int
 print_residuals(const char *filename, poltor_workspace *w)
 {
 #if 0/*XXX*/
@@ -617,6 +1165,8 @@ print_residuals(const char *filename, poltor_workspace *w)
   return 0;
 } /* print_residuals() */
 
+#endif/*XXX*/
+
 int
 print_chisq(const char *filename, poltor_workspace *w)
 {
@@ -653,12 +1203,12 @@ print_help(char *argv[])
   fprintf(stderr, "\t --alpha_int | -c alpha_int          - damping parameter for internal coefficients\n");
   fprintf(stderr, "\t --alpha_sh | -d alpha_sh            - damping parameter for shell poloidal coefficients\n");
   fprintf(stderr, "\t --alpha_tor | -j alpha_tor          - damping parameter for shell toroidal coefficients\n");
-  fprintf(stderr, "\t --residual_file | -r file           - residual output file\n");
+  fprintf(stderr, "\t --print_residuals | -r              - print residuals for each iteration\n");
   fprintf(stderr, "\t --coef_file | -o file               - coefficient output file\n");
   fprintf(stderr, "\t --chisq_file | -p file              - chi^2 output file (for L-curve analysis)\n");
   fprintf(stderr, "\t --lls_file | -l lls_file            - LS system file (matrix and rhs)\n");
   fprintf(stderr, "\t --lcurve_file | -k lcurve_file      - output file for L-curve data\n");
-  fprintf(stderr, "\t --maxit | -q maxit                  - number of robust iterations\n");
+  fprintf(stderr, "\t --maxit | -n maxit                  - number of robust iterations\n");
   fprintf(stderr, "\t --print_data | -u                   - print data file\n");
 }
 
@@ -669,15 +1219,14 @@ main(int argc, char *argv[])
   double alpha_int = -1.0;
   double alpha_sh = -1.0;
   double alpha_tor = -1.0;
-  size_t robust_maxit = 5;
   const double R = R_EARTH_KM;
   const double d = R + 350.0;   /* radius of current shell for gravity/diamag */
   char *config_file = "PT.cfg";
   char *datamap_prefix = "output";
   char *data_prefix = "output";
+  char *residual_prefix = "output";
   char *spectrum_file = "poltor.s";
   char *corr_file = "corr.dat";
-  char *residual_file = NULL;
   char *output_file = NULL;
   char *chisq_file = NULL;
   char *lls_file = NULL;
@@ -687,8 +1236,10 @@ main(int argc, char *argv[])
   poltor_parameters params;
   struct timeval tv0, tv1;
   int print_data = 0;
-  double rmin, rmax; /* min/max radii of sources (km) */
-  int nsource; /* number of different satellites */
+  int print_residuals = 0; /* print residuals for each iteration */
+  size_t maxit = 0;        /* maximum iterations */
+  double rmin, rmax;       /* min/max radii of sources (km) */
+  int nsource;             /* number of different satellites */
 
   poltor_init_params(&params);
 
@@ -698,7 +1249,7 @@ main(int argc, char *argv[])
       int option_index = 0;
       static struct option long_options[] =
         {
-          { "residual_file", required_argument, NULL, 'r' },
+          { "print_residuals", no_argument, NULL, 'r' },
           { "output_file", required_argument, NULL, 'o' },
           { "chisq_file", required_argument, NULL, 'p' },
           { "lls_file", required_argument, NULL, 'l' },
@@ -706,13 +1257,13 @@ main(int argc, char *argv[])
           { "alpha_int", required_argument, NULL, 'c' },
           { "alpha_sh", required_argument, NULL, 'd' },
           { "alpha_tor", required_argument, NULL, 'j' },
-          { "maxit", required_argument, NULL, 'q' },
+          { "maxit", required_argument, NULL, 'n' },
           { "print_data", no_argument, NULL, 'u' },
           { "config_file", no_argument, NULL, 'C' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "c:C:d:j:k:l:o:p:q:r:u", long_options, &option_index);
+      c = getopt_long(argc, argv, "c:C:d:j:k:l:o:p:n:ru", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -735,7 +1286,7 @@ main(int argc, char *argv[])
             break;
 
           case 'r':
-            residual_file = optarg;
+            print_residuals = 1;
             break;
 
           case 'k':
@@ -754,8 +1305,8 @@ main(int argc, char *argv[])
             lls_file = optarg;
             break;
 
-          case 'q':
-            robust_maxit = (size_t) atoi(optarg);
+          case 'n':
+            maxit = (size_t) atoi(optarg);
             break;
 
           case 'u':
@@ -810,17 +1361,22 @@ main(int argc, char *argv[])
     params.alpha_sh = alpha_sh;
   if (alpha_tor > 0.0)
     params.alpha_tor = alpha_tor;
+  if (maxit > 0)
+    params.max_iter = maxit;
 
   if (params.synth_data)
     {
-      params.nmax_int = 20;
-      params.mmax_int = 12;
+      params.nmax_int = 10;
+      params.mmax_int = 10;
       params.nmax_ext = 3;
       params.mmax_ext = 2;
-      params.nmax_sh = 5;
-      params.mmax_sh = 5;
-      params.nmax_tor = 30;
-      params.mmax_tor = 10;
+      params.nmax_sh = 4;
+      params.mmax_sh = 4;
+      params.nmax_tor = 5;
+      params.mmax_tor = 3;
+
+      /* turn off weights for synthetic test */
+      params.use_weights = 0;
     }
 
   params.mmax_int = GSL_MIN(params.mmax_int, params.nmax_int);
@@ -842,9 +1398,6 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: shell_J   = %zu\n", params.shell_J);
   fprintf(stderr, "main: R         = %g [km]\n", params.R);
   fprintf(stderr, "main: b         = %g [km]\n", params.b);
-
-  if (residual_file)
-    fprintf(stderr, "main: residual file = %s\n", residual_file);
 
   if (Lcurve_file)
     fprintf(stderr, "main: L-curve file  = %s\n", Lcurve_file);
@@ -934,24 +1487,59 @@ main(int argc, char *argv[])
     }
   else
     {
-      size_t maxiter = robust_maxit;
+      size_t maxiter = params.max_iter;
       size_t iter = 0;
       char buf[2048];
+      gsl_vector_complex *cprev = gsl_vector_complex_alloc(poltor_p->p);
+      gsl_vector_complex *c = poltor_p->c; /* model coefficients */
+      size_t *res_cnt = poltor_p->res_cnt;
 
-      if (params.synth_data)
+      fprintf(stderr, "main: X residuals      = %zu\n", res_cnt[MAGDATA_LIST_IDX_X]);
+      fprintf(stderr, "main: Y residuals      = %zu\n", res_cnt[MAGDATA_LIST_IDX_Y]);
+      fprintf(stderr, "main: Z residuals      = %zu\n", res_cnt[MAGDATA_LIST_IDX_Z]);
+      fprintf(stderr, "main: F residuals      = %zu\n", res_cnt[MAGDATA_LIST_IDX_F]);
+      fprintf(stderr, "main: DX N/S residuals = %zu\n", res_cnt[MAGDATA_LIST_IDX_DX_NS]);
+      fprintf(stderr, "main: DY N/S residuals = %zu\n", res_cnt[MAGDATA_LIST_IDX_DY_NS]);
+      fprintf(stderr, "main: DZ N/S residuals = %zu\n", res_cnt[MAGDATA_LIST_IDX_DZ_NS]);
+      fprintf(stderr, "main: DF N/S residuals = %zu\n", res_cnt[MAGDATA_LIST_IDX_DF_NS]);
+      fprintf(stderr, "main: total residuals  = %zu\n", poltor_p->n);
+      fprintf(stderr, "main: ncoeff           = %zu\n", poltor_p->p);
+      fprintf(stderr, "main: nres / ncoeff    = %.1f\n", (double) poltor_p->n / (double) poltor_p->p);
+
+      if (params.synth_data == 1 && poltor_p->lls_solution == 1)
         maxiter = 1;
+
+      /* construct initial guess vector */
+      initial_guess(poltor_p->c, poltor_p);
 
       while (iter++ < maxiter)
         {
           fprintf(stderr, "main: ROBUST ITERATION %zu/%zu\n", iter, maxiter);
 
+          /* save current coefficient vector */
+          gsl_vector_complex_memcpy(cprev, c);
+
           poltor_calc_nonlinear(poltor_p);
 
+          /* compute || c_{k+1} - c_k || */
+          gsl_vector_complex_sub(cprev, c);
+          fprintf(stderr, "main: || c_{k+1} - c_k || = %.12e\n", gsl_blas_dznrm2(cprev));
+
+          /* output spectrum for this iteration */
           sprintf(buf, "%s.iter%zu", spectrum_file, iter);
           fprintf(stderr, "main: printing spectrum to %s...", buf);
-          poltor_print_spectrum(buf, poltor_p);
+          poltor_print_spectrum(buf, c, poltor_p);
           fprintf(stderr, "done\n");
+
+          if (print_residuals)
+            {
+              fprintf(stderr, "main: printing residuals to %s...", residual_prefix);
+              poltor_print_residuals(residual_prefix, iter, poltor_p);
+              fprintf(stderr, "done\n");
+            }
         }
+
+      gsl_vector_complex_free(cprev);
     }
 
   print_coefficients(poltor_p);
@@ -961,7 +1549,7 @@ main(int argc, char *argv[])
   fprintf(stderr, "done\n");
 
   fprintf(stderr, "main: printing spectrum to %s...", spectrum_file);
-  poltor_print_spectrum(spectrum_file, poltor_p);
+  poltor_print_spectrum(spectrum_file, poltor_p->c, poltor_p);
   fprintf(stderr, "done\n");
 
   if (Lcurve_file)
@@ -975,13 +1563,6 @@ main(int argc, char *argv[])
     {
       fprintf(stderr, "main: writing output coefficients to %s...", output_file);
       poltor_write(output_file, poltor_p);
-      fprintf(stderr, "done\n");
-    }
-
-  if (residual_file)
-    {
-      fprintf(stderr, "main: printing residuals to %s...", residual_file);
-      print_residuals(residual_file, poltor_p);
       fprintf(stderr, "done\n");
     }
 

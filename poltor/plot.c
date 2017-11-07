@@ -23,7 +23,6 @@
 #include <common/common.h>
 
 #include "poltor.h"
-#include "poltor_test.h"
 
 int
 main_K(const double x[], double J[], void *params)
@@ -505,7 +504,7 @@ main(int argc, char *argv[])
   print_coefficients(poltor_p);
 
   fprintf(stderr, "main: printing spectrum to %s...", spectrum_file);
-  poltor_print_spectrum(spectrum_file, poltor_p);
+  poltor_print_spectrum(spectrum_file, poltor_p->c, poltor_p);
   fprintf(stderr, "done\n");
 
   plot_flow(universal_time, poltor_p);
