@@ -13,6 +13,7 @@
 #include <gsl/gsl_multilarge_nlinear.h>
 
 #include <common/bin2d.h>
+#include <indices/indices.h>
 
 #include "green_complex.h"
 #include "lls.h"
@@ -91,6 +92,8 @@ typedef struct
 
   size_t flags;      /* POLTOR_FLG_xxx */
 
+  int solar_flux_factor; /* include solar flux factor of (1 + N*EUVAC) */
+
   /* synthetic data parameters */
   int synth_data;    /* replace real data with synthetic for testing */
 
@@ -123,16 +126,6 @@ typedef struct
   size_t mmax_max;   /* max(mmax_int,mmax_ext,mmax_sh,mmax_tor) */
 
   poltor_parameters params;
-
-  double *Pnm;       /* legendre array */
-  double *dPnm;      /* legendre derivative array */
-  double *Pnm2;      /* legendre array for along-track gradient */
-  double *dPnm2;     /* legendre derivative array for along-track gradient */
-
-  complex double *Ynm;     /* Pnm * exp(i m phi) */
-  complex double *dYnm;    /* dPnm * exp(i m phi) */
-  complex double *Ynm2;    /* Pnm * exp(i m phi2) */
-  complex double *dYnm2;   /* dPnm * exp(i m phi2) */
 
   gsl_vector *weights;     /* weights vector */
   gsl_vector *L;           /* Tikhonov regularization matrix = diag(L) */
@@ -175,15 +168,19 @@ typedef struct
 
   int lls_solution;   /* set to 1 if LS system is linear */
 
+  gsl_vector *solar_flux; /* array of (1 + N*EUVAC) values, multiplying B model */
+  gsl_vector *solar_flux_grad; /* array of (1 + N*EUVAC) values for gradient point */
+
   /* nonlinear least squares parameters */
-  gsl_vector *wts_spatial; /* spatial weights */
-  gsl_vector *wts_robust;  /* robust weights */
-  gsl_vector *wts_final;   /* final weights (spatial * robust) */
+  gsl_vector *wts_spatial; /* spatial weights, size n */
+  gsl_vector *wts_robust;  /* robust weights, size n */
+  gsl_vector *wts_final;   /* final weights (spatial * robust), size n */
   size_t ndata;            /* total number of unique data points in LS system */
+  gsl_vector *f;           /* residual vector, size n */
   gsl_multilarge_nlinear_workspace *multilarge_workspace_p;
 
-  gsl_matrix_complex *JHJ_vec;     /* J^H J for vector measurements, p-by-p */
-  gsl_vector_complex *JHf_vec;     /* J^H f for vector measurements, size p */
+  gsl_matrix_complex *JHJ; /* J^H J for vector measurements, p-by-p */
+  gsl_vector_complex *JHf; /* J^H f for vector measurements, size p */
 
   size_t max_threads;
   gsl_matrix_complex *omp_dX;      /* dX/dg max_threads-by-p */
@@ -192,9 +189,10 @@ typedef struct
   gsl_matrix_complex *omp_dX_grad; /* gradient dX/dg max_threads-by-p */
   gsl_matrix_complex *omp_dY_grad; /* gradient dY/dg max_threads-by-p */
   gsl_matrix_complex *omp_dZ_grad; /* gradient dZ/dg max_threads-by-p */
-  gsl_matrix_complex **omp_J;      /* max_threads matrices, each nblock-by-p_int */
+  gsl_matrix_complex **omp_J;      /* max_threads matrices, each nblock-by-p */
   gsl_vector_complex **omp_f;      /* max_threads vectors, each size nblock */
   size_t *omp_rowidx;              /* row indices for omp_J */
+  size_t *omp_nrows;               /* total rows of J filled so far by each thread */
   size_t nblock;                   /* maximum rows to fold into normal matrix at a time */
   green_complex_workspace **green_p; /* array of green workspaces, size max_threads */
   green_complex_workspace **green_grad_p; /* array of green workspaces for gradient point, size max_threads */
@@ -208,6 +206,7 @@ typedef struct
 
   size_t flags;       /* POLTOR_FLG_xxx */
 
+  f107_workspace *f107_workspace_p;
   lls_complex_workspace *lls_workspace_p;
   gsl_integration_cquad_workspace *cquad_workspace_p;
 } poltor_workspace;
@@ -233,9 +232,9 @@ int poltor_eval_chi_sh(const double r, const double theta, const double phi,
                        double *chi, poltor_workspace *w);
 int poltor_eval_chi_ext(const double r, const double theta, const double phi,
                         double *chi, poltor_workspace *w);
-int poltor_eval_B(const double r, const double theta, const double phi,
+int poltor_eval_B(const double t, const double r, const double theta, const double phi,
                   double B[4], poltor_workspace *w);
-int poltor_eval_B_all(const double r, const double theta, const double phi,
+int poltor_eval_B_all(const double t, const double r, const double theta, const double phi,
                       double B_int[4], double B_ext[4], double B_sh[4], double B_tor[4],
                       poltor_workspace *w);
 int poltor_write(const char *filename, poltor_workspace *w);
@@ -262,9 +261,10 @@ int poltor_calc_tor(const double r, const double theta,
                     const complex double *Ynm, const complex double *dYnm,
                     complex double *X, complex double *Y, complex double *Z,
                     poltor_workspace *w);
+double poltor_sflux_factor(const double flux, const poltor_workspace *w);
 
 /* poltor_nonlinear.c */
-int poltor_calc_nonlinear(poltor_workspace *w);
+int poltor_calc_nonlinear(const size_t iter, gsl_vector_complex *c, poltor_workspace *w);
 
 /* poltor_shell.c */
 int poltor_shell_An(const size_t n, const size_t j, const double r,

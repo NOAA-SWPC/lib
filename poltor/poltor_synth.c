@@ -105,31 +105,17 @@ poltor_synth_calc(const double r, const double theta, const double phi,
                   gsl_vector_complex *g, double B[3], poltor_workspace *w)
 {
   int s = 0;
-  const size_t nmax = w->nmax_max;
-  const size_t mmax = w->mmax_max;
   const double invsint = 1.0 / sin(theta);
-  const double cost = cos(theta);
   complex double X = 0.0, Y = 0.0, Z = 0.0;
   double ratio;
+  green_complex_workspace *green_p = w->green_p[0];
+  complex double *Ynm = green_p->Ynm;
+  complex double *dYnm = green_p->dYnm;
   size_t n, j;
   int m;
 
-  gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, nmax,
-                                  cost, w->Pnm, w->dPnm);
-
-  /* pre-compute Ynm and dYnm */
-  for (m = 0; m <= (int) mmax; ++m)
-    {
-      complex double expimphi = cos(m * phi) + I * sin(m * phi);
-
-      for (n = GSL_MAX(m, 1); n <= nmax; ++n)
-        {
-          size_t pidx = gsl_sf_legendre_array_index(n, m);
-
-          w->Ynm[pidx] = w->Pnm[pidx] * expimphi;
-          w->dYnm[pidx] = w->dPnm[pidx] * expimphi;
-        }
-    }
+  /* compute Ynm and d/dtheta Ynm */
+  green_complex_Ynm_deriv(theta, phi, green_p);
 
   /* internal potential field */
   ratio = w->R / r;
@@ -145,22 +131,22 @@ poltor_synth_calc(const double r, const double theta, const double phi,
           size_t cidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
           gsl_complex val = gsl_vector_complex_get(g, cidx);
           complex double gnm = GSL_REAL(val) + I * GSL_IMAG(val);
-          complex double Ynm, dYnm;
+          complex double Y_nm, dY_nm;
 
           if (m >= 0)
             {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
+              Y_nm = Ynm[pidx];
+              dY_nm = dYnm[pidx];
             }
           else
             {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
+              Y_nm = conj(Ynm[pidx]);
+              dY_nm = conj(dYnm[pidx]);
             }
 
-          X += rterm * gnm * dYnm;
-          Y -= rterm * I * m * invsint * gnm * Ynm;
-          Z -= (n + 1.0) * rterm * gnm * Ynm;
+          X += rterm * gnm * dY_nm;
+          Y -= rterm * I * m * invsint * gnm * Y_nm;
+          Z -= (n + 1.0) * rterm * gnm * Y_nm;
         }
     }
 
@@ -178,22 +164,22 @@ poltor_synth_calc(const double r, const double theta, const double phi,
           size_t cidx = poltor_nmidx(POLTOR_IDX_PEXT, n, m, w);
           gsl_complex val = gsl_vector_complex_get(g, cidx);
           complex double knm = GSL_REAL(val) + I * GSL_IMAG(val);
-          complex double Ynm, dYnm;
+          complex double Y_nm, dY_nm;
 
           if (m >= 0)
             {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
+              Y_nm = Ynm[pidx];
+              dY_nm = dYnm[pidx];
             }
           else
             {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
+              Y_nm = conj(Ynm[pidx]);
+              dY_nm = conj(dYnm[pidx]);
             }
 
-          X += rterm * knm * dYnm;
-          Y -= rterm * I * m * invsint * knm * Ynm;
-          Z += n * rterm * knm * Ynm;
+          X += rterm * knm * dY_nm;
+          Y -= rterm * I * m * invsint * knm * Y_nm;
+          Z += n * rterm * knm * Y_nm;
         }
     }
 
@@ -218,22 +204,22 @@ poltor_synth_calc(const double r, const double theta, const double phi,
               size_t cidx = poltor_jnmidx(j, n, m, w);
               gsl_complex val = gsl_vector_complex_get(g, cidx);
               complex double gnm = GSL_REAL(val) + I * GSL_IMAG(val);
-              complex double Ynm, dYnm;
+              complex double Y_nm, dY_nm;
 
               if (m >= 0)
                 {
-                  Ynm = w->Ynm[pidx];
-                  dYnm = w->dYnm[pidx];
+                  Y_nm = Ynm[pidx];
+                  dY_nm = dYnm[pidx];
                 }
               else
                 {
-                  Ynm = conj(w->Ynm[pidx]);
-                  dYnm = conj(w->dYnm[pidx]);
+                  Y_nm = conj(Ynm[pidx]);
+                  dY_nm = conj(dYnm[pidx]);
                 }
 
-              X += ratio * gnm * dABsum * dYnm;
-              Y -= ratio * I * m * invsint * gnm * dABsum * Ynm;
-              Z += ratio * n * (n + 1.0) * gnm * ABsum * Ynm;
+              X += ratio * gnm * dABsum * dY_nm;
+              Y -= ratio * I * m * invsint * gnm * dABsum * Y_nm;
+              Z += ratio * n * (n + 1.0) * gnm * ABsum * Y_nm;
             }
         }
     }
@@ -250,21 +236,21 @@ poltor_synth_calc(const double r, const double theta, const double phi,
           size_t cidx = poltor_nmidx(POLTOR_IDX_TOR, n, m, w);
           gsl_complex val = gsl_vector_complex_get(g, cidx);
           complex double phinm = GSL_REAL(val) + I * GSL_IMAG(val);
-          complex double Ynm, dYnm;
+          complex double Y_nm, dY_nm;
 
           if (m >= 0)
             {
-              Ynm = w->Ynm[pidx];
-              dYnm = w->dYnm[pidx];
+              Y_nm = Ynm[pidx];
+              dY_nm = dYnm[pidx];
             }
           else
             {
-              Ynm = conj(w->Ynm[pidx]);
-              dYnm = conj(w->dYnm[pidx]);
+              Y_nm = conj(Ynm[pidx]);
+              dY_nm = conj(dYnm[pidx]);
             }
 
-          X += I * m * invsint * phinm * Ynm;
-          Y += phinm * dYnm;
+          X += I * m * invsint * phinm * Y_nm;
+          Y += phinm * dY_nm;
         }
     }
 

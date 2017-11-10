@@ -641,7 +641,7 @@ magdata_print(const char *prefix, const magdata *data)
       fprintf(fp[i], "# Field %zu: longitude (degrees)\n", j++);
       fprintf(fp[i], "# Field %zu: geocentric latitude (degrees)\n", j++);
       fprintf(fp[i], "# Field %zu: QD latitude (degrees)\n", j++);
-      fprintf(fp[i], "# Field %zu: geocentric radius (km)\n", j++);
+      fprintf(fp[i], "# Field %zu: geocentric altitude (km)\n", j++);
       fprintf(fp[i], "# Field %zu: satellite direction (+/- 1)\n", j++);
     }
 
@@ -665,6 +665,7 @@ magdata_print(const char *prefix, const magdata *data)
       double doy = get_season(unix_time);
       double phi = wrap180(data->phi[i] * 180.0 / M_PI);
       double lat = 90.0 - data->theta[i] * 180.0 / M_PI;
+      double alt = data->r[i] - data->R;
       double B[4], dB[4];
 
       if (MAGDATA_Discarded(data->flags[i]))
@@ -675,42 +676,42 @@ magdata_print(const char *prefix, const magdata *data)
 
       if (MAGDATA_ExistX(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[0], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[0]);
+          fprintf(fp[0], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], B[0]);
         }
 
       if (MAGDATA_ExistY(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[1], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[1]);
+          fprintf(fp[1], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], B[1]);
         }
 
       if (MAGDATA_ExistZ(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[2], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[2]);
+          fprintf(fp[2], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], B[2]);
         }
 
       if (MAGDATA_ExistScalar(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[3], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], B[3]);
+          fprintf(fp[3], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], B[3]);
         }
 
       if (MAGDATA_ExistDX_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[4], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[0]);
+          fprintf(fp[4], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], data->satdir[i] * dB[0]);
         }
 
       if (MAGDATA_ExistDY_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[5], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[1]);
+          fprintf(fp[5], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], data->satdir[i] * dB[1]);
         }
 
       if (MAGDATA_ExistDZ_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[6], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[2]);
+          fprintf(fp[6], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], data->satdir[i] * dB[2]);
         }
 
       if (MAGDATA_ExistDF_NS(data->flags[i]) && MAGDATA_FitMF(data->flags[i]))
         {
-          fprintf(fp[7], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], data->r[i], data->satdir[i], data->satdir[i] * dB[3]);
+          fprintf(fp[7], fmtstr, unix_time, lt, doy, phi, lat, data->qdlat[i], alt, data->satdir[i], data->satdir[i] * dB[3]);
         }
 
       /* separate individual tracks with newlines */

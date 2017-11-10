@@ -134,7 +134,7 @@ pcafit_alloc(const void * params)
   state->residual = gsl_vector_alloc(state->nmax);
   state->perm = gsl_permutation_alloc(state->p);
 
-  state->pca_workspace_p = pca_alloc();
+  state->pca_workspace_p = pca_alloc(PCA_SRC_EXTERNAL);
 
   /*
    * 23 January 2017:

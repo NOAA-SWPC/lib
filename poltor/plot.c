@@ -293,6 +293,8 @@ plot_B(const char *filename, const double r, poltor_workspace *w)
   double B_int[4], B_ext[4], B_sh[4], B_tor[4];
   FILE *fp;
   size_t i;
+  const time_t unix_time = 1427846400; /* Apr 1 2015 00:00:00 UTC */
+  const double t = satdata_timet2epoch(unix_time);
 
   fp = fopen(filename, "w");
   if (!fp)
@@ -318,7 +320,7 @@ plot_B(const char *filename, const double r, poltor_workspace *w)
         {
           double theta = M_PI / 2.0 - lat * M_PI / 180.0;
 
-          poltor_eval_B_all(r, theta, phi, B_int, B_ext, B_sh, B_tor, w);
+          poltor_eval_B_all(t, r, theta, phi, B_int, B_ext, B_sh, B_tor, w);
 
           fprintf(fp, "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n",
                   phi * 180.0 / M_PI,
@@ -429,6 +431,8 @@ print_slice(const char *filename, const double r, const double phi, poltor_works
   FILE *fp;
   double theta;
   size_t i;
+  const time_t unix_time = 1427846400; /* Apr 1 2015 00:00:00 UTC */
+  const double t = satdata_timet2epoch(unix_time);
 
   fp = fopen(filename, "w");
   if (!fp)
@@ -452,7 +456,7 @@ print_slice(const char *filename, const double r, const double phi, poltor_works
       double B[4];
 
       poltor_eval_K_tor(0.0, theta, phi, K, w);
-      poltor_eval_B(r, theta, phi, B, w);
+      poltor_eval_B(t, r, theta, phi, B, w);
 
       fprintf(fp, "%f %e %e %e %e %e\n",
               90.0 - theta * 180.0 / M_PI,

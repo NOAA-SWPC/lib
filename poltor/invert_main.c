@@ -93,6 +93,8 @@ parse_config_file(const char *filename, poltor_parameters *poltor_params)
     poltor_params->use_weights = ival;
   if (config_lookup_int(&cfg, "regularize", &ival))
     poltor_params->regularize = ival;
+  if (config_lookup_int(&cfg, "solar_flux_factor", &ival))
+    poltor_params->solar_flux_factor = ival;
 
   if (config_lookup_float(&cfg, "alpha_int", &fval))
     poltor_params->alpha_int = fval;
@@ -746,7 +748,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
           if (MAGDATA_FitMF(mptr->flags[j]))
             {
               /* evaluate model */
-              poltor_eval_B(r, theta, phi, B_fit, w);
+              poltor_eval_B(mptr->t[j], r, theta, phi, B_fit, w);
 
               if (MAGDATA_ExistDX_NS(mptr->flags[j]) || MAGDATA_ExistDY_NS(mptr->flags[j]) ||
                   MAGDATA_ExistDZ_NS(mptr->flags[j]) || MAGDATA_ExistDF_NS(mptr->flags[j]) ||
@@ -761,7 +763,7 @@ poltor_print_residuals(const char *prefix, const size_t iter, poltor_workspace *
                   B_obs_grad[2] = mptr->Bz_nec_ns[j];
                   B_obs_grad[3] = mptr->F_ns[j];
 
-                  poltor_eval_B(mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], B_grad_fit, w);
+                  poltor_eval_B(mptr->t_ns[j], mptr->r_ns[j], mptr->theta_ns[j], mptr->phi_ns[j], B_grad_fit, w);
                 }
 
               /* calculate vector residuals */
@@ -1512,7 +1514,7 @@ main(int argc, char *argv[])
         maxiter = 1;
 
       /* construct initial guess vector */
-      initial_guess(poltor_p->c, poltor_p);
+      initial_guess(c, poltor_p);
 
       while (iter++ < maxiter)
         {
@@ -1521,7 +1523,7 @@ main(int argc, char *argv[])
           /* save current coefficient vector */
           gsl_vector_complex_memcpy(cprev, c);
 
-          poltor_calc_nonlinear(poltor_p);
+          poltor_calc_nonlinear(iter, c, poltor_p);
 
           /* compute || c_{k+1} - c_k || */
           gsl_vector_complex_sub(cprev, c);
@@ -1532,6 +1534,15 @@ main(int argc, char *argv[])
           fprintf(stderr, "main: printing spectrum to %s...", buf);
           poltor_print_spectrum(buf, c, poltor_p);
           fprintf(stderr, "done\n");
+
+          /* output coefficient file for this iteration */
+          if (output_file)
+            {
+              sprintf(buf, "%s.iter%zu", output_file, iter);
+              fprintf(stderr, "main: writing output coefficients to %s...", buf);
+              poltor_write(buf, poltor_p);
+              fprintf(stderr, "done\n");
+            }
 
           if (print_residuals)
             {

@@ -115,7 +115,7 @@ green_complex_int(const double r, const double theta, const double phi,
   int s;
 
   /* compute Y_{nm} and d/dtheta Y_{nm} */
-  s = green_complex_Ynm(theta, phi, w);
+  s = green_complex_Ynm_deriv(theta, phi, w);
   if (s)
     return s;
 
@@ -157,7 +157,7 @@ green_complex_ext(const double r, const double theta, const double phi,
   int s;
 
   /* compute Y_{nm} and d/dtheta Y_{nm} */
-  s = green_complex_Ynm(theta, phi, w);
+  s = green_complex_Ynm_deriv(theta, phi, w);
   if (s)
     return s;
 
@@ -342,6 +342,47 @@ green_complex_nnm(const green_complex_workspace *w)
 
 /*
 green_complex_Ynm()
+  Compute Y_{nm}(theta,phi) = P_{nm}(cos(theta)) * exp(i m phi)
+
+Inputs: theta - colatitude (radians)
+        phi   - longitude (radians)
+        w     - workspace
+
+Notes:
+1) On output, the following arrays are initialized
+w->Plm
+w->Ylm
+*/
+
+int
+green_complex_Ynm(const double theta, const double phi, green_complex_workspace *w)
+{
+  int s = 0;
+  const size_t nmax = w->nmax;
+  const size_t mmax = w->mmax;
+  size_t n;
+  int m;
+
+  /* compute associated Legendres */
+  gsl_sf_legendre_array(GSL_SF_LEGENDRE_SCHMIDT, nmax, cos(theta), w->Pnm);
+
+  /* pre-compute Ynm */
+  for (m = 0; m <= (int) mmax; ++m)
+    {
+      complex double expimphi = cos(m * phi) + I * sin(m * phi);
+
+      for (n = GSL_MAX(m, 1); n <= nmax; ++n)
+        {
+          size_t pidx = gsl_sf_legendre_array_index(n, m);
+          w->Ynm[pidx] = w->Pnm[pidx] * expimphi;
+        }
+    }
+
+  return s;
+}
+
+/*
+green_complex_Ynm_deriv()
   Compute Y_{nm}(theta,phi) = P_{nm}(cos(theta)) * exp(i m phi) as
 well as d/dtheta Y_{nm}(theta,phi)
 
@@ -358,7 +399,7 @@ w->dYlm
 */
 
 int
-green_complex_Ynm(const double theta, const double phi, green_complex_workspace *w)
+green_complex_Ynm_deriv(const double theta, const double phi, green_complex_workspace *w)
 {
   int s = 0;
   const size_t nmax = w->nmax;

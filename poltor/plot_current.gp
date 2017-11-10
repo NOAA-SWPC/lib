@@ -35,5 +35,5 @@ splot 'chi.dat' us 1:2:3
 unset table
 
 load 'moreland.pal'
-set title "Sq current stream function, 110 km, 12 UT"
+set title "Sq current stream function, 110 km"
 p 'test.dat' w image, 'cont.dat' w li lt -1 lw 1.5

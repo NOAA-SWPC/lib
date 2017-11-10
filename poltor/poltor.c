@@ -39,6 +39,8 @@
 #include <common/common.h>
 #include <common/oct.h>
 
+#include <indices/indices.h>
+
 #include "green.h"
 #include "lls.h"
 #include "magdata_list.h"
@@ -72,7 +74,9 @@ static int poltor_row_tor(const double r, const double theta,
                           poltor_workspace *w);
 static int poltor_eval_chi(const double r, const double theta, const double phi,
                            const size_t idx, double *chi, poltor_workspace *w);
+static int poltor_init(poltor_workspace * w);
 static int poltor_init_weights(poltor_workspace * w);
+static int poltor_init_solar_flux(poltor_workspace * w);
 
 /*
 poltor_alloc()
@@ -93,7 +97,6 @@ poltor_workspace *
 poltor_alloc(const poltor_parameters *params)
 {
   poltor_workspace *w;
-  size_t psize; /* size of Legendre arrays */
 
   w = calloc(1, sizeof(poltor_workspace));
   if (!w)
@@ -207,28 +210,13 @@ poltor_alloc(const poltor_parameters *params)
       return 0;
     }
 
+  w->solar_flux = gsl_vector_alloc(w->n);
+  w->solar_flux_grad = gsl_vector_alloc(w->n);
+
   w->wts_spatial = gsl_vector_alloc(w->n);
   w->wts_robust = gsl_vector_alloc(w->n);
   w->wts_final = gsl_vector_alloc(w->n);
-
-  psize = gsl_sf_legendre_array_n(w->nmax_max);
-
-  w->Pnm = malloc(psize * sizeof(double));
-  w->dPnm = malloc(psize * sizeof(double));
-  w->Pnm2 = malloc(psize * sizeof(double));
-  w->dPnm2 = malloc(psize * sizeof(double));
-  w->Ynm = malloc(psize * sizeof(complex double));
-  w->dYnm = malloc(psize * sizeof(complex double));
-  w->Ynm2 = malloc(psize * sizeof(complex double));
-  w->dYnm2 = malloc(psize * sizeof(complex double));
-  if (!w->Pnm || !w->dPnm || !w->Pnm2 || !w->dPnm2 ||
-      !w->Ynm || !w->dYnm || !w->Ynm2 || !w->dYnm2)
-    {
-      fprintf(stderr, "poltor_alloc: cannot allocate legendre arrays: %s\n",
-              strerror(errno));
-      poltor_free(w);
-      return 0;
-    }
+  w->f = gsl_vector_alloc(w->n);
 
   w->cquad_workspace_p = gsl_integration_cquad_workspace_alloc(1000);
   if (!w->cquad_workspace_p)
@@ -253,9 +241,10 @@ poltor_alloc(const poltor_parameters *params)
   w->omp_dY_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
   w->omp_dZ_grad = gsl_matrix_complex_alloc(w->max_threads, w->p);
   w->omp_rowidx = malloc(w->max_threads * sizeof(size_t));
+  w->omp_nrows = malloc(w->max_threads * sizeof(size_t));
 
-  w->JHJ_vec = gsl_matrix_complex_alloc(w->p, w->p);
-  w->JHf_vec = gsl_vector_complex_alloc(w->p);
+  w->JHJ = gsl_matrix_complex_alloc(w->p, w->p);
+  w->JHf = gsl_vector_complex_alloc(w->p);
 
   {
     const size_t nmax_max = GSL_MAX(w->nmax_int, GSL_MAX(w->nmax_ext, GSL_MAX(w->nmax_sh, w->nmax_tor)));
@@ -283,6 +272,8 @@ poltor_alloc(const poltor_parameters *params)
       }
   }
 
+  w->f107_workspace_p = f107_alloc(F107_IDX_FILE);
+
   /* determine if system is linear */
   if (w->res_cnt[MAGDATA_LIST_IDX_F] == 0 &&
       w->res_cnt[MAGDATA_LIST_IDX_DF_NS] == 0 &&
@@ -297,8 +288,8 @@ poltor_alloc(const poltor_parameters *params)
 
   if (w->data)
     {
-      /* compute spatial weights */
-      poltor_init_weights(w);
+      /* compute spatial weights and solar flux array */
+      poltor_init(w);
     }
 
   return w;
@@ -309,6 +300,15 @@ poltor_free(poltor_workspace *w)
 {
   if (w->weights)
     gsl_vector_free(w->weights);
+
+  if (w->solar_flux)
+    gsl_vector_free(w->solar_flux);
+
+  if (w->solar_flux_grad)
+    gsl_vector_free(w->solar_flux_grad);
+
+  if (w->f)
+    gsl_vector_free(w->f);
 
   if (w->wts_spatial)
     gsl_vector_free(w->wts_spatial);
@@ -327,30 +327,6 @@ poltor_free(poltor_workspace *w)
 
   if (w->residuals)
     gsl_vector_complex_free(w->residuals);
-
-  if (w->Pnm)
-    free(w->Pnm);
-
-  if (w->dPnm)
-    free(w->dPnm);
-
-  if (w->Pnm2)
-    free(w->Pnm2);
-
-  if (w->dPnm2)
-    free(w->dPnm2);
-
-  if (w->Ynm)
-    free(w->Ynm);
-
-  if (w->dYnm)
-    free(w->dYnm);
-
-  if (w->Ynm2)
-    free(w->Ynm2);
-
-  if (w->dYnm2)
-    free(w->dYnm2);
 
   if (w->lls_workspace_p)
     lls_complex_free(w->lls_workspace_p);
@@ -388,11 +364,14 @@ poltor_free(poltor_workspace *w)
   if (w->omp_rowidx)
     free(w->omp_rowidx);
 
-  if (w->JHJ_vec)
-    gsl_matrix_complex_free(w->JHJ_vec);
+  if (w->omp_nrows)
+    free(w->omp_nrows);
 
-  if (w->JHf_vec)
-    gsl_vector_complex_free(w->JHf_vec);
+  if (w->JHJ)
+    gsl_matrix_complex_free(w->JHJ);
+
+  if (w->JHf)
+    gsl_vector_complex_free(w->JHf);
 
   {
     size_t i;
@@ -418,6 +397,9 @@ poltor_free(poltor_workspace *w)
     free(w->omp_f);
   }
 
+  if (w->f107_workspace_p)
+    f107_free(w->f107_workspace_p);
+
   free(w);
 }
 
@@ -435,6 +417,7 @@ poltor_init_params(poltor_parameters * params)
   params->max_iter = 0;
   params->regularize = 0;
   params->use_weights = 0;
+  params->solar_flux_factor = 0;
   params->alpha_int = 0.0;
   params->alpha_sh = 0.0;
   params->alpha_tor = 0.0;
@@ -623,6 +606,7 @@ poltor_eval_J_shell(const double r, const double theta, const double phi,
                     double J[3], poltor_workspace *w)
 {
   int s = 0;
+#if 0 /*XXX*/
   size_t n, j;
   int m;
   const double invsint = 1.0 / sin(theta);
@@ -686,6 +670,7 @@ poltor_eval_J_shell(const double r, const double theta, const double phi,
   /* convert to A/m^2 */
   J[1] += creal(Jt) / w->R / POLTOR_MU_0 * 1.0e-3;
   J[2] += creal(Jp) / w->R / POLTOR_MU_0 * 1.0e-3;
+#endif
 
   return s;
 } /* poltor_eval_J_shell */
@@ -709,9 +694,67 @@ on output, K <- K + K_tor
 
 int
 poltor_eval_K_tor(const double b, const double theta, const double phi,
-                  double J[3], poltor_workspace *w)
+                  double K[3], poltor_workspace *w)
 {
   int s = 0;
+#if 1
+  const double ratio = w->R / b;
+  double rterm = ratio * ratio * ratio; /* (R/b)^{n+3} */
+  green_complex_workspace *green_p = w->green_p[0];
+  complex double *Ynm = green_p->Ynm;
+  complex double *dYnm = green_p->dYnm;
+  complex double Kt = 0.0, Kp = 0.0;
+  size_t n;
+
+  /* compute Ynm and d/dtheta Ynm */
+  green_complex_Ynm_deriv(theta, phi, green_p);
+
+  for (n = 1; n <= w->nmax_int; ++n)
+    {
+      double nfac = -(2.0 * n + 1.0) / (double) n;
+      int M = (int) GSL_MIN(n, w->mmax_int);
+      int m;
+
+      /* (R/b)^{n+3} */
+      rterm *= ratio;
+
+      for (m = -M; m <= M; ++m)
+        {
+          int mabs = abs(m);
+          size_t pidx = gsl_sf_legendre_array_index(n, mabs);
+          size_t nmidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
+          gsl_complex gnm = poltor_get(nmidx, w);
+          complex double qnm = nfac * rterm * (GSL_REAL(gnm) + I * GSL_IMAG(gnm));
+          complex double Y_nm, dY_nm;
+
+          if (m >= 0)
+            {
+              Y_nm = Ynm[pidx];
+              dY_nm = dYnm[pidx];
+            }
+          else
+            {
+              Y_nm = conj(Ynm[pidx]);
+              dY_nm = conj(dYnm[pidx]);
+            }
+
+          /* compute (theta,phi) components of K */
+          Kt -= m * qnm * Y_nm;
+          Kp += qnm * dY_nm;
+        }
+    }
+
+  Kt *= I / sin(theta);
+
+  /* sanity checks */
+  assert(fabs(cimag(Kt)) < 1.0e-8);
+  assert(fabs(cimag(Kp)) < 1.0e-8);
+
+  /* convert to kA/km */
+  K[1] += (b / w->R) * creal(Kt) / POLTOR_MU_0;
+  K[2] += (b / w->R) * creal(Kp) / POLTOR_MU_0;
+#else
+
   size_t n, m;
   const double invsint = 1.0 / sin(theta);
   complex double Jt = 0.0, Jp = 0.0;
@@ -768,8 +811,9 @@ poltor_eval_K_tor(const double b, const double theta, const double phi,
     }
 
   /* convert to kA/km */
-  J[1] += (b / w->R) * creal(Jt) / POLTOR_MU_0;
-  J[2] += (b / w->R) * creal(Jp) / POLTOR_MU_0;
+  K[1] += (b / w->R) * creal(Jt) / POLTOR_MU_0;
+  K[2] += (b / w->R) * creal(Jp) / POLTOR_MU_0;
+#endif
 
   return s;
 } /* poltor_eval_K_tor */
@@ -797,6 +841,7 @@ poltor_eval_K_ext(const double r, const double theta, const double phi,
                   double J[3], poltor_workspace *w)
 {
   int s = 0;
+#if 0/*XXX*/
   size_t n, m;
   const size_t nmax = w->nmax_ext;
   const size_t mmax = w->mmax_ext;
@@ -862,6 +907,7 @@ poltor_eval_K_ext(const double r, const double theta, const double phi,
   /* convert to kA/km */
   J[1] += ratio * creal(Jt) / POLTOR_MU_0;
   J[2] += ratio * creal(Jp) / POLTOR_MU_0;
+#endif
 
   return s;
 } /* poltor_eval_K_ext */
@@ -887,38 +933,24 @@ poltor_eval_chi_int(const double b, const double theta, const double phi,
                     double *chi, poltor_workspace *w)
 {
   int s = 0;
-  size_t n, m;
   complex double sum = 0.0;
-  const size_t nmax = w->nmax_int;
-  const size_t mmax = w->mmax_int;
   const double ratio = w->R / b;
-  double rterm = pow(ratio, 2.0);
+  double rterm = ratio * ratio * ratio; /* (R/b)^{n+3} */
+  green_complex_workspace *green_p = w->green_p[0];
+  complex double *Ynm = green_p->Ynm;
+  size_t n;
+  double alpha = poltor_sflux_factor(120.0, w); /*XXX*/
 
-  /* compute legendre functions */
-  gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, nmax,
-                                  cos(theta), w->Pnm, w->dPnm);
+  /* compute Ynm */
+  green_complex_Ynm(theta, phi, green_p);
 
-  /* pre-compute Ynm and dYnm */
-  for (m = 0; m <= mmax; ++m)
+  for (n = 1; n <= w->nmax_int; ++n)
     {
-      complex double expimphi = cos(m * phi) + I * sin(m * phi);
-
-      for (n = GSL_MAX(m, 1); n <= nmax; ++n)
-        {
-          size_t pidx = gsl_sf_legendre_array_index(n, m);
-
-          w->Ynm[pidx] = w->Pnm[pidx] * expimphi;
-          w->dYnm[pidx] = w->dPnm[pidx] * expimphi;
-        }
-    }
-
-  for (n = 1; n <= nmax; ++n)
-    {
-      int M = (int) GSL_MIN(n, mmax);
+      int M = (int) GSL_MIN(n, w->mmax_int);
       int m;
       double nfac = -(2.0 * n + 1.0) / (double) n;
 
-      /* (R/b)^(n+2) */
+      /* (R/b)^{n+3} */
       rterm *= ratio;
 
       for (m = -M; m <= M; ++m)
@@ -926,24 +958,21 @@ poltor_eval_chi_int(const double b, const double theta, const double phi,
           int mabs = abs(m);
           size_t nmidx = poltor_nmidx(POLTOR_IDX_PINT, n, m, w);
           size_t pidx = gsl_sf_legendre_array_index(n, mabs);
-          gsl_complex cnm = gsl_vector_complex_get(w->c, nmidx);
-          complex double qnm;
-          complex double Ynm;
-
-          qnm = nfac * rterm * (GSL_REAL(cnm) + I * GSL_IMAG(cnm));
+          gsl_complex gnm = gsl_vector_complex_get(w->c, nmidx);
+          complex double qnm = nfac * rterm * (GSL_REAL(gnm) + I * GSL_IMAG(gnm));
+          complex double Y_nm;
 
           if (m >= 0)
-            Ynm = w->Ynm[pidx];
+            Y_nm = Ynm[pidx];
           else
-            Ynm = conj(w->Ynm[pidx]);
+            Y_nm = conj(Ynm[pidx]);
 
-          sum += qnm * Ynm;
+          sum += qnm * Y_nm;
         }
     }
 
   /* current function = -Qr/mu0 (units of kA) */
-  sum = -sum / POLTOR_MU_0 * b;
-  *chi = creal(sum);
+  *chi = -alpha * (b / POLTOR_MU_0) * (b / w->R) * creal(sum);
 
   return s;
 } /* poltor_eval_chi_int() */
@@ -998,6 +1027,7 @@ poltor_eval_chi_ext(const double b, const double theta, const double phi,
                     double *chi, poltor_workspace *w)
 {
   int s = 0;
+#if 0/*XXX*/
   size_t n, m;
   complex double sum = 0.0;
   const size_t nmax = w->nmax_ext;
@@ -1055,6 +1085,7 @@ poltor_eval_chi_ext(const double b, const double theta, const double phi,
   /* current function = -Qr/mu0 (units of kA) */
   sum = -sum / POLTOR_MU_0 * b;
   *chi = creal(sum);
+#endif
 
   return s;
 } /* poltor_eval_chi_ext() */
@@ -1063,7 +1094,8 @@ poltor_eval_chi_ext(const double b, const double theta, const double phi,
 poltor_eval_B()
   Calculate total magnetic field model at a given point
 
-Inputs: r     - geocentric radius (km)
+Inputs: t     - timestamp (CDF_EPOCH)
+        r     - geocentric radius (km)
         theta - geocentric colatitude (radians)
         phi   - longitude (radians)
         B     - (output) NEC magnetic field model in units of nT
@@ -1074,93 +1106,31 @@ Return: success/error
 */
 
 int
-poltor_eval_B(const double r, const double theta, const double phi,
+poltor_eval_B(const double t, const double r, const double theta, const double phi,
               double B[4], poltor_workspace *w)
 {
-  int s = 0;
-  green_complex_workspace *green_p = w->green_p[0];
-  complex double *Ynm = green_p->Ynm;
-  complex double *dYnm = green_p->dYnm;
-  gsl_vector_complex_view dX = gsl_matrix_complex_row(w->omp_dX, 0);
-  gsl_vector_complex_view dY = gsl_matrix_complex_row(w->omp_dY, 0);
-  gsl_vector_complex_view dZ = gsl_matrix_complex_row(w->omp_dZ, 0);
-  gsl_vector_complex_view X, Y, Z;
-  gsl_complex val[3];
+  int s;
+  double B_int[4], B_ext[4], B_sh[4], B_tor[4];
+  size_t k;
 
-  /* compute Ynm and d/dtheta Ynm */
-  green_complex_Ynm(theta, phi, green_p);
+  s = poltor_eval_B_all(t, r, theta, phi, B_int, B_ext, B_sh, B_tor, w);
+  if (s)
+    return s;
 
-  if (w->p_pint > 0)
-    {
-      X = gsl_vector_complex_subvector(&dX.vector, w->pint_offset, w->p_pint);
-      Y = gsl_vector_complex_subvector(&dY.vector, w->pint_offset, w->p_pint);
-      Z = gsl_vector_complex_subvector(&dZ.vector, w->pint_offset, w->p_pint);
+  for (k = 0; k < 3; ++k)
+    B[k] = B_int[k] + B_ext[k] + B_sh[k] + B_tor[k];
 
-      /* compute internal Green's functions */
-      green_complex_calc_int(w->nmax_int, w->mmax_int, w->R, r, theta, Ynm, dYnm,
-                             (complex double *) X.vector.data,
-                             (complex double *) Y.vector.data,
-                             (complex double *) Z.vector.data);
-    }
-
-  if (w->p_pext > 0)
-    {
-      X = gsl_vector_complex_subvector(&dX.vector, w->pext_offset, w->p_pext);
-      Y = gsl_vector_complex_subvector(&dY.vector, w->pext_offset, w->p_pext);
-      Z = gsl_vector_complex_subvector(&dZ.vector, w->pext_offset, w->p_pext);
-
-      /* compute external Green's functions */
-      green_complex_calc_ext(w->nmax_ext, w->mmax_ext, w->R, r, theta, Ynm, dYnm,
-                             (complex double *) X.vector.data,
-                             (complex double *) Y.vector.data,
-                             (complex double *) Z.vector.data);
-    }
-
-  if (w->p_psh > 0)
-    {
-      X = gsl_vector_complex_subvector(&dX.vector, w->psh_offset, w->p_psh);
-      Y = gsl_vector_complex_subvector(&dY.vector, w->psh_offset, w->p_psh);
-      Z = gsl_vector_complex_subvector(&dZ.vector, w->psh_offset, w->p_psh);
-
-      /* compute shell Green's functions */
-      poltor_calc_psh(r, theta, Ynm, dYnm,
-                      (complex double *) X.vector.data,
-                      (complex double *) Y.vector.data,
-                      (complex double *) Z.vector.data,
-                      w);
-    }
-
-  if (w->p_tor > 0)
-    {
-      X = gsl_vector_complex_subvector(&dX.vector, w->tor_offset, w->p_tor);
-      Y = gsl_vector_complex_subvector(&dY.vector, w->tor_offset, w->p_tor);
-      Z = gsl_vector_complex_subvector(&dZ.vector, w->tor_offset, w->p_tor);
-
-      /* compute shell Green's functions */
-      poltor_calc_tor(r, theta, Ynm, dYnm,
-                      (complex double *) X.vector.data,
-                      (complex double *) Y.vector.data,
-                      (complex double *) Z.vector.data,
-                      w);
-    }
-
-  gsl_blas_zdotu(&dX.vector, w->c, &val[0]);
-  gsl_blas_zdotu(&dY.vector, w->c, &val[1]);
-  gsl_blas_zdotu(&dZ.vector, w->c, &val[2]);
-
-  B[0] = GSL_REAL(val[0]);
-  B[1] = GSL_REAL(val[1]);
-  B[2] = GSL_REAL(val[2]);
   B[3] = gsl_hypot3(B[0], B[1], B[2]);
 
-  return s;
-} /* poltor_eval_B() */
+  return 0;
+}
 
 /*
 poltor_eval_B_all()
-  Calculate magnetic field model at a given point
+  Calculate magnetic field model at a given point for all sources
 
-Inputs: r     - geocentric radius (km)
+Inputs: t     - timestamp (CDF_EPOCH)
+        r     - geocentric radius (km)
         theta - geocentric colatitude (radians)
         phi   - longitude (radians)
         B_int - (output) internal poloidal NEC magnetic field model in units of nT
@@ -1177,130 +1147,146 @@ Return: success/error
 */
 
 int
-poltor_eval_B_all(const double r, const double theta, const double phi,
+poltor_eval_B_all(const double t, const double r, const double theta, const double phi,
                   double B_int[4], double B_ext[4], double B_sh[4], double B_tor[4],
                   poltor_workspace *w)
 {
   int s = 0;
-#if 0/*XXX*/
-  gsl_vector_complex_view vx, vy, vz;
-  gsl_vector_complex_view c, sx, sy, sz;
-  gsl_complex valx, valy, valz;
-  size_t i;
+  green_complex_workspace *green_p = w->green_p[0];
+  complex double *Ynm = green_p->Ynm;
+  complex double *dYnm = green_p->dYnm;
+  gsl_vector_complex_view dX = gsl_matrix_complex_row(w->omp_dX, 0);
+  gsl_vector_complex_view dY = gsl_matrix_complex_row(w->omp_dY, 0);
+  gsl_vector_complex_view dZ = gsl_matrix_complex_row(w->omp_dZ, 0);
+  gsl_vector_complex_view X, Y, Z;
+  gsl_vector_complex_view c;
+  gsl_complex val[3];
+  time_t unix_time = satdata_epoch2timet(t);
+  double euvac, alpha; /* 1 + N*EUVAC */
+  size_t k;
 
-  /* initialize to 0 */
-  for (i = 0; i < 3; ++i)
+  f107_get_euvac(unix_time, &euvac, w->f107_workspace_p);
+  alpha = poltor_sflux_factor(euvac, w);
+
+  /* initialize */
+  for (k = 0; k < 4; ++k)
     {
-      B_int[i] = 0.0;
-      B_ext[i] = 0.0;
-      B_sh[i] = 0.0;
-      B_tor[i] = 0.0;
+      B_int[k] = 0.0;
+      B_ext[k] = 0.0;
+      B_sh[k] = 0.0;
+      B_tor[k] = 0.0;
     }
 
-  /* views of 3 rows of the design matrix for X,Y,Z */
-  vx = gsl_matrix_complex_row(w->A, 0);
-  vy = gsl_matrix_complex_row(w->A, 1);
-  vz = gsl_matrix_complex_row(w->A, 2);
-
-  /* build these 3 rows of design matrix at this point */
-  poltor_row(r, theta, phi, 0.0, 0.0, 0.0,
-             &vx.vector, &vy.vector, &vz.vector,
-             NULL, NULL, NULL, w);
+  /* compute Ynm and d/dtheta Ynm */
+  green_complex_Ynm_deriv(theta, phi, green_p);
 
   if (w->p_pint > 0)
     {
       c = gsl_vector_complex_subvector(w->c, w->pint_offset, w->p_pint);
-      sx = gsl_vector_complex_subvector(&vx.vector, w->pint_offset, w->p_pint);
-      sy = gsl_vector_complex_subvector(&vy.vector, w->pint_offset, w->p_pint);
-      sz = gsl_vector_complex_subvector(&vz.vector, w->pint_offset, w->p_pint);
 
-      gsl_blas_zdotu(&sx.vector, &c.vector, &valx);
-      gsl_blas_zdotu(&sy.vector, &c.vector, &valy);
-      gsl_blas_zdotu(&sz.vector, &c.vector, &valz);
+      X = gsl_vector_complex_subvector(&dX.vector, w->pint_offset, w->p_pint);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->pint_offset, w->p_pint);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->pint_offset, w->p_pint);
 
-      B_int[0] = GSL_REAL(valx);
-      B_int[1] = GSL_REAL(valy);
-      B_int[2] = GSL_REAL(valz);
+      /* compute internal Green's functions */
+      green_complex_calc_int(w->nmax_int, w->mmax_int, w->R, r, theta, Ynm, dYnm,
+                             (complex double *) X.vector.data,
+                             (complex double *) Y.vector.data,
+                             (complex double *) Z.vector.data);
+
+      gsl_blas_zdotu(&X.vector, &c.vector, &val[0]);
+      gsl_blas_zdotu(&Y.vector, &c.vector, &val[1]);
+      gsl_blas_zdotu(&Z.vector, &c.vector, &val[2]);
+
+      B_int[0] = GSL_REAL(val[0]);
+      B_int[1] = GSL_REAL(val[1]);
+      B_int[2] = GSL_REAL(val[2]);
     }
 
   if (w->p_pext > 0)
     {
       c = gsl_vector_complex_subvector(w->c, w->pext_offset, w->p_pext);
-      sx = gsl_vector_complex_subvector(&vx.vector, w->pext_offset, w->p_pext);
-      sy = gsl_vector_complex_subvector(&vy.vector, w->pext_offset, w->p_pext);
-      sz = gsl_vector_complex_subvector(&vz.vector, w->pext_offset, w->p_pext);
 
-      gsl_blas_zdotu(&sx.vector, &c.vector, &valx);
-      gsl_blas_zdotu(&sy.vector, &c.vector, &valy);
-      gsl_blas_zdotu(&sz.vector, &c.vector, &valz);
+      X = gsl_vector_complex_subvector(&dX.vector, w->pext_offset, w->p_pext);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->pext_offset, w->p_pext);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->pext_offset, w->p_pext);
 
-      B_ext[0] = GSL_REAL(valx);
-      B_ext[1] = GSL_REAL(valy);
-      B_ext[2] = GSL_REAL(valz);
+      /* compute external Green's functions */
+      green_complex_calc_ext(w->nmax_ext, w->mmax_ext, w->R, r, theta, Ynm, dYnm,
+                             (complex double *) X.vector.data,
+                             (complex double *) Y.vector.data,
+                             (complex double *) Z.vector.data);
+
+      gsl_blas_zdotu(&X.vector, &c.vector, &val[0]);
+      gsl_blas_zdotu(&Y.vector, &c.vector, &val[1]);
+      gsl_blas_zdotu(&Z.vector, &c.vector, &val[2]);
+
+      B_ext[0] = GSL_REAL(val[0]);
+      B_ext[1] = GSL_REAL(val[1]);
+      B_ext[2] = GSL_REAL(val[2]);
     }
 
   if (w->p_psh > 0)
     {
       c = gsl_vector_complex_subvector(w->c, w->psh_offset, w->p_psh);
-      sx = gsl_vector_complex_subvector(&vx.vector, w->psh_offset, w->p_psh);
-      sy = gsl_vector_complex_subvector(&vy.vector, w->psh_offset, w->p_psh);
-      sz = gsl_vector_complex_subvector(&vz.vector, w->psh_offset, w->p_psh);
 
-#if 0
-      /* XXX */
-      {
-        /* set degrees [nmin,nmax] to zero */
-        const size_t nmin = 1;
-        const size_t nmax = 6;
-        size_t j, n;
-        for (j = 0; j <= w->shell_J; ++j)
-          {
-            for (n = nmin; n <= nmax; ++n)
-              {
-                int M = (int) GSL_MIN(n, w->mmax_sh);
-                int m;
+      X = gsl_vector_complex_subvector(&dX.vector, w->psh_offset, w->p_psh);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->psh_offset, w->p_psh);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->psh_offset, w->p_psh);
 
-                for (m = -M; m <= M; ++m)
-                  {
-                    size_t nmidx = poltor_jnmidx(j, n, m, w);
-                    gsl_vector_complex_set(w->c, nmidx, GSL_COMPLEX_ZERO);
-                  }
-              }
-          }
-      }
-#endif
+      /* compute shell Green's functions */
+      poltor_calc_psh(r, theta, Ynm, dYnm,
+                      (complex double *) X.vector.data,
+                      (complex double *) Y.vector.data,
+                      (complex double *) Z.vector.data,
+                      w);
 
-      gsl_blas_zdotu(&sx.vector, &c.vector, &valx);
-      gsl_blas_zdotu(&sy.vector, &c.vector, &valy);
-      gsl_blas_zdotu(&sz.vector, &c.vector, &valz);
+      gsl_blas_zdotu(&X.vector, &c.vector, &val[0]);
+      gsl_blas_zdotu(&Y.vector, &c.vector, &val[1]);
+      gsl_blas_zdotu(&Z.vector, &c.vector, &val[2]);
 
-      B_sh[0] = GSL_REAL(valx);
-      B_sh[1] = GSL_REAL(valy);
-      B_sh[2] = GSL_REAL(valz);
+      B_sh[0] = GSL_REAL(val[0]);
+      B_sh[1] = GSL_REAL(val[1]);
+      B_sh[2] = GSL_REAL(val[2]);
     }
 
   if (w->p_tor > 0)
     {
       c = gsl_vector_complex_subvector(w->c, w->tor_offset, w->p_tor);
-      sx = gsl_vector_complex_subvector(&vx.vector, w->tor_offset, w->p_tor);
-      sy = gsl_vector_complex_subvector(&vy.vector, w->tor_offset, w->p_tor);
-      sz = gsl_vector_complex_subvector(&vz.vector, w->tor_offset, w->p_tor);
 
-      gsl_blas_zdotu(&sx.vector, &c.vector, &valx);
-      gsl_blas_zdotu(&sy.vector, &c.vector, &valy);
-      gsl_blas_zdotu(&sz.vector, &c.vector, &valz);
+      X = gsl_vector_complex_subvector(&dX.vector, w->tor_offset, w->p_tor);
+      Y = gsl_vector_complex_subvector(&dY.vector, w->tor_offset, w->p_tor);
+      Z = gsl_vector_complex_subvector(&dZ.vector, w->tor_offset, w->p_tor);
 
-      B_tor[0] = GSL_REAL(valx);
-      B_tor[1] = GSL_REAL(valy);
-      B_tor[2] = GSL_REAL(valz);
+      /* compute shell Green's functions */
+      poltor_calc_tor(r, theta, Ynm, dYnm,
+                      (complex double *) X.vector.data,
+                      (complex double *) Y.vector.data,
+                      (complex double *) Z.vector.data,
+                      w);
+
+      gsl_blas_zdotu(&X.vector, &c.vector, &val[0]);
+      gsl_blas_zdotu(&Y.vector, &c.vector, &val[1]);
+      gsl_blas_zdotu(&Z.vector, &c.vector, &val[2]);
+
+      B_tor[0] = GSL_REAL(val[0]);
+      B_tor[1] = GSL_REAL(val[1]);
+      B_tor[2] = GSL_REAL(val[2]);
     }
 
-  /* compute |B| */
+  /* multiply by time dependent factor and compute magnitudes */
+  for (k = 0; k < 3; ++k)
+    {
+      B_int[k] *= alpha;
+      B_ext[k] *= alpha;
+      B_sh[k] *= alpha;
+      B_tor[k] *= alpha;
+    }
+
   B_int[3] = gsl_hypot3(B_int[0], B_int[1], B_int[2]);
   B_ext[3] = gsl_hypot3(B_ext[0], B_ext[1], B_ext[2]);
   B_sh[3] = gsl_hypot3(B_sh[0], B_sh[1], B_sh[2]);
   B_tor[3] = gsl_hypot3(B_tor[0], B_tor[1], B_tor[2]);
-#endif/*XXX*/
 
   return s;
 } /* poltor_eval_B_all() */
@@ -1699,46 +1685,19 @@ poltor_calc_tor(const double r, const double theta,
   return s;
 }
 
-#if 0/*XXX*/
-/*
-poltor_theta()
-  Determine colatitude (either geocentric or QD)
-
-Inputs: idx - index of data point
-        w   - workspace
-
-Return: colatitude in radians
-*/
-
 double
-poltor_theta(const size_t idx, const poltor_workspace *w)
+poltor_sflux_factor(const double flux, const poltor_workspace *w)
 {
-  if (w->flags & POLTOR_FLG_QD_HARMONICS)
-    return (M_PI / 2.0 - w->data->qdlat[idx] * M_PI / 180.0);
-
-  return w->data->theta[idx];
-} /* poltor_theta() */
-
-/*
-poltor_theta_ns()
-  Determine colatitude (either geocentric or QD)
-
-Inputs: idx - index of data point
-        w   - workspace
-
-Return: colatitude in radians
-*/
-
-double
-poltor_theta_ns(const size_t idx, const poltor_workspace *w)
-{
-  if (w->flags & POLTOR_FLG_QD_HARMONICS)
-    return (M_PI / 2.0 - w->data->qdlat_ns[idx] * M_PI / 180.0);
-
-  return w->data->theta_ns[idx];
-} /* poltor_theta_ns() */
-
-#endif/*XXX*/
+  if (w->params.synth_data || !w->params.solar_flux_factor)
+    {
+      return 1.0;
+    }
+  else
+    {
+      const double N_wolf = 14.85e-3; /* Wolf ratio in sfu (Chulliat et al 2016) */
+      return (1.0 + N_wolf * flux);
+    }
+}
 
 /***********************************************
  * INTERNAL ROUTINES                           *
@@ -2802,6 +2761,7 @@ poltor_eval_chi(const double r, const double theta, const double phi,
                 const size_t idx, double *chi, poltor_workspace *w)
 {
   int s = 0;
+#if 0
   size_t n, m;
   complex double sum = 0.0;
   size_t nmax, mmax;
@@ -2861,9 +2821,36 @@ poltor_eval_chi(const double r, const double theta, const double phi,
   /* current function = -Qr/mu0 (units of kA) */
   sum = -sum / POLTOR_MU_0 * r;
   *chi = creal(sum);
+#endif
 
   return s;
 } /* poltor_eval_chi() */
+
+/*
+poltor_init()
+  Initialize poltor workspace (spatial weights, solar flux values)
+
+Inputs: w - workspace
+*/
+
+static int
+poltor_init(poltor_workspace * w)
+{
+  int s;
+  const poltor_parameters *params = &(w->params);
+
+  /* initialize spatial weights */
+  s = poltor_init_weights(w);
+  if (s)
+    return s;
+
+  /* initialize array of daily solar flux values */
+  s = poltor_init_solar_flux(w);
+  if (s)
+    return s;
+
+  return 0;
+}
 
 /*
 poltor_init_weights()
@@ -2993,6 +2980,123 @@ poltor_init_weights(poltor_workspace * w)
   assert(idx == w->n);
 
   track_weight_free(weight_p);
+
+  return s;
+}
+
+/*
+poltor_init_solar_flux()
+  Initialize w->solar_flux and w->solar_flux_grad with:
+  
+  1 + N * EUVAC
+  
+where N is the Wolf ratio constant and EUVAC is the daily
+solar flux value in sfu
+*/
+
+static int
+poltor_init_solar_flux(poltor_workspace * w)
+{
+  int s = 0;
+  magdata_list *list = w->data;
+  size_t i, j;
+  size_t idx = 0;
+
+  gsl_vector_set_zero(w->solar_flux);
+  gsl_vector_set_zero(w->solar_flux_grad);
+
+  fprintf(stderr, "poltor_init_solar_flux: computing daily solar flux values...");
+
+  /* store daily solar flux values for all residuals */
+  for (i = 0; i < list->n; ++i)
+    {
+      magdata *mptr = magdata_list_ptr(i, list);
+
+      for (j = 0; j < mptr->n; ++j)
+        {
+          time_t unix_time;
+          double euvac, alpha, alpha_grad;
+
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
+
+          /* calculate solar flux factor */
+          unix_time = satdata_epoch2timet(mptr->t[j]);
+          f107_get_euvac(unix_time, &euvac, w->f107_workspace_p);
+          alpha = poltor_sflux_factor(euvac, w);
+
+          /* calculate solar flux factor for gradient point, which might be different */
+          if (mptr->flags[j] & (MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DF_NS |
+                                MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW | MAGDATA_FLG_DF_EW))
+            {
+              unix_time = satdata_epoch2timet(mptr->t_ns[j]);
+              f107_get_euvac(unix_time, &euvac, w->f107_workspace_p);
+              alpha_grad = poltor_sflux_factor(euvac, w);
+            }
+          else
+            {
+              alpha_grad = 0.0;
+            }
+
+          if (MAGDATA_ExistX(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistY(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistZ(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistScalar(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistDX_NS(mptr->flags[j]) || MAGDATA_ExistDX_EW(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistDY_NS(mptr->flags[j]) || MAGDATA_ExistDY_EW(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistDZ_NS(mptr->flags[j]) || MAGDATA_ExistDZ_EW(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistDF_NS(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+
+          if (MAGDATA_ExistDF_EW(mptr->flags[j]) && MAGDATA_FitMF(mptr->flags[j]))
+            {
+              gsl_vector_set(w->solar_flux, idx, alpha);
+              gsl_vector_set(w->solar_flux_grad, idx++, alpha_grad);
+            }
+        }
+    }
+
+  fprintf(stderr, "done\n");
+
+  assert(idx == w->n);
 
   return s;
 }

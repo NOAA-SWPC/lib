@@ -44,5 +44,6 @@ int green_complex_calc_ext(const size_t nmax, const size_t mmax, const double R,
 inline size_t green_complex_nmidx(const size_t n, const int m, const green_complex_workspace *w);
 size_t green_complex_nnm(const green_complex_workspace *w);
 int green_complex_Ynm(const double theta, const double phi, green_complex_workspace *w);
+int green_complex_Ynm_deriv(const double theta, const double phi, green_complex_workspace *w);
 
 #endif /* INCLUDED_green_complex_h */
