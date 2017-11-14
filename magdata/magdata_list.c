@@ -307,11 +307,20 @@ magdata_list_index(magdata_list * list, size_t count[])
 
       for (j = 0; j < mptr->n; ++j)
         {
+          mptr->index[j] = 0;
+
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
+          if (!(mptr->flags[j] & (MAGDATA_FLG_X | MAGDATA_FLG_Y | MAGDATA_FLG_Z | MAGDATA_FLG_F |
+                                  MAGDATA_FLG_DX_NS | MAGDATA_FLG_DY_NS | MAGDATA_FLG_DZ_NS | MAGDATA_FLG_DF_NS |
+                                  MAGDATA_FLG_DX_EW | MAGDATA_FLG_DY_EW | MAGDATA_FLG_DZ_EW | MAGDATA_FLG_DF_EW)))
+            {
+              fprintf(stderr, "magdata_list_index: warning: data point found with no associated measurement (flags = %zu)\n",
+                      mptr->flags[j]);
+            }
+
           /* store index of this data point accounting for all previous counts */
-          mptr->index[j] = 0;
           for (k = 0; k <= MAGDATA_LIST_IDX_DF_EW; ++k)
             {
               mptr->index[j] += count[k];

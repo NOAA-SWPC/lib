@@ -661,7 +661,6 @@ magdata_print(const char *prefix, const magdata *data)
     {
       time_t unix_time = satdata_epoch2timet(data->t[i]);
       double lt = data->lt[i];
-      double ut = get_ut(unix_time);
       double doy = get_season(unix_time);
       double phi = wrap180(data->phi[i] * 180.0 / M_PI);
       double lat = 90.0 - data->theta[i] * 180.0 / M_PI;

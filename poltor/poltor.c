@@ -606,31 +606,19 @@ poltor_eval_J_shell(const double r, const double theta, const double phi,
                     double J[3], poltor_workspace *w)
 {
   int s = 0;
-#if 0 /*XXX*/
   size_t n, j;
   int m;
   const double invsint = 1.0 / sin(theta);
   const double ratio = (r - w->rmid) / w->R;
   double rterm = 1.0; /* [(r - r_0) / R]^j */
   complex double Jt = 0.0, Jp = 0.0;
+  green_complex_workspace *green_p = w->green_p[0];
+  complex double *Ynm = green_p->Ynm;
+  complex double *dYnm = green_p->dYnm;
+  complex double Kt = 0.0, Kp = 0.0;
 
-  /* compute legendre functions */
-  gsl_sf_legendre_deriv_alt_array(GSL_SF_LEGENDRE_SCHMIDT, w->nmax_sh,
-                                  cos(theta), w->Pnm, w->dPnm);
-
-  /* pre-compute Ynm and dYnm */
-  for (m = 0; m <= (int) w->mmax_sh; ++m)
-    {
-      complex double expimphi = cos(m * phi) + I * sin(m * phi);
-
-      for (n = GSL_MAX(m, 1); n <= w->nmax_sh; ++n)
-        {
-          size_t pidx = gsl_sf_legendre_array_index(n, m);
-
-          w->Ynm[pidx] = w->Pnm[pidx] * expimphi;
-          w->dYnm[pidx] = w->dPnm[pidx] * expimphi;
-        }
-    }
+  /* compute Ynm and d/dtheta Ynm */
+  green_complex_Ynm_deriv(theta, phi, green_p);
 
   for (j = 0; j <= w->shell_J; ++j)
     {
@@ -643,24 +631,24 @@ poltor_eval_J_shell(const double r, const double theta, const double phi,
               int mabs = abs(m);
               size_t nmidx = poltor_jnmidx(j, n, m, w);
               size_t pidx = gsl_sf_legendre_array_index(n, mabs);
-              gsl_complex cnm = gsl_vector_complex_get(w->c, nmidx);
-              complex double qnm = GSL_REAL(cnm) + I * GSL_IMAG(cnm);
-              complex double Ynm, dYnm;
+              gsl_complex cnmj = gsl_vector_complex_get(w->c, nmidx);
+              complex double qnmj = GSL_REAL(cnmj) + I * GSL_IMAG(cnmj);
+              complex double Y_nm, dY_nm;
 
               if (m >= 0)
                 {
-                  Ynm = w->Ynm[pidx];
-                  dYnm = w->dYnm[pidx];
+                  Y_nm = Ynm[pidx];
+                  dY_nm = dYnm[pidx];
                 }
               else
                 {
-                  Ynm = conj(w->Ynm[pidx]);
-                  dYnm = conj(w->dYnm[pidx]);
+                  Y_nm = conj(Ynm[pidx]);
+                  dY_nm = conj(dYnm[pidx]);
                 }
 
               /* compute (theta,phi) components of J */
-              Jt -= rterm * I * m * invsint * qnm * Ynm;
-              Jp += rterm * qnm * dYnm;
+              Jt -= rterm * I * m * invsint * qnmj * Y_nm;
+              Jp += rterm * qnmj * dY_nm;
             }
         }
 
@@ -670,7 +658,6 @@ poltor_eval_J_shell(const double r, const double theta, const double phi,
   /* convert to A/m^2 */
   J[1] += creal(Jt) / w->R / POLTOR_MU_0 * 1.0e-3;
   J[2] += creal(Jp) / w->R / POLTOR_MU_0 * 1.0e-3;
-#endif
 
   return s;
 } /* poltor_eval_J_shell */
@@ -980,11 +967,11 @@ poltor_eval_chi_int(const double b, const double theta, const double phi,
 /*
 poltor_eval_chi_sh()
   Calculate toroidal current scalar function chi at given point
-on the spherical shell r = d
+on the spherical shell at radius r
 
-chi = -Q d / mu_0 
+chi = -1 / mu_0 * (r/R) * sum_{nm} q_{nm}(r) Y_{nm}
 
-Inputs: r     - radius (km) (not currently used)
+Inputs: r     - radius (km) in [rmin,rmax]
         theta - colatitude (radians)
         phi   - longitude (radians)
         chi   - (output) current scalar in units of kA
@@ -998,10 +985,48 @@ poltor_eval_chi_sh(const double r, const double theta, const double phi,
                    double *chi, poltor_workspace *w)
 {
   int s = 0;
+  complex double sum = 0.0;
+  const double ratio = (r - w->rmid) / w->R;
+  double rterm = 1.0;
+  green_complex_workspace *green_p = w->green_p[0];
+  complex double *Ynm = green_p->Ynm;
+  size_t n, j;
+  double alpha = poltor_sflux_factor(120.0, w); /*XXX*/
 
-  (void)r;
+  /* compute Ynm */
+  green_complex_Ynm(theta, phi, green_p);
 
-  s = poltor_eval_chi(w->d, theta, phi, POLTOR_IDX_PSH, chi, w);
+  for (j = 0; j <= w->shell_J; ++j)
+    {
+      for (n = 1; n <= w->nmax_sh; ++n)
+        {
+          int M = (int) GSL_MIN(n, w->mmax_sh);
+          int m;
+
+          for (m = -M; m <= M; ++m)
+            {
+              int mabs = abs(m);
+              size_t nmjidx = poltor_jnmidx(j, n, m, w);
+              size_t pidx = gsl_sf_legendre_array_index(n, mabs);
+              gsl_complex cnmj = gsl_vector_complex_get(w->c, nmjidx);
+              complex double qnmj = GSL_REAL(cnmj) + I * GSL_IMAG(cnmj);
+              complex double Y_nm;
+
+              if (m >= 0)
+                Y_nm = Ynm[pidx];
+              else
+                Y_nm = conj(Ynm[pidx]);
+
+              sum += rterm * qnmj * Y_nm;
+            }
+        }
+
+      /* ((r-rmid)/R)^j */
+      rterm *= ratio;
+    }
+
+  /* current function = -Qr/mu0 (units of kA) */
+  *chi = -alpha / POLTOR_MU_0 * (r / w->R) * creal(sum);
 
   return s;
 } /* poltor_eval_chi_sh() */
@@ -2628,7 +2653,7 @@ poltor_nmidx(const size_t type, const size_t n, const int m, poltor_workspace *w
 poltor_jnmidx()
   Return index of shell poloidal coefficient corresponding
 to (j,n,m) where j is the term in the Taylor series expansion
-for q_{nm}(r)
+for q_{nm}(r). Index is in [0,p-1]
 */
 
 size_t
@@ -2643,7 +2668,7 @@ poltor_jnmidx(const size_t j, const size_t n, const int m, poltor_workspace *w)
 poltor_jnmidx2()
   Return index of shell poloidal coefficient corresponding
 to (j,n,m) where j is the term in the Taylor series expansion
-for q_{nm}(r)
+for q_{nm}(r). Index is in [0,p_psh - 1]
 */
 
 size_t

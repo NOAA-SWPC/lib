@@ -1,9 +1,11 @@
 #!/usr/bin/env gnuplot
 #
-# Plot current stream function on higher shell (350km) with contour lines
+# Plot current stream function with contour lines
 
-set terminal pngcairo enh col
+set terminal pngcairo enh col size 1280,960 font ",22"
 set output "current_shell.png"
+
+d = 6371.2 + 350.0
 
 unset key
 
@@ -14,24 +16,25 @@ set yrange [-75:75]
 set ytics -75,15,75
 
 set cbrange [-100:100]
+set cbtics 10
 
 set xlabel "longitude (degrees)"
 set ylabel "QD latitude (degrees)"
 set cblabel "kA"
 
 set table 'test.dat'
-splot 'chi.dat' us 1:2:4
+splot 'chi.dat' us 1:2:($4*d)
 unset table
 
 set contour base
 # 10 kA spacing between contours
-set cntrparam levels inc -80, 10, 80
+#set cntrparam levels inc -80, 10, 80
+set cntrparam levels inc -80, 5, 80
 unset surface
 set table 'cont.dat'
-splot 'chi.dat' us 1:2:4
+splot 'chi.dat' us 1:2:($4*d)
 unset table
 
-set pm3d map interp 20,20
-set palette @MATLAB
-#splot 'chi.dat' us 1:2:4
+load 'moreland.pal'
+set title "Sq current stream function, 350 km"
 p 'test.dat' w image, 'cont.dat' w li lt -1 lw 1.5
