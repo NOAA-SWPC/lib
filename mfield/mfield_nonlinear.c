@@ -2504,7 +2504,7 @@ mfield_nonlinear_alloc_multilarge(const gsl_multilarge_nlinear_trs * trs,
     gsl_multilarge_nlinear_free(w->nlinear_workspace_p);
 
   fdf_params.trs = trs;
-  fdf_params.scale = gsl_multilarge_nlinear_scale_more;
+  fdf_params.scale = gsl_multilarge_nlinear_scale_levenberg;
 
   w->nlinear_workspace_p = gsl_multilarge_nlinear_alloc(T, &fdf_params, w->nres_tot, w->p);
 

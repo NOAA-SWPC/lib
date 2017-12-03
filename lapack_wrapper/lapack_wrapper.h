@@ -30,4 +30,10 @@ int lapack_cholesky_invert(gsl_matrix * A);
 int lapack_zposv(const gsl_matrix_complex * A, const gsl_vector_complex * b, gsl_vector_complex *x,
                  double * rcond);
 
+/* lapack_complex.c */
+int lapack_complex_cholesky_decomp(gsl_matrix_complex * A);
+int lapack_complex_cholesky_invert(gsl_matrix_complex * A);
+int lapack_complex_zposv(const gsl_vector_complex * b, gsl_matrix_complex * A,
+                         gsl_vector_complex *x, double * rcond);
+
 #endif /* INCLUDED_lapack_common_h */

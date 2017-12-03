@@ -32,6 +32,8 @@
 #include <common/common.h>
 #include <common/oct.h>
 
+#include "green.h"
+#include "lapack_wrapper.h"
 #include "magdata_list.h"
 #include "track.h"
 
@@ -296,6 +298,77 @@ replace_qdlat(magdata_list *list)
 }
 
 int
+print_error_source(FILE *fp, const size_t nmax, const size_t mmax,
+                   const size_t offset, gsl_vector_complex *err,
+                   gsl_vector_complex *c)
+{
+  int s = 0;
+  size_t n;
+
+  n = 1;
+  fprintf(fp, "# Field %zu: spherical harmonic order m\n", n++);
+  fprintf(fp, "# Field %zu: spherical harmonic degree n\n", n++);
+  fprintf(fp, "# Field %zu: uncertainty in c(n,m) (nT)\n", n++);
+  fprintf(fp, "# Field %zu: Re[c(n,m)] (nT)\n", n++);
+  fprintf(fp, "# Field %zu: Im[c(n,m)] (nT)\n", n++);
+
+  for (n = 1; n <= nmax; ++n)
+    {
+      int M = (int) GSL_MIN(n, mmax);
+      int m;
+
+      for (m = -M; m <= M; ++m)
+        {
+          size_t cidx = green_idx(n, m, mmax) + offset;
+          gsl_complex cnm = gsl_vector_complex_get(c, cidx);
+          gsl_complex err_cnm = gsl_vector_complex_get(err, cidx);
+
+          fprintf(fp, "%5d %5zu %20.4e %20.4e %20.4e\n", m, n, GSL_REAL(err_cnm), GSL_REAL(cnm), GSL_IMAG(cnm));
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  fprintf(fp, "\n\n");
+
+  return s;
+}
+
+/* w->JHJ must contain covariance matrix on entry */
+int
+print_uncertanties(const char *filename, poltor_workspace *w)
+{
+  int s = 0;
+  gsl_matrix_complex *JHJ = w->JHJ;
+  gsl_vector_complex_view diag = gsl_matrix_complex_diagonal(JHJ);
+  FILE *fp;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "print_uncertanties: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  if (w->p_pint > 0)
+    print_error_source(fp, w->nmax_int, w->mmax_int, w->pint_offset, &diag.vector, w->c);
+
+  if (w->p_pext > 0)
+    print_error_source(fp, w->nmax_ext, w->mmax_ext, w->pext_offset, &diag.vector, w->c);
+
+  if (w->p_psh > 0)
+    print_error_source(fp, w->nmax_sh, w->mmax_sh, w->psh_offset, &diag.vector, w->c);
+
+  if (w->p_tor > 0)
+    print_error_source(fp, w->nmax_tor, w->mmax_tor, w->tor_offset, &diag.vector, w->c);
+
+  fclose(fp);
+
+  return s;
+}
+
+int
 print_correlation(const char *filename, poltor_workspace *w)
 {
   int s = 0;
@@ -303,22 +376,41 @@ print_correlation(const char *filename, poltor_workspace *w)
   const size_t nmax = GSL_MIN(w->nmax_int, w->nmax_sh);
   const size_t mmax = GSL_MIN(w->mmax_int, w->mmax_sh);
   gsl_matrix_complex *B;
+  gsl_vector_complex_view d;
   size_t n;
-  FILE *fp;
-
-  fp = fopen(filename, "w");
-  if (!fp)
-    {
-      fprintf(stderr, "print_correlation: unable to open %s: %s\n",
-              filename, strerror(errno));
-      return -1;
-    }
+  size_t i, j;
 
   B = gsl_matrix_complex_calloc(p, p);
+  gsl_matrix_complex_memcpy(B, w->JHJ);
+  d = gsl_matrix_complex_diagonal(B);
 
-  /* compute correlation matrix */
-  s = lls_complex_correlation(B, w->lls_workspace_p);
+  /* covariance matrix is in upper triangle, so fill in lower half of B */
+  for (j = 1; j < p; ++j)
+    {
+      for (i = 0; i < j; ++i)
+        {
+          gsl_complex z = gsl_matrix_complex_get(B, i, j);
+          GSL_SET_IMAG(&z, -GSL_IMAG(z));
+          gsl_matrix_complex_set(B, j, i, z); 
+        }
+    }
 
+  /* compute correlation matrix: B = diag(C)^{-1/2} C diag(C)^{-1/2} */
+  for (i = 0; i < n; ++i)
+    {
+      gsl_complex di = gsl_vector_complex_get(&d.vector, i);
+      gsl_vector_complex_view ri = gsl_matrix_complex_row(B, i);
+      gsl_vector_complex_view ci = gsl_matrix_complex_column(B, i);
+      gsl_complex z;
+
+      GSL_SET_COMPLEX(&z, 1.0 / sqrt(GSL_REAL(di)), 0.0);
+      gsl_vector_complex_scale(&ri.vector, z);
+      gsl_vector_complex_scale(&ci.vector, z);
+    }
+
+  printherm_octave(B, filename);
+
+#if 0
   for (n = 1; n <= nmax; ++n)
     {
       int ni = (int) GSL_MIN(n, mmax);
@@ -338,10 +430,9 @@ print_correlation(const char *filename, poltor_workspace *w)
 
       fprintf(fp, "\n\n");
     }
+#endif
 
   gsl_matrix_complex_free(B);
-
-  fclose(fp);
 
   return s;
 } /* print_correlation() */
@@ -1263,9 +1354,7 @@ main(int argc, char *argv[])
   const double R = R_EARTH_KM;
   const double d = R + 350.0;   /* radius of current shell for gravity/diamag */
   char *config_file = "PT.cfg";
-  char *datamap_prefix = "output";
-  char *data_prefix = "output";
-  char *residual_prefix = "output";
+  char *output_prefix = "output";
   char *spectrum_file = "poltor.s";
   char *corr_file = "corr.dat";
   char *output_file = NULL;
@@ -1517,12 +1606,12 @@ main(int argc, char *argv[])
 
   if (print_data)
     {
-      fprintf(stderr, "main: writing data to %s...", data_prefix);
-      magdata_list_print(data_prefix, mlist);
+      fprintf(stderr, "main: writing data to %s...", output_prefix);
+      magdata_list_print(output_prefix, mlist);
       fprintf(stderr, "done\n");
 
-      fprintf(stderr, "main: writing data map to %s...", datamap_prefix);
-      magdata_list_map(datamap_prefix, mlist);
+      fprintf(stderr, "main: writing data map to %s...", output_prefix);
+      magdata_list_map(output_prefix, mlist);
       fprintf(stderr, "done\n");
     }
 
@@ -1577,7 +1666,7 @@ main(int argc, char *argv[])
           fprintf(stderr, "main: || c_{k+1} - c_k || = %.12e\n", gsl_blas_dznrm2(cprev));
 
           /* output spectrum for this iteration */
-          sprintf(buf, "%s.iter%zu", spectrum_file, iter);
+          sprintf(buf, "%s/%s.iter%zu", output_prefix, spectrum_file, iter);
           fprintf(stderr, "main: printing spectrum to %s...", buf);
           poltor_print_spectrum(buf, c, poltor_p);
           fprintf(stderr, "done\n");
@@ -1585,16 +1674,34 @@ main(int argc, char *argv[])
           /* output coefficient file for this iteration */
           if (output_file)
             {
-              sprintf(buf, "%s.iter%zu", output_file, iter);
+              sprintf(buf, "%s/%s.iter%zu", output_prefix, output_file, iter);
               fprintf(stderr, "main: writing output coefficients to %s...", buf);
               poltor_write(buf, poltor_p);
               fprintf(stderr, "done\n");
             }
 
+          /*
+           * JHJ contains the Cholesky factor of J^H W J after calling poltor_calc_nonlinear(),
+           * invert the matrix to find the covariance matrix
+           */
+          fprintf(stderr, "main: calculating model covariance matrix...");
+          lapack_complex_cholesky_invert(poltor_p->JHJ);
+          fprintf(stderr, "done\n");
+
+          sprintf(buf, "%s/error.iter%zu", output_prefix, iter);
+          fprintf(stderr, "main: writing coefficient uncertainties to %s...", buf);
+          print_uncertanties(buf, poltor_p);
+          fprintf(stderr, "done\n");
+
+          sprintf(buf, "corr_iter%zu", iter);
+          fprintf(stderr, "main: writing correlation matrix to %s...", buf);
+          print_correlation(buf, poltor_p);
+          fprintf(stderr, "done\n");
+
           if (print_residuals)
             {
-              fprintf(stderr, "main: printing residuals to %s...", residual_prefix);
-              poltor_print_residuals(residual_prefix, iter, poltor_p);
+              fprintf(stderr, "main: printing residuals to %s...", output_prefix);
+              poltor_print_residuals(output_prefix, iter, poltor_p);
               fprintf(stderr, "done\n");
             }
         }
@@ -1603,10 +1710,6 @@ main(int argc, char *argv[])
     }
 
   print_coefficients(poltor_p);
-
-  fprintf(stderr, "main: printing correlation data to %s...", corr_file);
-  print_correlation(corr_file, poltor_p);
-  fprintf(stderr, "done\n");
 
   fprintf(stderr, "main: printing spectrum to %s...", spectrum_file);
   poltor_print_spectrum(spectrum_file, poltor_p->c, poltor_p);

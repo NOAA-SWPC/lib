@@ -245,3 +245,10 @@ or,
      -\frac{im}{\sin{\theta}} Y_n^m \\
      -(n+1) Y_n^m
    \end{pmatrix}
+
+Useful Identities
+=================
+
+The following identities are useful for developing regularization conditions in inverse problems.
+
+.. math:: \int_0^{2\pi} e^{i(m - m')\phi} d\phi = 2 \pi \delta_{m m'}

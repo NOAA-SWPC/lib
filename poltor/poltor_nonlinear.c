@@ -93,7 +93,7 @@ poltor_calc_nonlinear(const size_t iter, gsl_vector_complex *c, poltor_workspace
         }
 
       fprintf(stderr, "poltor_calc_nonlinear: solving linear system J^H W J = J^H W f...");
-      s = lapack_zposv(w->JHJ, w->JHf, c, &rcond);
+      s = lapack_complex_zposv(w->JHf, w->JHJ, c, &rcond);
       fprintf(stderr, "done (s = %d, cond = %.12e)\n", s, 1.0 / rcond);
 
       /* reverse sign since precompute calculates -J^H W b */

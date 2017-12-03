@@ -702,12 +702,24 @@ mfield_data_add_noise(const double sigma, mfield_data_workspace * w)
 
       for (j = 0; j < mptr->n; ++j)
         {
-          mptr->Bx_vfm[j] += gsl_ran_gaussian(r, sigma);
-          mptr->By_vfm[j] += gsl_ran_gaussian(r, sigma);
-          mptr->Bz_vfm[j] += gsl_ran_gaussian(r, sigma);
+          if (MAGDATA_Discarded(mptr->flags[j]))
+            continue;
 
-          /* recompute scalar field measurement */
-          mptr->F[j] = gsl_hypot3(mptr->Bx_vfm[j], mptr->By_vfm[j], mptr->Bz_vfm[j]);
+          /* if no vector measurement, do nothing */
+          if (MAGDATA_ExistVector(mptr->flags[j]))
+            {
+              mptr->Bx_vfm[j] += gsl_ran_gaussian(r, sigma);
+              mptr->By_vfm[j] += gsl_ran_gaussian(r, sigma);
+              mptr->Bz_vfm[j] += gsl_ran_gaussian(r, sigma);
+
+              /* recompute scalar field measurement */
+              mptr->F[j] = gsl_hypot3(mptr->Bx_vfm[j], mptr->By_vfm[j], mptr->Bz_vfm[j]);
+            }
+          else if (MAGDATA_ExistScalar(mptr->flags[j]))
+            {
+              /* scalar only measurement (high latitudes) */
+              mptr->F[j] += gsl_ran_gaussian(r, sigma);
+            }
         }
     }
 
