@@ -208,7 +208,7 @@ main(int argc, char *argv[])
   double rms[6], rms_data[6];
   size_t nrms;
 
-  while ((c = getopt(argc, argv, "i:t:w:")) != (-1))
+  while ((c = getopt(argc, argv, "i:t:o:w:")) != (-1))
     {
       switch (c)
         {
@@ -224,9 +224,13 @@ main(int argc, char *argv[])
             weimer_data = grobs_iaga_read(optarg, NULL);
             break;
 
+          case 'o':
+            outfile = optarg;
+            break;
+
           case '?':
           default:
-            printf("usage: %s [options]\n", argv[0]);
+            fprintf(stderr, "usage: %s <-i iaga_data_file> <-w weimer_data_file> <-t t_storm> [-o output_file]\n", argv[0]);
             exit(1);
             break;
         }
@@ -234,7 +238,7 @@ main(int argc, char *argv[])
 
   if (iaga_data == NULL || weimer_data == NULL)
     {
-      fprintf(stderr, "usage: %s <-i iaga_data_file> <-w weimer_data_file> <-t t_storm>\n",
+      fprintf(stderr, "usage: %s <-i iaga_data_file> <-w weimer_data_file> <-t t_storm> [-o output_file]\n",
               argv[0]);
       exit(1);
     }

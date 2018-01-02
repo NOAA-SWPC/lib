@@ -647,7 +647,7 @@ track_print_track(const int header, FILE *fp, const track_data *tptr,
       if (data->flags[didx])
         continue;
 
-      fprintf(fp, "%ld %.2f %.2f %.2f %.1f %.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
+      fprintf(fp, "%ld %7.4f %7.4f %7.4f %5.1f %7.2f %.3f %.3f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %.5e\n",
               unix_time,
               ut,
               lt,

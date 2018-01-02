@@ -229,6 +229,7 @@ print_help(char *argv[])
   fprintf(stderr, "\t --swarm_file | -s swarm_index_file          - Swarm index file\n");
   fprintf(stderr, "\t --champ_file | -c champ_index_file          - CHAMP index file\n");
   fprintf(stderr, "\t --champ_plp_file | -b champ_plp_index_file  - CHAMP PLP index file\n");
+  fprintf(stderr, "\t --dmsp_file | -D dmsp_index_file            - DMSP index file\n");
   fprintf(stderr, "\t --all | -a                                  - print all tracks (no filtering)\n");
   fprintf(stderr, "\t --downsample | -d downsample                - downsampling factor\n");
   fprintf(stderr, "\t --output_file | -o output_file              - output file\n");
@@ -284,6 +285,7 @@ main(int argc, char *argv[])
           { "champ_file", required_argument, NULL, 'c' },
           { "swarm_file", required_argument, NULL, 's' },
           { "champ_plp_file", required_argument, NULL, 'b' },
+          { "dmsp_file", required_argument, NULL, 'D' },
           { "downsample", required_argument, NULL, 'd' },
           { "lt_min", required_argument, NULL, 'j' },
           { "lt_max", required_argument, NULL, 'k' },
@@ -298,7 +300,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "ab:c:d:j:k:l:m:o:q:s:t:u:", long_options, &option_index);
+      c = getopt_long(argc, argv, "ab:c:d:D:j:k:l:m:o:q:s:t:u:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -336,6 +338,15 @@ main(int argc, char *argv[])
                       nflag, data->n, (double)nflag / (double)data->n * 100.0);
             }
 
+            break;
+
+          case 'D':
+            fprintf(stderr, "main: reading %s...", optarg);
+            gettimeofday(&tv0, NULL);
+            data = satdata_dmsp_read_idx(optarg, 0);
+            gettimeofday(&tv1, NULL);
+            fprintf(stderr, "done (%zu data read, %g seconds)\n",
+                    data->n, time_diff(tv0, tv1));
             break;
 
           case 'b':

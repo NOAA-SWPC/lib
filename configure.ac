@@ -54,6 +54,7 @@ AC_CONFIG_FILES([            \
   swarm/Makefile             \
   pca/Makefile               \
   pca/pca.h                  \
+  pca3d/Makefile             \
   track/Makefile             \
 ])
 
