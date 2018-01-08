@@ -31,9 +31,6 @@ tiegcm3d_alloc(const size_t nt, const size_t nr, const size_t nlon, const size_t
   tiegcm3d_realloc(nt, nr, nlon, nlat, data);
 
   data->nt_max = 9000;
-  data->workx = malloc(data->nt_max * nlon * nlat * sizeof(double));
-  data->worky = malloc(data->nt_max * nlon * nlat * sizeof(double));
-  data->workz = malloc(data->nt_max * nlon * nlat * sizeof(double));
 
   return data;
 }
@@ -64,6 +61,8 @@ tiegcm3d_realloc(const size_t nt, const size_t nr, const size_t nlon, const size
   data->Jr = realloc(data->Jr, nt * nr * nlon * nlat * sizeof(double));
   data->Jt = realloc(data->Jt, nt * nr * nlon * nlat * sizeof(double));
   data->Jp = realloc(data->Jp, nt * nr * nlon * nlat * sizeof(double));
+
+  data->work = realloc(data->work, nt * nr * nlon * nlat * sizeof(double));
 
   /* initialize newly allocated memory */
   for (i = data->ntot; i < nt; ++i)
@@ -115,14 +114,8 @@ tiegcm3d_free(tiegcm3d_data *data)
   if (data->Jp)
     free(data->Jp);
 
-  if (data->workx)
-    free(data->workx);
-
-  if (data->worky)
-    free(data->worky);
-
-  if (data->workz)
-    free(data->workz);
+  if (data->work)
+    free(data->work);
 
   free(data);
 }

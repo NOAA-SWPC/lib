@@ -23,9 +23,8 @@
 #include <satdata/satdata.h>
 #include <indices/indices.h>
 
+#include <apex/apex.h>
 #include <common/common.h>
-
-#include "apex.h"
 
 typedef struct
 {
@@ -58,8 +57,8 @@ print_data(const int down_sample, const print_parameters *params,
   int s = 0;
   size_t i;
   f107_workspace *f107_p = f107_alloc(F107_IDX_FILE);
-  int year = (int) satdata_epoch2year(data->t[0]);
-  apex_workspace *apex_p = apex_alloc(year);
+  double epoch = satdata_epoch2year(data->t[0]);
+  apex_workspace *apex_p = apex_alloc();
 
   i = 1;
   printf("# Field %zu: time (CDF_EPOCH)\n", i++);
@@ -92,7 +91,7 @@ print_data(const int down_sample, const print_parameters *params,
       if (data->flags[i] > 20)
         continue;
 
-      apex_transform(theta, phi, data->r[i] * 1.0e3, &alon, &alat, &qdlat,
+      apex_transform(epoch, theta, phi, data->r[i], &alon, &alat, &qdlat,
                      NULL, NULL, NULL, apex_p);
 
       if (qdlat < params->qd_min || qdlat > params->qd_max)
@@ -157,8 +156,8 @@ print_data2(const int down_sample, const print_parameters *params,
   int s = 0;
   size_t i;
   f107_workspace *f107_p = f107_alloc(F107_IDX_FILE);
-  int year = (int) satdata_epoch2year(data->t[0]);
-  apex_workspace *apex_p = apex_alloc(year);
+  double epoch = satdata_epoch2year(data->t[0]);
+  apex_workspace *apex_p = apex_alloc();
   double qdlat_prev = 0.0;
   const double alpha = 1.0e-2;
   double mean_Ey = SATDATA_VEC_Y(data->E, 0);
@@ -192,7 +191,7 @@ print_data2(const int down_sample, const print_parameters *params,
       double lt, euvac;
       double qdlat, alon, alat;
 
-      apex_transform(theta, phi, data->r[i] * 1.0e3, &alon, &alat, &qdlat,
+      apex_transform(epoch, theta, phi, data->r[i], &alon, &alat, &qdlat,
                      NULL, NULL, NULL, apex_p);
 
       if (qdlat_prev * qdlat < 0.0 && fabs(qdlat) < 5.0)

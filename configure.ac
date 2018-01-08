@@ -18,8 +18,6 @@ AC_SUBST(DATAHOME)
 
 AC_CONFIG_FILES([            \
   Makefile                   \
-  apex/Makefile              \
-  apex/apex.h                \
   champ/Makefile             \
   cond/Makefile              \
   curvefit/Makefile          \

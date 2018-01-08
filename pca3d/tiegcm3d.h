@@ -24,9 +24,8 @@ typedef struct
   double *Jt;   /* J_t grid, nt-by-nr-by-nlon-by-nlat */
   double *Jp;   /* J_p grid, nt-by-nr-by-nlon-by-nlat */
 
-  double *workx; /* temporary B_x grid, nt_max-by-nlon-by-nlat */
-  double *worky; /* temporary B_y grid, nt_max-by-nlon-by-nlat */
-  double *workz; /* temporary B_z grid, nt_max-by-nlon-by-nlat */
+  double *work; /* temporary grid, nt-by-nr-nlon-by-nlat */
+
   size_t nt_max; /* maximum time snapshots in 1 TIEGCM file */
 
   size_t nt;    /* number of time snapshots stored */

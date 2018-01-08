@@ -16,18 +16,18 @@
 #include <satdata/satdata.h>
 #include <gsl/gsl_math.h>
 
+#include <apex/apex.h>
 #include <common/common.h>
 #include <msynth/msynth.h>
 
-#include "apex.h"
 #include "pomme.h"
 
 #include "track.h"
 
 /*
 track_synth_int()
-  Synthesize main and crustal fields along satellite track. Also
-computes QD latitudes.
+  Synthesize main and crustal fields along satellite track, with
+parallelized implementation
 
 Inputs: data           - satellite data output
         msynth_core_p  - msynth core workspace (degrees 1 to 15)
@@ -42,8 +42,6 @@ track_synth_int(satdata_mag *data, msynth_workspace *msynth_core_p, msynth_works
   const size_t max_threads = (size_t) omp_get_max_threads();
   msynth_workspace **crust_p = malloc(max_threads * sizeof(msynth_workspace *));
   msynth_workspace **core_p = malloc(max_threads * sizeof(msynth_workspace *));
-  int year = (int) satdata_epoch2year(data->t[0]);
-  apex_workspace *apex_p = apex_alloc(year);
 
   for (i = 0; i < max_threads; ++i)
     {
@@ -79,22 +77,6 @@ track_synth_int(satdata_mag *data, msynth_workspace *msynth_core_p, msynth_works
       SATDATA_VEC_Z(data->B_crust, i) = B_crust[2];
     }
 
-  /* now compute QD latitudes (apex_transform is not thread safe) */
-  for (i = 0; i < data->n; ++i)
-    {
-      double r = data->r[i];
-      double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
-      double phi = data->longitude[i] * M_PI / 180.0;
-      double alon, alat, qdlat;
-
-      /* compute QD latitude (apex_transform is not thread-safe) */
-      apex_transform(theta, phi, r * 1.0e3,
-                     &alon, &alat, &qdlat, NULL, NULL, NULL, apex_p);
-
-      /* store QD latitude */
-      data->qdlat[i] = qdlat;
-    }
-
   for (i = 0; i < max_threads; ++i)
     {
       msynth_free(core_p[i]);
@@ -103,6 +85,40 @@ track_synth_int(satdata_mag *data, msynth_workspace *msynth_core_p, msynth_works
 
   free(crust_p);
   free(core_p);
+
+  return s;
+}
+
+/*
+track_synth_QD()
+  Compute QD latitudes along track
+
+Inputs: data - (input/output) satellite data output
+*/
+
+int
+track_synth_QD(satdata_mag *data)
+{
+  int s = 0;
+  size_t i;
+  apex_workspace *apex_p = apex_alloc();
+
+  /* compute QD latitudes (apex_transform is not thread safe so we can't parallelize this loop) */
+  for (i = 0; i < data->n; ++i)
+    {
+      double tyr = satdata_epoch2year(data->t[i]);
+      double r = data->r[i];
+      double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
+      double phi = data->longitude[i] * M_PI / 180.0;
+      double alon, alat, qdlat;
+
+      /* compute QD latitude (apex_transform is not thread-safe) */
+      apex_transform(tyr, theta, phi, r, &alon, &alat, &qdlat, NULL, NULL, NULL, apex_p);
+
+      /* store QD latitude */
+      data->qdlat[i] = qdlat;
+    }
+
   apex_free(apex_p);
 
   return s;
@@ -125,7 +141,6 @@ track_synth_pomme(satdata_mag *data)
   size_t i, j;
   const size_t max_threads = (size_t) omp_get_max_threads();
   pomme_workspace **ext_p = malloc(max_threads * sizeof(pomme_workspace *));
-  size_t idx = 0; /* data_out index */
   estist_workspace *estist_workspace_p = estist_alloc(ESTIST_IDX_FILE);
 
   for (i = 0; i < max_threads; ++i)
@@ -139,8 +154,6 @@ track_synth_pomme(satdata_mag *data)
     {
       int thread_id = omp_get_thread_num();
       time_t t = satdata_epoch2timet(data->t[i]);
-      double tyr = satdata_epoch2year(data->t[i]);
-      double r = data->r[i];
       double theta = M_PI / 2.0 - data->latitude[i] * M_PI / 180.0;
       double phi = data->longitude[i] * M_PI / 180.0;
       double B_ext[4];
@@ -156,7 +169,7 @@ track_synth_pomme(satdata_mag *data)
       s = pomme_get_indices(0, t, &E_st, &I_st, &IMF_By, &Em, &f107, ext_p[thread_id]);
       if (s)
         {
-          fprintf(stderr, "track_synth_pomme: pomme_get_indices failed: %s\n", s);
+          fprintf(stderr, "track_synth_pomme: pomme_get_indices failed: %d\n", s);
           continue;
         }
 
@@ -166,7 +179,7 @@ track_synth_pomme(satdata_mag *data)
                                  E_st, I_st, IMF_By, Em, f107, B_ext, ext_p[thread_id]);
       if (s)
         {
-          fprintf(stderr, "track_synth_pomme: pomme_calc_ext_indices failed: %s\n", s);
+          fprintf(stderr, "track_synth_pomme: pomme_calc_ext_indices failed: %d\n", s);
           continue;
         }
 

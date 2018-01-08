@@ -26,7 +26,7 @@
 #include <gsl/gsl_sort.h>
 #include <gsl/gsl_sort_vector.h>
 
-#include "apex.h"
+#include <apex/apex.h>
 #include <common/bin.h>
 #include <common/bin2d.h>
 #include <common/bsearch.h>

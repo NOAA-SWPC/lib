@@ -10,8 +10,8 @@
 
 #include <gsl/gsl_math.h>
 #include <common/common.h>
+#include <apex/apex.h>
 
-#include "apex.h"
 #include "iri.h"
 
 int
@@ -27,7 +27,7 @@ map_fixed_alt(const char *filename, const time_t t, const double alt)
   FILE *fp;
   size_t i;
   apex_workspace *apex_p;
-  int year = (int) get_year(t);
+  const double epoch = get_year(t);
 
   fp = fopen(filename, "w");
   if (!fp)
@@ -37,7 +37,7 @@ map_fixed_alt(const char *filename, const time_t t, const double alt)
       return -1;
     }
 
-  apex_p = apex_alloc(year);
+  apex_p = apex_alloc();
 
   w = iri_alloc(nalt, F107_IDX_FILE);
   result = iri_get_result(0, w);
@@ -71,7 +71,7 @@ map_fixed_alt(const char *filename, const time_t t, const double alt)
           iri_calc(theta, phi, t, alt, 1.0, nalt, w);
 
           /* compute QD latitude */
-          apex_transform_geodetic(theta, phi, alt * 1.0e3, &alon, &alat, &qdlat,
+          apex_transform_geodetic(epoch, theta, phi, alt, &alon, &alat, &qdlat,
                                   NULL, NULL, NULL, apex_p);
 
           fprintf(fp, "%.3f %.3f %.3f %.3f %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e %.12e\n",
@@ -115,7 +115,7 @@ map_fixed_alt_qd(const char *filename, const time_t t, const double alt)
   FILE *fp;
   size_t i;
   apex_workspace *apex_p;
-  int year = (int) get_year(t);
+  const double epoch = get_year(t);
 
   fp = fopen(filename, "w");
   if (!fp)
@@ -125,7 +125,7 @@ map_fixed_alt_qd(const char *filename, const time_t t, const double alt)
       return -1;
     }
 
-  apex_p = apex_alloc(year);
+  apex_p = apex_alloc();
 
   w = iri_alloc(nalt, F107_IDX_FILE);
   result = iri_get_result(0, w);
@@ -154,7 +154,7 @@ map_fixed_alt_qd(const char *filename, const time_t t, const double alt)
           double theta;
           double glat, glon;
 
-          apex_transform_inv_geodetic(qdlat, lon, alt * 1.0e3,
+          apex_transform_inv_geodetic(epoch, qdlat, lon, alt,
                                       &glat, &glon, apex_p);
           theta = M_PI / 2.0 - glat;
 

@@ -742,7 +742,7 @@ mag_calc_field_models(const double t_eq, const size_t sidx, const size_t eidx,
 
       data->F_main[i] = gsl_hypot3(B_tot[0], B_tot[1], B_tot[2]);
 
-      apex_transform(theta, phi, r * 1.0e3, &alon, &alat, &qdlat,
+      apex_transform(tyr, theta, phi, r, &alon, &alat, &qdlat,
                      NULL, NULL, NULL, apex_p);
       data->qdlat[i] = qdlat;
     }

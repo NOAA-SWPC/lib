@@ -13,8 +13,8 @@
 #include <gsl/gsl_multifit.h>
 
 #include <msynth/msynth.h>
+#include <apex/apex.h>
 
-#include "apex.h"
 #include "estist_calc.h"
 #include "green.h"
 #include "log.h"

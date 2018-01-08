@@ -28,7 +28,8 @@
 #include <common/common.h>
 #include <common/geo.h>
 
-#include "apex.h"
+#include <apex/apex.h>
+
 #include "geod2geoc.h"
 #include "mag.h"
 #include "mageq.h"
@@ -63,6 +64,7 @@ mag_eej_alloc(const int year, const size_t ncurr,
   const size_t nlon = 360;
   const double dlon = (qdlon_max - qdlon_min) / (nlon - 1.0);
   const double dlat = (2.0 * qdlat_max) / (ncurr - 1.0);
+  const double epoch = (double) year;
   size_t j, k;
 
   w = calloc(1, sizeof(mag_eej_workspace));
@@ -78,7 +80,7 @@ mag_eej_alloc(const int year, const size_t ncurr,
   /* distance in km between arc currents */
   w->curr_dist_km = dlat * (40008.0) / 360.0;
 
-  w->apex_workspace_p = apex_alloc(year);
+  w->apex_workspace_p = apex_alloc();
   w->mageq_workspace_p = mageq_alloc();
 
   w->Jx = gsl_matrix_alloc(ncurr, nlon);
@@ -161,7 +163,7 @@ mag_eej_alloc(const int year, const size_t ncurr,
           double mid_pos[3]; /* ECEF Cartesian position of segment midpt */
 
           /* compute geodetic lon/lat of qd point */
-          apex_transform_inv_geodetic(qdlat, qdlon, w->qd_alt * 1.0e3,
+          apex_transform_inv_geodetic(epoch, qdlat, qdlon, w->qd_alt,
                                       &glat, &glon, w->apex_workspace_p);
 
           /* convert geodetic to geocentric spherical */
@@ -193,9 +195,9 @@ mag_eej_alloc(const int year, const size_t ncurr,
           w->mid_lon[k] = glon * 180.0 / M_PI;
 
           /* find geocentric coordinates of segment endpoints */
-          apex_transform_inv_geodetic(qdlat, qdlon1, w->qd_alt * 1.0e3,
+          apex_transform_inv_geodetic(epoch, qdlat, qdlon1, w->qd_alt,
                                       &glat1, &glon1, w->apex_workspace_p);
-          apex_transform_inv_geodetic(qdlat, qdlon2, w->qd_alt * 1.0e3,
+          apex_transform_inv_geodetic(epoch, qdlat, qdlon2, w->qd_alt,
                                       &glat2, &glon2, w->apex_workspace_p);
 
           /* convert geodetic to geocentric spherical */
@@ -454,10 +456,11 @@ mag_eej_vector_proc(mag_track *track, double *J, mag_eej_workspace *w)
 
   /* fill output current vector */
   {
+    double epoch = satdata_epoch2year(track->t_eq);
     double r = R_EARTH_KM + 110.0;
     double qdlat, alon, alat;
 
-    apex_transform(track->theta_eq, track->phi_eq, r * 1.0e3, &alon, &alat,
+    apex_transform(epoch, track->theta_eq, track->phi_eq, r, &alon, &alat,
                    &qdlat, NULL, NULL, NULL, w->apex_workspace_p);
 
     for (i = 0; i < w->p; ++i)
@@ -466,7 +469,7 @@ mag_eej_vector_proc(mag_track *track, double *J, mag_eej_workspace *w)
         double qdlat = -w->qdlat_max + i * w->dqdlat;
         double glat, glon, theta;
 
-        apex_transform_inv(qdlat, alon, 110.0 * 1.0e3, &glat, &glon, w->apex_workspace_p);
+        apex_transform_inv(epoch, qdlat, alon, 110.0, &glat, &glon, w->apex_workspace_p);
         theta = M_PI / 2.0 - glat;
 
         magfit_eval_J(R_EARTH_KM + 110.0, theta, 0.0, K, magfit_p);

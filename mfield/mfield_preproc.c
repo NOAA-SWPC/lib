@@ -28,6 +28,7 @@
 #include <omp.h>
 #include <libconfig.h>
 
+#include <apex/apex.h>
 #include <satdata/satdata.h>
 #include <flow/flow.h>
 #include <indices/indices.h>
@@ -43,7 +44,6 @@
 #include <common/solarpos.h>
 #include <msynth/msynth.h>
 
-#include "apex.h"
 #include "euler.h"
 #include "magdata.h"
 #include "magfit.h"
@@ -924,7 +924,7 @@ mfield_fill_polar_gap(const double polar_gap, preprocess_parameters * params)
   gsl_rng *rng_p = gsl_rng_alloc(gsl_rng_default);
   msynth_workspace *core_p = msynth_swarm_read(MSYNTH_CHAOS_FILE);
   msynth_workspace *crust_p = msynth_mf7_read(MSYNTH_MF7_FILE);
-  apex_workspace *apex_p = apex_alloc(2015);
+  apex_workspace *apex_p = apex_alloc();
 
   magdata_datum_init(&datum);
   msynth_set(1, 15, core_p);
@@ -979,9 +979,9 @@ mfield_fill_polar_gap(const double polar_gap, preprocess_parameters * params)
       datum.F = gsl_hypot3(datum.B_nec[0], datum.B_nec[1], datum.B_nec[2]);
       datum.F_ns = gsl_hypot3(datum.B_nec_ns[0], datum.B_nec_ns[1], datum.B_nec_ns[2]);
 
-      apex_transform(datum.theta, datum.phi, datum.r * 1.0e3, &alon, &alat,
+      apex_transform(epoch, datum.theta, datum.phi, datum.r, &alon, &alat,
                      &(datum.qdlat), NULL, NULL, NULL, apex_p);
-      apex_transform(datum.theta_ns, datum.phi_ns, datum.r_ns * 1.0e3, &alon, &alat,
+      apex_transform(epoch, datum.theta_ns, datum.phi_ns, datum.r_ns, &alon, &alat,
                      &(datum.qdlat_ns), NULL, NULL, NULL, apex_p);
 
       magdata_add(&datum, mdata);
@@ -1019,9 +1019,9 @@ mfield_fill_polar_gap(const double polar_gap, preprocess_parameters * params)
       datum.F = gsl_hypot3(datum.B_nec[0], datum.B_nec[1], datum.B_nec[2]);
       datum.F_ns = gsl_hypot3(datum.B_nec_ns[0], datum.B_nec_ns[1], datum.B_nec_ns[2]);
 
-      apex_transform(datum.theta, datum.phi, datum.r * 1.0e3, &alon, &alat,
+      apex_transform(epoch, datum.theta, datum.phi, datum.r, &alon, &alat,
                      &(datum.qdlat), NULL, NULL, NULL, apex_p);
-      apex_transform(datum.theta_ns, datum.phi_ns, datum.r_ns * 1.0e3, &alon, &alat,
+      apex_transform(epoch, datum.theta_ns, datum.phi_ns, datum.r_ns, &alon, &alat,
                      &(datum.qdlat_ns), NULL, NULL, NULL, apex_p);
 
       magdata_add(&datum, mdata);

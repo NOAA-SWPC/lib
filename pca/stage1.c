@@ -37,7 +37,8 @@
 #include <common/geo.h>
 #include <common/oct.h>
 
-#include "apex.h"
+#include <apex/apex.h>
+
 #include "green.h"
 #include "lapack_wrapper.h"
 #include "magdata.h"
@@ -290,6 +291,7 @@ print_matlab(const char *outdir, const size_t tidx,
 magdata *
 tiegcm_magdata(const size_t tidx, tiegcm_data *data)
 {
+  const double epoch = 2009.0;
   const size_t grid_size = data->nlon * data->nlat;
   magdata *mdata;
   magdata_datum datum;
@@ -300,7 +302,7 @@ tiegcm_magdata(const size_t tidx, tiegcm_data *data)
   if (!mdata)
     return 0;
 
-  apex_p = apex_alloc(2016);
+  apex_p = apex_alloc();
 
   magdata_datum_init(&datum);
 
@@ -329,7 +331,7 @@ tiegcm_magdata(const size_t tidx, tiegcm_data *data)
           r = R_EARTH_KM;
 #endif
 
-          apex_transform_geodetic(thetad, phi, 0.0, &alon, &alat, &qdlat,
+          apex_transform_geodetic(epoch, thetad, phi, 0.0, &alon, &alat, &qdlat,
                                   NULL, NULL, NULL, apex_p);
 
           datum.r = r;

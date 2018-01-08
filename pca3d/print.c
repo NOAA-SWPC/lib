@@ -21,6 +21,7 @@
 #include <gsl/gsl_math.h>
 
 #include <common/common.h>
+#include <common/bsearch.h>
 
 #include "tiegcm3d.h"
 
@@ -124,14 +125,68 @@ print_time(const char *filename, const tiegcm3d_data *data, const int ir, const 
   return s;
 }
 
+/*
+print_alt()
+  Print altitude/latitude map of Jr/Jt/Jp for fixed time and longitude
+
+Inputs: data - tiegcm data
+*/
+
+int
+print_alt(const char *filename, const tiegcm3d_data *data, const int it, const int ilon)
+{
+  int s = 0;
+  FILE *fp;
+  size_t i;
+  size_t ir, ilat;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "print_alt: unable to open %s: %s\n",
+              filename, strerror(errno));
+    }
+
+  i = 1;
+  fprintf(fp, "# Time: %ld (%.6f DOY)\n", data->t[it], data->doy[it] + data->ut[it] / 24.0);
+  fprintf(fp, "# Longitude: %.2f (deg)\n", data->glon[ilon]);
+  fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
+  fprintf(fp, "# Field %zu: radius (km)\n", i++);
+  fprintf(fp, "# Field %zu: J_r (A/m2)\n", i++);
+  fprintf(fp, "# Field %zu: J_t (A/m)\n", i++);
+  fprintf(fp, "# Field %zu: J_p (A/m)\n", i++);
+
+  for (ilat = 0; ilat < data->nlat; ++ilat)
+    {
+      for (ir = 0; ir < data->nr; ++ir)
+        {
+          size_t idx = TIEGCM3D_IDX(it, ir, ilat, ilon, data);
+
+          fprintf(fp, "%8.4f %8.4f %16.4e %16.4e %16.4e\n",
+                  data->glat[ilat],
+                  data->r[ir],
+                  data->Jr[idx],
+                  data->Jt[idx],
+                  data->Jp[idx]);
+        }
+
+      fprintf(fp, "\n");
+    }
+
+  fclose(fp);
+
+  return s;
+}
+
 int
 main(int argc, char *argv[])
 {
   tiegcm3d_data *data;
   struct timeval tv0, tv1;
   char *infile = NULL;
-  char *outfile = "data.txt";
+  char *outfile_map = "data_map.txt";
   char *outfile_time = "data_time.txt";
+  char *outfile_alt = "data_alt.txt";
   int time_idx = 0;
   double lon = 150.0; /* desired longitude */
   double lat = 8.0;   /* desired latitude */
@@ -166,7 +221,7 @@ main(int argc, char *argv[])
             break;
 
           case 'o':
-            outfile = optarg;
+            outfile_map = optarg;
             break;
 
           default:
@@ -203,12 +258,16 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: lat_idx = %d (%.2f [deg])\n", lat_idx, data->glat[lat_idx]);
   fprintf(stderr, "main: lon_idx = %d (%.2f [deg])\n", lon_idx, data->glon[lon_idx]);
 
-  fprintf(stderr, "main: writing grid data to %s (time idx = %d, r idx = %d)...", outfile, time_idx, r_idx);
-  print_data(outfile, data, time_idx, r_idx);
+  fprintf(stderr, "main: writing grid data to %s (time idx = %d, r idx = %d)...", outfile_map, time_idx, r_idx);
+  print_data(outfile_map, data, time_idx, r_idx);
   fprintf(stderr, "done\n");
 
   fprintf(stderr, "main: writing time series data to %s...", outfile_time);
   print_time(outfile_time, data, r_idx, lat_idx, lon_idx);
+  fprintf(stderr, "done\n");
+
+  fprintf(stderr, "main: writing altitude data to %s...", outfile_alt);
+  print_alt(outfile_alt, data, time_idx, lon_idx);
   fprintf(stderr, "done\n");
 
   tiegcm3d_free(data);
