@@ -9,14 +9,105 @@
 #include <math.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_matrix.h>
+#include <gsl/gsl_complex.h>
 
 #include "io.h"
 #include "tiegcm3d.h"
 
 static int matlab_dlmwrite_complex(FILE * fp, const gsl_matrix_complex * A);
+
+int
+pca3d_write_fft_data(const char *filename, const tiegcm3d_fft_data *data)
+{
+  FILE *fp;
+
+  fp = fopen(filename, "w");
+  if (!fp)
+    {
+      fprintf(stderr, "pca3d_write_fft_data: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return -1;
+    }
+
+  fwrite(&(data->nt), sizeof(size_t), 1, fp);
+  fwrite(&(data->nfreq), sizeof(size_t), 1, fp);
+  fwrite(&(data->nr), sizeof(size_t), 1, fp);
+  fwrite(&(data->nlat), sizeof(size_t), 1, fp);
+  fwrite(&(data->nlon), sizeof(size_t), 1, fp);
+  fwrite(&(data->T), sizeof(size_t), 1, fp);
+  fwrite(&(data->fs), sizeof(double), 1, fp);
+  fwrite(&(data->window_size), sizeof(double), 1, fp);
+  fwrite(&(data->window_shift), sizeof(double), 1, fp);
+  fwrite(&(data->nwindow), sizeof(size_t), 1, fp);
+  fwrite(data->t, sizeof(time_t), data->nt, fp);
+  fwrite(data->r, sizeof(double), data->nr, fp);
+  fwrite(data->glat, sizeof(double), data->nlat, fp);
+  fwrite(data->glon, sizeof(double), data->nlon, fp);
+  fwrite(data->Jr, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
+  fwrite(data->Jt, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
+  fwrite(data->Jp, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
+  fwrite(data->Qp, sizeof(gsl_complex), data->nfreq * data->nr * data->nlat * data->nlon, fp);
+  gsl_vector_fwrite(fp, data->window);
+
+  fclose(fp);
+
+  return 0;
+}
+
+tiegcm3d_fft_data
+pca3d_read_fft_data(const char *filename)
+{
+  tiegcm3d_fft_data data;
+  size_t nfreq, nr, nlat, nlon, T;
+  FILE *fp;
+
+  fp = fopen(filename, "r");
+  if (!fp)
+    {
+      fprintf(stderr, "pca3d_read_fft_data: unable to open %s: %s\n",
+              filename, strerror(errno));
+      return data;
+    }
+
+  fread(&(data.nt), sizeof(size_t), 1, fp);
+  fread(&(data.nfreq), sizeof(size_t), 1, fp);
+  fread(&(data.nr), sizeof(size_t), 1, fp);
+  fread(&(data.nlat), sizeof(size_t), 1, fp);
+  fread(&(data.nlon), sizeof(size_t), 1, fp);
+  fread(&(data.T), sizeof(size_t), 1, fp);
+  fread(&(data.fs), sizeof(double), 1, fp);
+  fread(&(data.window_size), sizeof(double), 1, fp);
+  fread(&(data.window_shift), sizeof(double), 1, fp);
+  fread(&(data.nwindow), sizeof(size_t), 1, fp);
+
+  data.t = malloc(data.nt * sizeof(time_t));
+  data.r = malloc(data.nr * sizeof(double));
+  data.glat = malloc(data.nlat * sizeof(double));
+  data.glon = malloc(data.nlon * sizeof(double));
+  data.Jr = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
+  data.Jt = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
+  data.Jp = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
+  data.Qp = malloc(data.nfreq * data.nr * data.nlat * data.nlon * sizeof(gsl_complex));
+  data.window = gsl_vector_alloc(data.nwindow);
+
+  fread(data.t, sizeof(time_t), data.nt, fp);
+  fread(data.r, sizeof(double), data.nr, fp);
+  fread(data.glat, sizeof(double), data.nlat, fp);
+  fread(data.glon, sizeof(double), data.nlon, fp);
+  fread(data.Jr, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
+  fread(data.Jt, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
+  fread(data.Jp, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
+  fread(data.Qp, sizeof(gsl_complex), data.nfreq * data.nr * data.nlat * data.nlon, fp);
+  gsl_vector_fread(fp, data.window);
+
+  fclose(fp);
+
+  return data;
+}
 
 int
 pca_write_data(const char *filename, const size_t nmax, const size_t mmax, const tiegcm3d_data *data)

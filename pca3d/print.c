@@ -52,9 +52,9 @@ print_data(const char *filename, const tiegcm3d_data *data, const int time_idx, 
   fprintf(fp, "# Radius: %.2f (km) [%.2f km altitude]\n", data->r[ir], data->r[ir] - 6371.2);
   fprintf(fp, "# Field %zu: longitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
-  fprintf(fp, "# Field %zu: J_r (A/m2)\n", i++);
-  fprintf(fp, "# Field %zu: J_t (A/m)\n", i++);
-  fprintf(fp, "# Field %zu: J_p (A/m)\n", i++);
+  fprintf(fp, "# Field %zu: J_r (uA/m^2)\n", i++);
+  fprintf(fp, "# Field %zu: J_t (uA/m^2)\n", i++);
+  fprintf(fp, "# Field %zu: J_p (uA/m^2)\n", i++);
 
   for (ilon = 0; ilon < data->nlon; ++ilon)
     {
@@ -105,9 +105,9 @@ print_time(const char *filename, const tiegcm3d_data *data, const int ir, const 
   fprintf(fp, "# Longitude: %.2f (deg)\n", data->glon[ilon]);
   fprintf(fp, "# Radius: %.2f (km) [%.2f km altitude]\n", data->r[ir], data->r[ir] - 6371.2);
   fprintf(fp, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", i++);
-  fprintf(fp, "# Field %zu: J_r (A/m2)\n", i++);
-  fprintf(fp, "# Field %zu: J_t (A/m)\n", i++);
-  fprintf(fp, "# Field %zu: J_p (A/m)\n", i++);
+  fprintf(fp, "# Field %zu: J_r (uA/m^2)\n", i++);
+  fprintf(fp, "# Field %zu: J_t (uA/m^2)\n", i++);
+  fprintf(fp, "# Field %zu: J_p (uA/m^2)\n", i++);
 
   for (it = 0; it < data->nt; ++it)
     {
@@ -152,9 +152,9 @@ print_alt(const char *filename, const tiegcm3d_data *data, const int it, const i
   fprintf(fp, "# Longitude: %.2f (deg)\n", data->glon[ilon]);
   fprintf(fp, "# Field %zu: latitude (degrees)\n", i++);
   fprintf(fp, "# Field %zu: radius (km)\n", i++);
-  fprintf(fp, "# Field %zu: J_r (A/m2)\n", i++);
-  fprintf(fp, "# Field %zu: J_t (A/m)\n", i++);
-  fprintf(fp, "# Field %zu: J_p (A/m)\n", i++);
+  fprintf(fp, "# Field %zu: J_r (uA/m^2)\n", i++);
+  fprintf(fp, "# Field %zu: J_t (uA/m^2)\n", i++);
+  fprintf(fp, "# Field %zu: J_p (uA/m^2)\n", i++);
 
   for (ilat = 0; ilat < data->nlat; ++ilat)
     {

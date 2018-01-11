@@ -1,0 +1,20 @@
+/*
+ * pca3d.h.in
+ *
+ * XXX URGENT XXX: do not edit pca.h directly. Edit pca.h.in instead
+ */
+
+#ifndef INCLUDED_pca3d_h
+#define INCLUDED_pca3d_h
+
+#include <gsl/gsl_math.h>
+#include <gsl/gsl_matrix.h>
+
+/* stage2a: FFT data file */
+#define PCA3D_STAGE2A_FFT_DATA         "@abs_top_builddir@/pca3d/data/stage2a_fft.dat"
+
+/*
+ * Prototypes
+ */
+
+#endif /* INCLUDED_pca3d_h */

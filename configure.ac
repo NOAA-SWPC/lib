@@ -53,6 +53,7 @@ AC_CONFIG_FILES([            \
   pca/Makefile               \
   pca/pca.h                  \
   pca3d/Makefile             \
+  pca3d/pca3d.h              \
   track/Makefile             \
 ])
 

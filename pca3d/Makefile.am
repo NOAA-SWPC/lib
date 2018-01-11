@@ -6,7 +6,13 @@ AM_CPPFLAGS = -I$(top_builddir)/green -I$(top_builddir)/magdata -I$(top_builddir
 
 common_libs = $(top_builddir)/curvefit/libcurvefit.la $(top_builddir)/pomme/libpomme.la $(top_builddir)/estist/libestist_calc.la -L/usr/lib64 -lsatdata -lindices ~/usr/lib/libgsl.a /home/palken/usr/lib/liblapacke.a /home/palken/usr/lib/liblapack.a -lptf77blas -lptcblas -latlas -lpthread /usr/lib64/libfftw3.so.3 -lgfortran -lnetcdf -lcdf
 
-bin_PROGRAMS = print
+bin_PROGRAMS = print print_fft stage2a
 
 print_SOURCES = print.c
-print_LDADD = libpca3d.la $(top_builddir)/green/libgreen.la -lcommon -lm -lgsl -lgslcblas -lnetcdf ${common_libs}
+print_LDADD = libpca3d.la -lcommon -lm -lgsl -lgslcblas -lnetcdf ${common_libs}
+
+print_fft_SOURCES = print_fft.c
+print_fft_LDADD = libpca3d.la -lcommon -lm -lgsl -lgslcblas -lnetcdf ${common_libs}
+
+stage2a_SOURCES = stage2a.c window.c
+stage2a_LDADD = libpca3d.la -lcommon -lm -lgsl -lgslcblas -lnetcdf ${common_libs}
