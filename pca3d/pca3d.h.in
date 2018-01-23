@@ -12,6 +12,11 @@
 
 /* stage2a: FFT data file */
 #define PCA3D_STAGE2A_FFT_DATA         "@abs_top_builddir@/pca3d/data/stage2a_fft.dat"
+#define PCA3D_STAGE2A_FFT_DATA_LIGHT   "@abs_top_builddir@/pca3d/data/stage2a_fft_light.dat"
+
+/* stage3a data files */
+#define PCA3D_STAGE3A_SVAL_TXT         "@abs_top_builddir@/pca3d/data/stage3a_sval_txt"
+#define PCA3D_STAGE3A_U                "@abs_top_builddir@/pca3d/data/stage3a_U"
 
 /*
  * Prototypes

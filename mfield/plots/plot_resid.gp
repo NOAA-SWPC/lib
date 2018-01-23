@@ -13,7 +13,7 @@ vbuffer = 0.8
 load 'multi_defs.cfg'
 load 'multi_png.cfg'
 
-satnum = '1'
+satnum = '0'
 iternum = '5'
 set out 'res'.satnum.'_iter'.iternum.'.png'
 

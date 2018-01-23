@@ -685,12 +685,14 @@ mfield_data_add_noise()
   For WMM simulation studies - add random Gaussian noise to vector
 data
 
-Inputs: sigma - standard deviation of noise (nT)
+Inputs: sigma - standard deviation of noise (nT);
+                if negative, not used
+        bias  - bias for vector components in VFM frame (nT)
         w     - workspace
 */
 
 int
-mfield_data_add_noise(const double sigma, mfield_data_workspace * w)
+mfield_data_add_noise(const double sigma, const double bias, mfield_data_workspace * w)
 {
   int s = 0;
   size_t i, j;
@@ -708,9 +710,16 @@ mfield_data_add_noise(const double sigma, mfield_data_workspace * w)
           /* if no vector measurement, do nothing */
           if (MAGDATA_ExistVector(mptr->flags[j]))
             {
-              mptr->Bx_vfm[j] += gsl_ran_gaussian(r, sigma);
-              mptr->By_vfm[j] += gsl_ran_gaussian(r, sigma);
-              mptr->Bz_vfm[j] += gsl_ran_gaussian(r, sigma);
+              if (sigma > 0.0)
+                {
+                  mptr->Bx_vfm[j] += gsl_ran_gaussian(r, sigma);
+                  mptr->By_vfm[j] += gsl_ran_gaussian(r, sigma);
+                  mptr->Bz_vfm[j] += gsl_ran_gaussian(r, sigma);
+                }
+
+              mptr->Bx_vfm[j] += bias;
+              mptr->By_vfm[j] += bias;
+              mptr->Bz_vfm[j] += bias;
 
               /* recompute scalar field measurement */
               mptr->F[j] = gsl_hypot3(mptr->Bx_vfm[j], mptr->By_vfm[j], mptr->Bz_vfm[j]);
@@ -718,7 +727,7 @@ mfield_data_add_noise(const double sigma, mfield_data_workspace * w)
           else if (MAGDATA_ExistScalar(mptr->flags[j]))
             {
               /* scalar only measurement (high latitudes) */
-              mptr->F[j] += gsl_ran_gaussian(r, sigma);
+              mptr->F[j] += bias + gsl_ran_gaussian(r, sigma);
             }
         }
     }

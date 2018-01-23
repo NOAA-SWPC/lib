@@ -8,6 +8,9 @@ load 'multi_default.cfg'
 plotheight = 1.5
 plotwidth = 5.5
 fontsize = ",10"
+r = -0.3
+l = 0.5
+hbuffer = 0.7
 
 load 'multi_defs.cfg'
 load 'multi_png.cfg'
@@ -15,6 +18,9 @@ load 'multi_png.cfg'
 outdir = 'output'
 file_time = 'window_time.txt'
 file_freq = 'window_freq.txt'
+
+load 'grid.cfg'
+load 'lines2.cfg'
 
 set point 1
 
@@ -33,9 +39,11 @@ set multiplot layout nrow,ncol
 load 'multi_reset.cfg'
 
 load 'xtimeon.cfg'
-set xtics 3600*8
 set key
 set ylabel "{/Symbol \155}A/m^2"
+
+# xtics every 24 hours
+set xtics 3600*24
 
 set title "J_r"
 plot file_time us 1:2 index idx w lp ti "Original data", \
@@ -57,7 +65,26 @@ plot file_time us 1:4 index idx w lp ti "Original data", \
 
 load 'inccolumn.cfg'
 
-plot file_freq us 
+load 'xtimeoff.cfg'
+set xtics auto
+set ylabel "Power ({/Symbol \155}A/m^2)"
+
+set title "Amplitude spectrum of J_r"
+plot file_freq us 2:3 index idx ls 3 w lp
+
+load 'incrow.cfg'
+
+set title "Amplitude spectrum of J_{/Symbol \161}"
+plot file_freq us 2:4 index idx ls 3 w lp
+
+load 'incrow.cfg'
+
+set xlabel "Period (days)"
+
+set title "Amplitude spectrum of J_{/Symbol \152}"
+plot file_freq us 2:5 index idx ls 3 w lp
+
+unset xlabel
 
 unset multiplot
 

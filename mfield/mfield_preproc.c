@@ -292,6 +292,9 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
     return 0;
 
   mdata->global_flags = magdata_flags;
+  
+  fprintf(stderr, "\n");
+  fprintf(stderr, "\t copy_data: copying tracks in magdata format...");
 
   /* copy tracks into mdata structure */
   for (i = 0; i < track_p->n; ++i)
@@ -308,7 +311,9 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
         magdata_copy_track_EW(&params, i, data, track_p, data2, track_p2, mdata, npts);
     }
 
-  fprintf(stderr, "ndata = %zu mdata_n = %zu, mdata_ntot = %zu\n", ndata, mdata->n, mdata->ntot);
+  fprintf(stderr, "done (ndata = %zu mdata_n = %zu, mdata_ntot = %zu)\n", ndata, mdata->n, mdata->ntot);
+
+  fprintf(stderr, "\t copy_data: flagging data for MF, Euler, etc...");
 
   /*
    * now determine which points in mdata will be used for
@@ -392,7 +397,8 @@ copy_data(const size_t magdata_flags, const satdata_mag *data, const track_works
       mdata->flags[i] |= fitting_flags;
     }
 
-  fprintf(stderr, "\n");
+  fprintf(stderr, "done\n");
+
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) scalar measurements available\n",
           npts[0], mdata->n, (double) npts[0] / (double) mdata->n * 100.0);
   fprintf(stderr, "\t copy_data: %zu/%zu (%.1f%%) vector measurements available\n",

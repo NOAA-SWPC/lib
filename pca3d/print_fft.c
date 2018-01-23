@@ -51,7 +51,6 @@ print_windows(const size_t ir, const size_t ilat, const size_t ilon, const tiegc
   const size_t nwindow = (size_t) (data->window_size * fs);   /* optimal number of samples per window */
   const size_t nforward = (size_t) (data->window_shift * fs); /* number of samples to slide forward */
   const size_t nfreq = nwindow / 2 + 1;                       /* FFT output buffer size (number of frequencies) */
-  gsl_vector *workp = gsl_vector_alloc(nwindow);
   size_t start_idx = 0;       /* starting time index */
   size_t t;
   FILE *fp_t, *fp_f;
@@ -60,6 +59,9 @@ print_windows(const size_t ir, const size_t ilat, const size_t ilon, const tiegc
   fp_f = fopen(file_freq, "w");
 
   t = 1;
+  fprintf(fp_t, "# Latitude:  %.2f [deg]\n", data->glat[ilat]);
+  fprintf(fp_t, "# Longitude: %.2f [deg]\n", data->glon[ilon]);
+  fprintf(fp_t, "# Altitude:  %.2f [km]\n", data->r[ir] - R_EARTH_KM);
   fprintf(fp_t, "# Field %zu: timestamp (UT seconds since 1970-01-01 00:00:00 UTC)\n", t++);
   fprintf(fp_t, "# Field %zu: J_r (uA/m^2)\n", t++);
   fprintf(fp_t, "# Field %zu: J_t (uA/m^2)\n", t++);
@@ -71,30 +73,23 @@ print_windows(const size_t ir, const size_t ilat, const size_t ilon, const tiegc
   t = 1;
   fprintf(fp_f, "# Field %zu: frequency (days^{-1})\n", t++);
   fprintf(fp_f, "# Field %zu: period (days)\n", t++);
-  fprintf(fp_f, "# Field %zu: power\n", t++);
+  fprintf(fp_f, "# Field %zu: Power in J_r (uA/m^2)\n", t++);
+  fprintf(fp_f, "# Field %zu: Power in J_t (uA/m^2)\n", t++);
+  fprintf(fp_f, "# Field %zu: Power in J_p (uA/m^2)\n", t++);
 
   for (t = 0; t < T; ++t)
     {
       size_t end_idx = GSL_MIN(start_idx + nwindow - 1, nt - 1);
       size_t n = end_idx - start_idx + 1; /* size of actual window */
-      double sqrtn = sqrt((double) n);
       size_t it, ifreq;
 
       assert(start_idx < end_idx);
-
-      if (n < nwindow)
-        {
-          /* could happen at the end of the time series; zero pad input buffer */
-          gsl_vector_set_zero(workp);
-        }
 
       /* print original and windowed J data for this time window */
       for (it = start_idx; it <= end_idx; ++it)
         {
           size_t idx = TIEGCM3D_IDX(it, ir, ilat, ilon, data);
           double wi = gsl_vector_get(data->window, it - start_idx);
-
-          gsl_vector_set(workp, it - start_idx, data->Jp[idx]);
 
           fprintf(fp_t, "%ld %13.6e %13.6e %13.6e %13.6e %13.6e %13.6e\n",
                  data->t[it],
@@ -108,16 +103,20 @@ print_windows(const size_t ir, const size_t ilat, const size_t ilon, const tiegc
 
       for (ifreq = 0; ifreq < nfreq; ++ifreq)
         {
-          size_t idx = TIEGCM3D_FREQIDX(ifreq, ir, ilat, ilon, data, nfreq);
+          size_t idx = TIEGCM3D_FREQIDX(t, ifreq, ir, ilat, ilon, data, T, nfreq);
+          gsl_complex Qr = data->Qr[idx];
+          gsl_complex Qt = data->Qt[idx];
           gsl_complex Qp = data->Qp[idx];
           double freq = ifreq * (fs / n);
           double period = 1.0 / freq;
-          double power = gsl_complex_abs2(Qp);
+          double fac = (ifreq == 0) ? 1.0 : 2.0;
 
-          fprintf(fp_f, "%f %f %.12e\n",
+          fprintf(fp_f, "%f %f %.12e %.12e %.12e\n",
                   freq,
                   period,
-                  power);
+                  fac * gsl_complex_abs(Qr),
+                  fac * gsl_complex_abs(Qt),
+                  fac * gsl_complex_abs(Qp));
         }
 
       if (t != T - 1)
@@ -125,25 +124,6 @@ print_windows(const size_t ir, const size_t ilat, const size_t ilon, const tiegc
           fprintf(fp_t, "\n\n");
           fprintf(fp_f, "\n\n");
         }
-
-#if 0
-      /* store FFT result in Q grids */
-      for (ifreq = 0; ifreq < nfreq; ++ifreq)
-        {
-          size_t idx = TIEGCM3D_FREQIDX(ifreq, ir, ilat, ilon, data, nfreq);
-          gsl_complex z = gsl_complex_rect(fft_out[ifreq][0] / sqrtn, fft_out[ifreq][1] / sqrtn);
-          double freq = ifreq * (fs / n);
-          double period = 1.0 / freq;
-          double power = gsl_complex_abs2(z);
-
-#if 0
-          printf("%f %f %.12e\n", freq, period, power);
-#endif
-        }
-#if 0
-      printf("\n\n");
-#endif
-#endif
 
       start_idx += nforward;
     }

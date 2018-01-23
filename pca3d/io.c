@@ -20,8 +20,18 @@
 
 static int matlab_dlmwrite_complex(FILE * fp, const gsl_matrix_complex * A);
 
+/*
+pca3d_write_fft_data()
+  Write FFT data to file
+
+Inputs: filename - output file
+        data     - data to write
+        light    - if 1, only metadata (grid positions, sizes etc) are written,
+                   not the current or FFT grids themselves; if 0, everything is written
+*/
+
 int
-pca3d_write_fft_data(const char *filename, const tiegcm3d_fft_data *data)
+pca3d_write_fft_data(const char *filename, const tiegcm3d_fft_data *data, const int light)
 {
   FILE *fp;
 
@@ -33,6 +43,7 @@ pca3d_write_fft_data(const char *filename, const tiegcm3d_fft_data *data)
       return -1;
     }
 
+  fwrite(&light, sizeof(int), 1, fp);
   fwrite(&(data->nt), sizeof(size_t), 1, fp);
   fwrite(&(data->nfreq), sizeof(size_t), 1, fp);
   fwrite(&(data->nr), sizeof(size_t), 1, fp);
@@ -47,11 +58,17 @@ pca3d_write_fft_data(const char *filename, const tiegcm3d_fft_data *data)
   fwrite(data->r, sizeof(double), data->nr, fp);
   fwrite(data->glat, sizeof(double), data->nlat, fp);
   fwrite(data->glon, sizeof(double), data->nlon, fp);
-  fwrite(data->Jr, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
-  fwrite(data->Jt, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
-  fwrite(data->Jp, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
-  fwrite(data->Qp, sizeof(gsl_complex), data->nfreq * data->nr * data->nlat * data->nlon, fp);
   gsl_vector_fwrite(fp, data->window);
+
+  if (!light)
+    {
+      fwrite(data->Jr, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
+      fwrite(data->Jt, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
+      fwrite(data->Jp, sizeof(double), data->nt * data->nr * data->nlat * data->nlon, fp);
+      fwrite(data->Qr, sizeof(gsl_complex), data->T * data->nfreq * data->nr * data->nlat * data->nlon, fp);
+      fwrite(data->Qt, sizeof(gsl_complex), data->T * data->nfreq * data->nr * data->nlat * data->nlon, fp);
+      fwrite(data->Qp, sizeof(gsl_complex), data->T * data->nfreq * data->nr * data->nlat * data->nlon, fp);
+    }
 
   fclose(fp);
 
@@ -62,7 +79,7 @@ tiegcm3d_fft_data
 pca3d_read_fft_data(const char *filename)
 {
   tiegcm3d_fft_data data;
-  size_t nfreq, nr, nlat, nlon, T;
+  int light;
   FILE *fp;
 
   fp = fopen(filename, "r");
@@ -73,6 +90,7 @@ pca3d_read_fft_data(const char *filename)
       return data;
     }
 
+  fread(&light, sizeof(int), 1, fp);
   fread(&(data.nt), sizeof(size_t), 1, fp);
   fread(&(data.nfreq), sizeof(size_t), 1, fp);
   fread(&(data.nr), sizeof(size_t), 1, fp);
@@ -88,21 +106,33 @@ pca3d_read_fft_data(const char *filename)
   data.r = malloc(data.nr * sizeof(double));
   data.glat = malloc(data.nlat * sizeof(double));
   data.glon = malloc(data.nlon * sizeof(double));
-  data.Jr = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
-  data.Jt = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
-  data.Jp = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
-  data.Qp = malloc(data.nfreq * data.nr * data.nlat * data.nlon * sizeof(gsl_complex));
   data.window = gsl_vector_alloc(data.nwindow);
+
+  if (!light)
+    {
+      data.Jr = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
+      data.Jt = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
+      data.Jp = malloc(data.nt * data.nr * data.nlat * data.nlon * sizeof(double));
+      data.Qr = malloc(data.T * data.nfreq * data.nr * data.nlat * data.nlon * sizeof(gsl_complex));
+      data.Qt = malloc(data.T * data.nfreq * data.nr * data.nlat * data.nlon * sizeof(gsl_complex));
+      data.Qp = malloc(data.T * data.nfreq * data.nr * data.nlat * data.nlon * sizeof(gsl_complex));
+    }
 
   fread(data.t, sizeof(time_t), data.nt, fp);
   fread(data.r, sizeof(double), data.nr, fp);
   fread(data.glat, sizeof(double), data.nlat, fp);
   fread(data.glon, sizeof(double), data.nlon, fp);
-  fread(data.Jr, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
-  fread(data.Jt, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
-  fread(data.Jp, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
-  fread(data.Qp, sizeof(gsl_complex), data.nfreq * data.nr * data.nlat * data.nlon, fp);
   gsl_vector_fread(fp, data.window);
+
+  if (!light)
+    {
+      fread(data.Jr, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
+      fread(data.Jt, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
+      fread(data.Jp, sizeof(double), data.nt * data.nr * data.nlat * data.nlon, fp);
+      fread(data.Qr, sizeof(gsl_complex), data.T * data.nfreq * data.nr * data.nlat * data.nlon, fp);
+      fread(data.Qt, sizeof(gsl_complex), data.T * data.nfreq * data.nr * data.nlat * data.nlon, fp);
+      fread(data.Qp, sizeof(gsl_complex), data.T * data.nfreq * data.nr * data.nlat * data.nlon, fp);
+    }
 
   fclose(fp);
 
@@ -258,7 +288,7 @@ pca_read_matrix(const char *filename)
 }
 
 int
-pca_write_matrix_complex(const char *filename, const gsl_matrix_complex * m)
+pca3d_write_matrix_complex(const char *filename, const gsl_matrix_complex * m)
 {
   int s;
   FILE *fp;
@@ -266,7 +296,7 @@ pca_write_matrix_complex(const char *filename, const gsl_matrix_complex * m)
   fp = fopen(filename, "w");
   if (!fp)
     {
-      fprintf(stderr, "pca_write_matrix: unable to open %s: %s\n",
+      fprintf(stderr, "pca3d_write_matrix_complex: unable to open %s: %s\n",
               filename, strerror(errno));
       return -1;
     }
@@ -281,7 +311,7 @@ pca_write_matrix_complex(const char *filename, const gsl_matrix_complex * m)
 }
 
 gsl_matrix_complex *
-pca_read_matrix_complex(const char *filename)
+pca3d_read_matrix_complex(const char *filename)
 {
   FILE *fp;
   gsl_matrix_complex *m;
@@ -290,7 +320,7 @@ pca_read_matrix_complex(const char *filename)
   fp = fopen(filename, "r");
   if (!fp)
     {
-      fprintf(stderr, "pca_read_matrix_complex: unable to open %s: %s\n",
+      fprintf(stderr, "pca3d_read_matrix_complex: unable to open %s: %s\n",
               filename, strerror(errno));
       return NULL;
     }
@@ -308,9 +338,9 @@ pca_read_matrix_complex(const char *filename)
 }
 
 int
-pca_write_S(const char *filename, const size_t nmax, const size_t mmax,
-            const double freq_cpd, const double window_size,
-            const double window_shift, const gsl_vector *S)
+pca3d_write_S(const char *filename, const size_t nmax, const size_t mmax,
+              const double freq_cpd, const double window_size,
+              const double window_shift, const gsl_vector *S)
 {
   int s = 0;
   FILE *fp;
@@ -318,7 +348,7 @@ pca_write_S(const char *filename, const size_t nmax, const size_t mmax,
   fp = fopen(filename, "w");
   if (!fp)
     {
-      fprintf(stderr, "pca_write_S: unable to open %s: %s\n",
+      fprintf(stderr, "pca3d_write_S: unable to open %s: %s\n",
               filename, strerror(errno));
       return -1;
     }

@@ -1334,6 +1334,7 @@ main(int argc, char *argv[])
   double lambda_sv = -1.0;    /* SV damping parameter */
   double lambda_sa = -1.0;    /* SA damping parameter */
   double sigma = -1.0;        /* sigma for artificial noise */
+  double bias = 0.0;          /* bias for artificial noise */
   struct timeval tv0, tv1;
   char buf[MAX_BUFFER];
 
@@ -1361,10 +1362,11 @@ main(int argc, char *argv[])
           { "lambda_sa", required_argument, NULL, 'a' },
           { "lambda_sv", required_argument, NULL, 'v' },
           { "sigma", required_argument, NULL, 'S' },
+          { "bias", required_argument, NULL, 'B' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "a:b:c:C:de:l:mn:o:p:rv:S:", long_options, &option_index);
+      c = getopt_long(argc, argv, "a:b:B:c:C:de:l:mn:o:p:rv:S:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -1420,6 +1422,10 @@ main(int argc, char *argv[])
 
           case 'l':
             Lfile = optarg;
+            break;
+
+          case 'B':
+            bias = atof(optarg);
             break;
 
           case 'S':
@@ -1540,10 +1546,10 @@ main(int argc, char *argv[])
     fprintf(stderr, "done (%zu data flagged)\n", nflag);
   }
 
-  if (sigma > 0.0)
+  if (bias > 0.0 || sigma > 0.0)
     {
-      fprintf(stderr, "main: adding noise (sigma = %.1f [nT])...", sigma);
-      mfield_data_add_noise(sigma, mfield_data_p);
+      fprintf(stderr, "main: adding noise (sigma = %.1f [nT], bias = %.1f [nT])...", sigma, bias);
+      mfield_data_add_noise(sigma, bias, mfield_data_p);
       fprintf(stderr, "done\n");
     }
 

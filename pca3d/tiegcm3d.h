@@ -13,10 +13,10 @@
 #include <gsl/gsl_complex.h>
 
 /* time domain grid index function */
-#define TIEGCM3D_IDX(it,ir,ilat,ilon,data)               (CIDX4((it),(data->nt),(ir),(data->nr),(ilon),(data->nlon),(ilat),(data->nlat)))
+#define TIEGCM3D_IDX(it,ir,ilat,ilon,data)                    (CIDX4((it),(data->nt),(ir),(data->nr),(ilon),(data->nlon),(ilat),(data->nlat)))
 
 /* frequency domain grid index function */
-#define TIEGCM3D_FREQIDX(ifreq,ir,ilat,ilon,data,nfreq)  (CIDX4((ifreq),(nfreq),(ir),(data->nr),(ilon),(data->nlon),(ilat),(data->nlat)))
+#define TIEGCM3D_FREQIDX(it,ifreq,ir,ilat,ilon,data,T,nfreq)  (CIDX5((it),(T),(ifreq),(nfreq),(ir),(data->nr),(ilon),(data->nlon),(ilat),(data->nlat)))
 
 typedef struct
 {
@@ -63,6 +63,8 @@ typedef struct
   double *Jr;      /* J_r grid, nt-by-nr-by-nlon-by-nlat */
   double *Jt;      /* J_t grid, nt-by-nr-by-nlon-by-nlat */
   double *Jp;      /* J_p grid, nt-by-nr-by-nlon-by-nlat */
+  gsl_complex *Qr; /* J_r transform grid, nfreq-by-nr-by-nlat-by-nlon */
+  gsl_complex *Qt; /* J_theta transform grid, nfreq-by-nr-by-nlat-by-nlon */
   gsl_complex *Qp; /* J_phi transform grid, nfreq-by-nr-by-nlat-by-nlon */
 } tiegcm3d_fft_data;
 
@@ -71,6 +73,9 @@ tiegcm3d_data *tiegcm3d_alloc(const size_t nt, const size_t nr, const size_t nlo
 tiegcm3d_data *tiegcm3d_realloc(const size_t nt, const size_t nr, const size_t nlon, const size_t nlat,
                                 tiegcm3d_data *data);
 void tiegcm3d_free(tiegcm3d_data *data);
+
+/* tiegcm3d_print.c */
+int tiegcm3d_print_time(const char *filename, const tiegcm3d_data *data, const int ir, const int ilat, const int ilon);
 
 /* tiegcm3d_read.c */
 tiegcm3d_data *tiegcm3d_read(const char *filename, tiegcm3d_data *data);

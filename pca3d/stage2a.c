@@ -14,6 +14,7 @@
 #include <getopt.h>
 #include <sys/time.h>
 #include <assert.h>
+#include <omp.h>
 
 #include <fftw3.h>
 
@@ -25,6 +26,7 @@
 
 #include <common/common.h>
 
+#include "io.h"
 #include "pca3d.h"
 #include "tiegcm3d.h"
 #include "window.h"
@@ -49,18 +51,15 @@ static size_t
 count_windows(const size_t nsamples, const double fs,
               const double window_size, const double window_shift)
 {
-  size_t T = 0;                                   /* number of windows */
-  size_t start_idx = 0;
-  size_t nforward = (size_t) (window_shift * fs); /* number of samples to slide forward */
-  int done = 0;
+  const size_t nwindow = (size_t) (window_size * fs);   /* number of samples per window */
+  const size_t nforward = (size_t) (window_shift * fs); /* number of samples to slide forward */
+  size_t T = 0;                                         /* number of windows */
+  size_t end_idx = nwindow - 1;                         /* first window contains samples [0, nwindow - 1] */
 
-  while (!done)
+  while (end_idx < nsamples)
     {
       ++T;
-
-      start_idx += nforward;
-      if (start_idx >= nsamples)
-        done = 1;
+      end_idx += nforward;
     }
 
   return T;
@@ -70,35 +69,63 @@ count_windows(const size_t nsamples, const double fs,
 do_transforms()
   Perform FFTs on each time window segment for all grid points in TIEGCM grid
 
-Inputs: data_file    - output data file for FFT grids
-        fs           - sampling frequency (samples/day)
+Inputs: fs           - sampling frequency (samples/day)
         window_size  - number of days in each time window
         window_shift - how many days to advance window
         data         - TIEGCM data
 */
 
 static int
-do_transforms(const char *data_file, const double fs, const double window_size, const double window_shift,
+do_transforms(const double fs, const double window_size, const double window_shift,
               const tiegcm3d_data * data)
 {
   int s = 0;
   const size_t nt = data->nt;
-  size_t ir, ilat, ilon;
-  size_t nwindow = (size_t) (window_size * fs);   /* optimal number of samples per window */
-  size_t nforward = (size_t) (window_shift * fs); /* number of samples to slide forward */
-  size_t nfreq = nwindow / 2 + 1;
-  size_t T;                                       /* number of time windows */
-  gsl_vector *work = gsl_vector_alloc(nwindow);
-  gsl_vector *window = gsl_vector_alloc(nwindow);
-  fftw_complex *fft_out = fftw_malloc(sizeof(fftw_complex) * nfreq);
-  fftw_plan plan;
+  const size_t nwindow = (size_t) (window_size * fs);                /* optimal number of samples per window */
+  const size_t nforward = (size_t) (window_shift * fs);              /* number of samples to slide forward */
+  const size_t nfreq = nwindow / 2 + 1;                              /* number of frequencies computed by FFT */
+  const size_t T = count_windows(nt, fs, window_size, window_shift); /* number of time windows */
+  const int max_threads = omp_get_max_threads();
+  gsl_vector *window = gsl_vector_alloc(nwindow);                    /* window function */
+
+  /* thread specific variables */
+  gsl_vector **workr = malloc(max_threads * sizeof(gsl_vector *));
+  gsl_vector **workt = malloc(max_threads * sizeof(gsl_vector *));
+  gsl_vector **workp = malloc(max_threads * sizeof(gsl_vector *));
+  fftw_complex **fft_r = malloc(max_threads * sizeof(fftw_complex *));
+  fftw_complex **fft_t = malloc(max_threads * sizeof(fftw_complex *));
+  fftw_complex **fft_p = malloc(max_threads * sizeof(fftw_complex *));
+  fftw_plan *plan_r = malloc(max_threads * sizeof(fftw_plan));
+  fftw_plan *plan_t = malloc(max_threads * sizeof(fftw_plan));
+  fftw_plan *plan_p = malloc(max_threads * sizeof(fftw_plan));
+
   struct timeval tv0, tv1;
+  gsl_complex *Qr; /* FT'd Jr grid, nfreq-by-nr-by-nlat-by-nlon */
+  gsl_complex *Qt; /* FT'd Jt grid, nfreq-by-nr-by-nlat-by-nlon */
   gsl_complex *Qp; /* FT'd Jp grid, nfreq-by-nr-by-nlat-by-nlon */
   tiegcm3d_fft_data fft_data;
+  size_t ir;
+  int i;
 
-  Qp = malloc(nfreq * data->nr * data->nlat * data->nlon * sizeof(gsl_complex));
+  /* allocate thread variables */
+  for (i = 0; i < max_threads; ++i)
+    {
+      workr[i] = gsl_vector_alloc(nwindow);
+      workt[i] = gsl_vector_alloc(nwindow);
+      workp[i] = gsl_vector_alloc(nwindow);
 
-  T = count_windows(nt, fs, window_size, window_shift);
+      fft_r[i] = fftw_malloc(sizeof(fftw_complex) * nfreq);
+      fft_t[i] = fftw_malloc(sizeof(fftw_complex) * nfreq);
+      fft_p[i] = fftw_malloc(sizeof(fftw_complex) * nfreq);
+
+      plan_r[i] = fftw_plan_dft_r2c_1d(nwindow, workr[i]->data, fft_r[i], FFTW_ESTIMATE);
+      plan_t[i] = fftw_plan_dft_r2c_1d(nwindow, workt[i]->data, fft_t[i], FFTW_ESTIMATE);
+      plan_p[i] = fftw_plan_dft_r2c_1d(nwindow, workp[i]->data, fft_p[i], FFTW_ESTIMATE);
+    }
+
+  Qr = malloc(T * nfreq * data->nr * data->nlat * data->nlon * sizeof(gsl_complex));
+  Qt = malloc(T * nfreq * data->nr * data->nlat * data->nlon * sizeof(gsl_complex));
+  Qp = malloc(T * nfreq * data->nr * data->nlat * data->nlon * sizeof(gsl_complex));
 
   fprintf(stderr, "do_transforms: samples per window   = %zu\n", nwindow);
   fprintf(stderr, "do_transforms: sample slide forward = %zu\n", nforward);
@@ -107,8 +134,8 @@ do_transforms(const char *data_file, const double fs, const double window_size, 
   fprintf(stderr, "do_transforms: window segments (T)  = %zu\n", T);
 
   /* compute window function */
-  /*apply_ps1(NULL, window);*/
-  apply_hamming(NULL, window);
+  apply_ps1(NULL, window);
+  /*apply_hamming(NULL, window);*/
 
   fft_data.nt = data->nt;
   fft_data.nfreq = nfreq;
@@ -128,15 +155,19 @@ do_transforms(const char *data_file, const double fs, const double window_size, 
   fft_data.Jr = data->Jr;
   fft_data.Jt = data->Jt;
   fft_data.Jp = data->Jp;
+  fft_data.Qr = Qr;
+  fft_data.Qt = Qt;
   fft_data.Qp = Qp;
-
-  plan = fftw_plan_dft_r2c_1d(nwindow, work->data, fft_out, FFTW_ESTIMATE);
 
   fprintf(stderr, "do_transforms: computing FFTs of windowed data...");
   gettimeofday(&tv0, NULL);
 
+#pragma omp parallel for private(ir)
   for (ir = 0; ir < data->nr; ++ir)
     {
+      int thread_id = omp_get_thread_num();
+      size_t ilat, ilon;
+
       for (ilat = 0; ilat < data->nlat; ++ilat)
         {
           for (ilon = 0; ilon < data->nlon; ++ilon)
@@ -156,59 +187,43 @@ do_transforms(const char *data_file, const double fs, const double window_size, 
                   if (n < nwindow)
                     {
                       /* could happen at the end of the time series; zero pad input buffer */
-                      gsl_vector_set_zero(work);
+                      gsl_vector_set_zero(workr[thread_id]);
+                      gsl_vector_set_zero(workt[thread_id]);
+                      gsl_vector_set_zero(workp[thread_id]);
                     }
 
-                  /* copy current time window into work array */
+                  /* copy current time window into work arrays */
                   for (it = start_idx; it <= end_idx; ++it)
                     {
                       size_t idx = TIEGCM3D_IDX(it, ir, ilat, ilon, data);
-                      double Jp = data->Jp[idx];
 
-                      gsl_vector_set(work, it - start_idx, Jp);
+                      gsl_vector_set(workr[thread_id], it - start_idx, data->Jr[idx]);
+                      gsl_vector_set(workt[thread_id], it - start_idx, data->Jt[idx]);
+                      gsl_vector_set(workp[thread_id], it - start_idx, data->Jp[idx]);
                     }
 
                   /* apply window function */
-                  gsl_vector_mul(work, window);
-
-#if 0
-                  for (it = 0; it < n; ++it)
-                    {
-                      size_t idx = TIEGCM3D_IDX(it + start_idx, ir, ilat, ilon, data);
-                      printf("%ld %.12e %.12e\n",
-                             data->t[it + start_idx],
-                             data->Jp[idx],
-                             gsl_vector_get(work, it));
-                    }
-                  printf("\n\n");
-#endif
+                  gsl_vector_mul(workr[thread_id], window);
+                  gsl_vector_mul(workt[thread_id], window);
+                  gsl_vector_mul(workp[thread_id], window);
 
                   /* compute FFT of this windowed data */
-                  fftw_execute(plan);
+                  fftw_execute(plan_r[thread_id]);
+                  fftw_execute(plan_t[thread_id]);
+                  fftw_execute(plan_p[thread_id]);
 
                   /* store FFT result in Q grids */
                   for (ifreq = 0; ifreq < nfreq; ++ifreq)
                     {
-                      size_t idx = TIEGCM3D_FREQIDX(ifreq, ir, ilat, ilon, data, nfreq);
-                      gsl_complex z = gsl_complex_rect(fft_out[ifreq][0] / sqrtn, fft_out[ifreq][1] / sqrtn);
-                      double freq = ifreq * (fs / n);
-                      double period = 1.0 / freq;
-                      double power = gsl_complex_abs2(z);
-                      Qp[idx] = z;
+                      size_t idx = TIEGCM3D_FREQIDX(t, ifreq, ir, ilat, ilon, data, T, nfreq);
 
-#if 1
-                      printf("%f %f %.12e\n", freq, period, power);
-#endif
+                      Qr[idx] = gsl_complex_rect(fft_r[thread_id][ifreq][0] / sqrtn, fft_r[thread_id][ifreq][1] / sqrtn);
+                      Qt[idx] = gsl_complex_rect(fft_t[thread_id][ifreq][0] / sqrtn, fft_t[thread_id][ifreq][1] / sqrtn);
+                      Qp[idx] = gsl_complex_rect(fft_p[thread_id][ifreq][0] / sqrtn, fft_p[thread_id][ifreq][1] / sqrtn);
                     }
-#if 1
-                  printf("\n\n");
-#endif
 
                   start_idx += nforward;
                 }
-#if 1
-              exit(1);
-#endif
             }
         }
     }
@@ -216,15 +231,42 @@ do_transforms(const char *data_file, const double fs, const double window_size, 
   gettimeofday(&tv1, NULL);
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
-  fprintf(stderr, "do_transforms: writing FFT grids to %s...", data_file);
-  pca3d_write_fft_data(data_file, &fft_data);
+  fprintf(stderr, "do_transforms: writing FFT grids to %s...", PCA3D_STAGE2A_FFT_DATA);
+  pca3d_write_fft_data(PCA3D_STAGE2A_FFT_DATA, &fft_data, 0);
   fprintf(stderr, "done\n");
 
-  free(Qp);
-  fftw_free(fft_out);
-  gsl_vector_free(work);
+  fprintf(stderr, "do_transforms: writing FFT metadata to %s...", PCA3D_STAGE2A_FFT_DATA_LIGHT);
+  pca3d_write_fft_data(PCA3D_STAGE2A_FFT_DATA_LIGHT, &fft_data, 1);
+  fprintf(stderr, "done\n");
+
+  for (i = 0; i < max_threads; ++i)
+    {
+      gsl_vector_free(workr[i]);
+      gsl_vector_free(workt[i]);
+      gsl_vector_free(workp[i]);
+
+      fftw_free(fft_r[i]);
+      fftw_free(fft_t[i]);
+      fftw_free(fft_p[i]);
+
+      fftw_destroy_plan(plan_r[i]);
+      fftw_destroy_plan(plan_t[i]);
+      fftw_destroy_plan(plan_p[i]);
+    }
+
   gsl_vector_free(window);
-  fftw_destroy_plan(plan);
+  free(Qr);
+  free(Qt);
+  free(Qp);
+  free(workr);
+  free(workt);
+  free(workp);
+  free(fft_r);
+  free(fft_t);
+  free(fft_p);
+  free(plan_r);
+  free(plan_t);
+  free(plan_p);
 
   fftw_cleanup();
 
@@ -234,7 +276,6 @@ do_transforms(const char *data_file, const double fs, const double window_size, 
 int
 main(int argc, char *argv[])
 {
-  const char *fft_data_file = PCA3D_STAGE2A_FFT_DATA;
   const double fs = 24.0;    /* sample frequency (samples/day) */
   char *infile = NULL;
   double window_size = 2.0;  /* number of days in each time segment */
@@ -251,7 +292,7 @@ main(int argc, char *argv[])
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "i:t:", long_options, &option_index);
+      c = getopt_long(argc, argv, "i:t:s:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -265,15 +306,19 @@ main(int argc, char *argv[])
             window_size = atof(optarg);
             break;
 
+          case 's':
+            window_shift = atof(optarg);
+            break;
+
           default:
-            fprintf(stderr, "Usage: %s <-i tiegcm3d_nc_file> [-t window_size (days)]\n", argv[0]);
+            fprintf(stderr, "Usage: %s <-i tiegcm3d_nc_file> [-t window_size (days)] [-s window_shift (days)]\n", argv[0]);
             break;
         }
     }
 
   if (!infile)
     {
-      fprintf(stderr, "Usage: %s <-i tiegcm3d_nc_file> [-t window_size (days)]\n", argv[0]);
+      fprintf(stderr, "Usage: %s <-i tiegcm3d_nc_file> [-t window_size (days)] [-s window_shift (days)]\n", argv[0]);
       exit(1);
     }
 
@@ -296,7 +341,7 @@ main(int argc, char *argv[])
   fprintf(stderr, "done (%zu records read, %g seconds)\n", data->nt,
           time_diff(tv0, tv1));
 
-  do_transforms(fft_data_file, fs, window_size, window_shift, data);
+  do_transforms(fs, window_size, window_shift, data);
 
   return 0;
 }

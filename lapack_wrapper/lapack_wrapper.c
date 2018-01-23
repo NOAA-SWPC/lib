@@ -441,6 +441,72 @@ lapack_complex_svd(const gsl_matrix_complex * A, gsl_vector * S,
 }
 
 /*
+lapack_complex_svd_thin()
+  Compute thin SVD of complex M-by-N matrix A
+
+Inputs: A - M-by-N complex matrix
+        S - (output) min(M,N) real vector of singular values
+        U - (output) M-by-min(M,N) complex matrix of left singular vectors
+        V - (output) min(M,N)-by-N complex matrix of right singular vectors
+
+Return: success/error
+*/
+
+int
+lapack_complex_svd_thin(const gsl_matrix_complex * A, gsl_vector * S,
+                        gsl_matrix_complex * U, gsl_matrix_complex * V)
+{
+  const size_t M = A->size1;
+  const size_t N = A->size2;
+  const size_t minMN = GSL_MIN(M, N);
+
+  if ((U->size1 != M) || (U->size2 != minMN))
+    {
+      GSL_ERROR ("U matrix must be M-by-min(M,N)", GSL_EBADLEN);
+    }
+  else if (S->size != minMN)
+    {
+      GSL_ERROR ("S must have length min(M,N)", GSL_EBADLEN);
+    }
+  else if ((V->size1 != minMN) || (V->size2 != N))
+    {
+      GSL_ERROR ("V matrix must be min(M,N)-by-N", GSL_EBADLEN);
+    }
+  else
+    {
+      int s;
+      lapack_int lda = A->size1;
+      lapack_int ldu = U->size1;
+      lapack_int ldvt = V->size1;
+      gsl_matrix_complex *work_A = gsl_matrix_complex_alloc(N, M);
+      gsl_matrix_complex *work_U = gsl_matrix_complex_alloc(minMN, M);
+
+      gsl_matrix_complex_transpose_memcpy(work_A, A);
+
+      s = LAPACKE_zgesdd(LAPACK_COL_MAJOR,
+                         'S',
+                         (lapack_int) M,
+                         (lapack_int) N,
+                         (lapack_complex_double *) work_A->data,
+                         lda,
+                         S->data,
+                         (lapack_complex_double *) work_U->data,
+                         ldu,
+                         (lapack_complex_double *) V->data,
+                         ldvt);
+
+      /* no need to transpose V since V^H is computed already by
+       * lapack routine */
+      gsl_matrix_complex_transpose_memcpy(U, work_U);
+
+      gsl_matrix_complex_free(work_A);
+      gsl_matrix_complex_free(work_U);
+
+      return s;
+    }
+}
+
+/*
 lapack_cholesky_solve()
   solve A x = b using Cholesky factorization of A
 
