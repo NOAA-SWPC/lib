@@ -523,7 +523,7 @@ pomme_get_indices(const int calc_estist, time_t t, double *E_st, double *I_st, d
 
   if (w->ace_workspace_p)
     {
-      s = ace_get(t, &IMF_B[0], &IMF_B[1], &IMF_B[2], &V, w->ace_workspace_p);
+      s = ace_get(t, IMF_B, &V, w->ace_workspace_p);
       if (s)
         {
           *Em = 0.5;

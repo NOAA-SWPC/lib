@@ -52,6 +52,8 @@ typedef struct
   double lon_max;     /* maximum longitude (deg) */
   double kp_min;      /* minimum kp */
   double kp_max;      /* maximum kp */
+  double IMF_Bz_min;  /* minimum IMF B_z (nT) */
+  double IMF_Bz_max;  /* maximum IMF B_z (nT) */
   size_t downsample;  /* downsampling factor */
   double alpha;       /* smoothing factor for high latitudes */
   double thresh[4];   /* rms thresholds */
@@ -164,9 +166,18 @@ preprocess_data(const preprocess_parameters *params, satdata_mag *data)
   {
     size_t nkp = track_flag_kp(params->kp_min, params->kp_max, data, track_p);
 
-    fprintf(stderr, "preprocess_data: flagged data outside kp window [%g,%g]: %zu/%zu (%.1f%%) data flagged)\n",
+    fprintf(stderr, "preprocess_data: flagged data outside kp window [%g,%g]: %zu/%zu (%.1f%%) tracks flagged)\n",
             params->kp_min, params->kp_max,
-            nkp, data->n, (double)nkp / (double)data->n * 100.0);
+            nkp, track_p->n, (double)nkp / (double)track_p->n * 100.0);
+  }
+
+  /* flag data according to IMF B */
+  {
+    size_t nIMF = track_flag_IMF(params->IMF_Bz_min, params->IMF_Bz_max, data, track_p);
+
+    fprintf(stderr, "preprocess_data: flagged data outside IMF B_z window [%g,%g]: %zu/%zu (%.1f%%) tracks flagged)\n",
+            params->IMF_Bz_min, params->IMF_Bz_max,
+            nIMF, track_p->n, (double)nIMF / (double)track_p->n * 100.0);
   }
 
   /* flag longitude */
@@ -241,6 +252,8 @@ print_help(char *argv[])
   fprintf(stderr, "\t --lon_max | -u lon_max                      - longitude maximum\n");
   fprintf(stderr, "\t --kp_min | -v kp_min                        - kp minimum\n");
   fprintf(stderr, "\t --kp_max | -w kp_max                        - kp maximum\n");
+  fprintf(stderr, "\t --imf_bz_min | -A imf_bz_min                - minimum IMF B_z (nT)\n");
+  fprintf(stderr, "\t --imf_bz_max | -B imf_bz_max                - maximum IMF B_z (nT)\n");
   fprintf(stderr, "\t --alpha | -q alpha                          - smoothing factor for high latitudes\n");
 }
 
@@ -268,6 +281,8 @@ main(int argc, char *argv[])
   params.lon_max = 200.0;
   params.kp_min = 0.0;
   params.kp_max = 20.0;
+  params.IMF_Bz_min = -1.0e6;
+  params.IMF_Bz_max = 1.0e6;
   params.downsample = 15;
   params.alpha = -1.0;
   params.thresh[0] = 80.0;
@@ -297,10 +312,12 @@ main(int argc, char *argv[])
           { "kp_max", required_argument, NULL, 'w' },
           { "output_file", required_argument, NULL, 'o' },
           { "alpha", required_argument, NULL, 'q' },
+          { "imf_bz_min", required_argument, NULL, 'A' },
+          { "imf_bz_max", required_argument, NULL, 'B' },
           { 0, 0, 0, 0 }
         };
 
-      c = getopt_long(argc, argv, "ab:c:d:D:j:k:l:m:o:q:s:t:u:", long_options, &option_index);
+      c = getopt_long(argc, argv, "ab:c:d:D:j:k:l:m:o:q:s:t:u:A:B:", long_options, &option_index);
       if (c == -1)
         break;
 
@@ -317,7 +334,7 @@ main(int argc, char *argv[])
           case 'c':
             fprintf(stderr, "main: reading %s...", optarg);
             gettimeofday(&tv0, NULL);
-            data = satdata_champ_read_idx(optarg, 0);
+            data = satdata_champ_read_idx(optarg, 1);
             gettimeofday(&tv1, NULL);
             fprintf(stderr, "done (%zu data read, %g seconds)\n",
                     data->n, time_diff(tv0, tv1));
@@ -399,6 +416,14 @@ main(int argc, char *argv[])
             params.alpha = atof(optarg);
             break;
 
+          case 'A':
+            params.IMF_Bz_min = atof(optarg);
+            break;
+
+          case 'B':
+            params.IMF_Bz_max = atof(optarg);
+            break;
+
           default:
             break;
         }
@@ -420,6 +445,8 @@ main(int argc, char *argv[])
   fprintf(stderr, "main: lon maximum      = %.1f\n", params.lon_max);
   fprintf(stderr, "main: kp minimum       = %.1f\n", params.kp_min);
   fprintf(stderr, "main: kp maximum       = %.1f\n", params.kp_max);
+  fprintf(stderr, "main: IMF B_z minimum  = %.1f\n", params.IMF_Bz_min);
+  fprintf(stderr, "main: IMF B_z maximum  = %.1f\n", params.IMF_Bz_max);
   fprintf(stderr, "main: smoothing alpha  = %f\n", params.alpha);
 
   if (lp_data)

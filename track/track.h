@@ -33,6 +33,7 @@
 #define TRACK_FLG_INCOMPLETE (1 << 10) /* flagged due to missing data */
 #define TRACK_FLG_PB         (1 << 11) /* flagged due to plasma bubble detected */
 #define TRACK_FLG_TIME       (1 << 12) /* flagged due to timestamp */
+#define TRACK_FLG_IMF        (1 << 13) /* flagged due to IMF conditions */
 
 typedef struct
 {
@@ -111,6 +112,7 @@ size_t track_flag_lt(const double lt_min, const double lt_max, size_t *ndata_fla
                      satdata_mag *data, track_workspace *w);
 size_t track_flag_kp(const double kp_min, const double kp_max, satdata_mag *data,
                      track_workspace *w);
+size_t track_flag_IMF(const double Bz_min, const double Bz_max, satdata_mag *data, track_workspace *w);
 size_t track_flag_season(int (*callback)(const double doy, const void *params),
                          const void *params, satdata_mag *data, track_workspace *w);
 size_t track_flag_lon(const double lon_min, const double lon_max,

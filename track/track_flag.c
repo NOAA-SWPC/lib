@@ -529,6 +529,66 @@ track_flag_kp(const double kp_min, const double kp_max, satdata_mag *data, track
 }
 
 /*
+track_flag_IMF()
+  Flag any tracks with IMF B_z outside of [Bz_min,Bz_max]. 3 IMF B_z values
+are compared: beginning of track, equator crossing, and end of track.
+
+Inputs: Bz_min - minimum IMF B_z
+        Bz_max - maximum IMF B_z
+        data   - satellite data
+        w      - track workspace
+
+Return: number of tracks flagged
+*/
+
+size_t
+track_flag_IMF(const double Bz_min, const double Bz_max, satdata_mag *data, track_workspace *w)
+{
+  size_t i;
+  size_t nflagged = 0;        /* number of points flagged */
+  size_t ntrack_flagged = 0;  /* number of entire tracks flagged for UT */
+  ace_workspace *ace_p;
+  int s;
+
+  if (data->n == 0)
+    return 0;
+
+  ace_p = ace_alloc(ACE_IDX_FILE);
+
+  for (i = 0; i < w->n; ++i)
+    {
+      track_data *tptr = &(w->tracks[i]);
+      size_t start_idx = tptr->start_idx;
+      size_t end_idx = tptr->end_idx;
+      time_t t1 = satdata_epoch2timet(data->t[start_idx]);
+      time_t t2 = satdata_epoch2timet(tptr->t_eq);
+      time_t t3 = satdata_epoch2timet(data->t[end_idx]);
+      double IMF_B1[3], IMF_B2[3], IMF_B3[3], SW_vel;
+
+      s = ace_get(t1, IMF_B1, &SW_vel, ace_p);
+      s += ace_get(t2, IMF_B2, &SW_vel, ace_p);
+      s += ace_get(t3, IMF_B3, &SW_vel, ace_p);
+      if (s)
+        {
+          fprintf(stderr, "track_flag_IMF: error: IMF not available for track %zu\n", i);
+          continue;
+        }
+
+      if ((IMF_B1[2] < Bz_min || IMF_B1[2] > Bz_max) ||
+          (IMF_B2[2] < Bz_min || IMF_B2[2] > Bz_max) ||
+          (IMF_B3[2] < Bz_min || IMF_B3[2] > Bz_max))
+        {
+          nflagged += track_flag_track(i, TRACK_FLG_IMF, data, w);
+          ++ntrack_flagged;
+        }
+    }
+
+  ace_free(ace_p);
+
+  return ntrack_flagged;
+}
+
+/*
 track_flag_meanalt()
   Flag any tracks with mean altitude outside of [alt_min,alt_max].
 

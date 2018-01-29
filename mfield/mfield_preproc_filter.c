@@ -384,12 +384,12 @@ mfield_flag_IMF(const preprocess_parameters * params, track_workspace *track_p, 
       time_t t1 = satdata_epoch2timet(data->t[start_idx]);
       time_t t2 = satdata_epoch2timet(tptr->t_eq);
       time_t t3 = satdata_epoch2timet(data->t[end_idx]);
-      double IMF_Bx[3], IMF_By[3], IMF_Bz[3], SW_vel;
+      double IMF_B1[3], IMF_B2[3], IMF_B3[3], SW_vel;
       int flag_IMF = 0;
 
-      s = ace_get(t1, &IMF_Bx[0], &IMF_By[0], &IMF_Bz[0], &SW_vel, ace_p);
-      s += ace_get(t2, &IMF_Bx[1], &IMF_By[1], &IMF_Bz[1], &SW_vel, ace_p);
-      s += ace_get(t3, &IMF_Bx[2], &IMF_By[2], &IMF_Bz[2], &SW_vel, ace_p);
+      s = ace_get(t1, IMF_B1, &SW_vel, ace_p);
+      s += ace_get(t2, IMF_B2, &SW_vel, ace_p);
+      s += ace_get(t3, IMF_B3, &SW_vel, ace_p);
       if (s)
         {
           /* missing data - flag track since we don't know what IMF is */
@@ -398,18 +398,13 @@ mfield_flag_IMF(const preprocess_parameters * params, track_workspace *track_p, 
         }
       else
         {
-          for (j = 0; j < 3; ++j)
+          /* flag if IMF_Bz is outside of [0,6] nT, or if IMF By is > 8 nT */
+          if ((IMF_B1[2] < 0.0) || (IMF_B1[2] > 6.0) ||
+              (IMF_B2[2] < 0.0) || (IMF_B2[2] > 6.0) ||
+              (IMF_B3[2] < 0.0) || (IMF_B3[2] > 6.0) ||
+              (IMF_B1[1] > 8.0) || (IMF_B2[1] > 8.0) || (IMF_B3[1] > 8.0))
             {
-              if (IMF_Bz[j] < 0.0 || IMF_Bz[j] > 6.0)
-                {
-                  flag_IMF = 1;
-                  break;
-                }
-              else if (IMF_By[j] > 8.0)
-                {
-                  flag_IMF = 1;
-                  break;
-                }
+              flag_IMF = 1;
             }
         }
 
