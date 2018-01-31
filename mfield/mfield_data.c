@@ -695,6 +695,9 @@ int
 mfield_data_add_noise(const double sigma, const double bias, mfield_data_workspace * w)
 {
   int s = 0;
+  const double T = 30.0;           /* period of bias signal in min */
+  const double T_ms = T / 60000.0; /* period of bias signal in ms */
+  const double omega = 2.0 * M_PI / T; /* frequency in ms^{-1} */
   size_t i, j;
   gsl_rng *r = gsl_rng_alloc(gsl_rng_default);
 
@@ -704,6 +707,9 @@ mfield_data_add_noise(const double sigma, const double bias, mfield_data_workspa
 
       for (j = 0; j < mptr->n; ++j)
         {
+          double wt = fmod(omega * mptr->t[j], 2.0 * M_PI);
+          double coswt = cos(wt);
+
           if (MAGDATA_Discarded(mptr->flags[j]))
             continue;
 
@@ -717,9 +723,9 @@ mfield_data_add_noise(const double sigma, const double bias, mfield_data_workspa
                   mptr->Bz_vfm[j] += gsl_ran_gaussian(r, sigma);
                 }
 
-              mptr->Bx_vfm[j] += bias;
-              mptr->By_vfm[j] += bias;
-              mptr->Bz_vfm[j] += bias;
+              mptr->Bx_vfm[j] += bias * coswt;
+              mptr->By_vfm[j] += bias * coswt;
+              mptr->Bz_vfm[j] += bias * coswt;
 
               /* recompute scalar field measurement */
               mptr->F[j] = gsl_hypot3(mptr->Bx_vfm[j], mptr->By_vfm[j], mptr->Bz_vfm[j]);
@@ -727,7 +733,7 @@ mfield_data_add_noise(const double sigma, const double bias, mfield_data_workspa
           else if (MAGDATA_ExistScalar(mptr->flags[j]))
             {
               /* scalar only measurement (high latitudes) */
-              mptr->F[j] += bias + gsl_ran_gaussian(r, sigma);
+              mptr->F[j] += bias * coswt + gsl_ran_gaussian(r, sigma);
             }
         }
     }

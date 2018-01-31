@@ -59,6 +59,7 @@ int
 build_X(const size_t ifreq, const tiegcm3d_fft_data * data, gsl_matrix_complex * X)
 {
   int s = 0;
+  const size_t N = data->nr * data->nlat * data->nlon;
   const size_t T = data->T;   /* number of time window segments */
   const double fs = data->fs;
   const size_t nwindow = (size_t) (data->window_size * fs);   /* optimal number of samples per window */
@@ -86,8 +87,8 @@ build_X(const size_t ifreq, const tiegcm3d_fft_data * data, gsl_matrix_complex *
                   gsl_complex Qp = data->Qp[fft_idx];
 
                   gsl_matrix_complex_set(X, row_idx, t, Qr);
-                  gsl_matrix_complex_set(X, 2*row_idx, t, Qt);
-                  gsl_matrix_complex_set(X, 3*row_idx, t, Qp);
+                  gsl_matrix_complex_set(X, row_idx + N, t, Qt);
+                  gsl_matrix_complex_set(X, row_idx + 2*N, t, Qp);
                 }
             }
         }

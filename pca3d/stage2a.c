@@ -1,5 +1,5 @@
 /*
- * stage2.c
+ * stage2a.c
  *
  * Perform PCA (frequency domain) directly on the 3D current grids from TIEGCM
  *
@@ -175,6 +175,7 @@ do_transforms(const double fs, const double window_size, const double window_shi
               size_t start_idx = 0; /* starting time index */
               size_t t;
 
+              /* loop over window segments for this (r,theta,phi) point */
               for (t = 0; t < T; ++t)
                 {
                   size_t end_idx = GSL_MIN(start_idx + nwindow - 1, nt - 1);

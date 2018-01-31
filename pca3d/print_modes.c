@@ -35,9 +35,11 @@
 int
 print_modes(const size_t ir, const gsl_matrix_complex *U, const tiegcm3d_fft_data *data)
 {
+  const size_t N = data->nr * data->nlat * data->nlon;
   const size_t T = U->size2;
   size_t t, ilat, ilon;
 
+  /* loop over modes t \in [0, T-1] */
   for (t = 0; t < T; ++t)
     {
       gsl_vector_complex_const_view v = gsl_matrix_complex_const_column(U, t);
@@ -64,9 +66,9 @@ print_modes(const size_t ir, const gsl_matrix_complex *U, const tiegcm3d_fft_dat
           for (ilat = 0; ilat < data->nlat; ++ilat)
             {
               size_t idx = CIDX3(ir, data->nr, ilat, data->nlat, ilon, data->nlon);
-              gsl_complex Ur = gsl_matrix_complex_get(U, idx, t);
-              gsl_complex Ut = gsl_matrix_complex_get(U, 2*idx, t);
-              gsl_complex Up = gsl_matrix_complex_get(U, 3*idx, t);
+              gsl_complex Ur = gsl_vector_complex_get(&v.vector, idx);
+              gsl_complex Ut = gsl_vector_complex_get(&v.vector, idx + N);
+              gsl_complex Up = gsl_vector_complex_get(&v.vector, idx + 2*N);
 
               fprintf(fp, "%8.4f %8.4f %12.4e %12.4e %12.4e %12.4e %12.4e %12.4e\n",
                       data->glon[ilon],
@@ -149,7 +151,7 @@ main(int argc, char *argv[])
   fprintf(stderr, "done (%g seconds)\n", time_diff(tv0, tv1));
 
   r_idx = bsearch_double(data.r, alt + R_EARTH_KM, 0, data.nr - 1);
-  fprintf(stderr, "main: r_idx = %d (%.2f [km])\n", r_idx, data.r[r_idx] - R_EARTH_KM);
+  fprintf(stderr, "main: r_idx = %zu (%.2f [km])\n", r_idx, data.r[r_idx] - R_EARTH_KM);
 
   print_modes(r_idx, U, &data);
 
